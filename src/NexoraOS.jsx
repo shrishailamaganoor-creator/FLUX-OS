@@ -10394,9 +10394,13 @@ export const AppWithAuth = () => {
   });
 
   React.useEffect(() => {
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
-    }
+    try {
+      const isPreviewHost =
+        window.location.hostname.includes(".run.app") || window.self !== window.top;
+      if ("serviceWorker" in navigator && !isPreviewHost) {
+        navigator.serviceWorker.register("./sw.js").catch(() => {});
+      }
+    } catch {}
   }, []);
 
   if (!authed) return <SignInScreen onAuth={() => setAuthed(true)} />;

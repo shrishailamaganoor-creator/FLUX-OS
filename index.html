@@ -28,7 +28,9 @@
             if (
               event &&
               ((event.filename && event.filename.indexOf('chrome-extension://') === 0) ||
-                (event.message && event.message.indexOf('Cannot set property fetch') !== -1))
+                (event.message &&
+                  (event.message.indexOf('Cannot set property fetch') !== -1 ||
+                    event.message.indexOf('ServiceWorker') !== -1)))
             ) {
               event.stopImmediatePropagation();
               event.preventDefault();
@@ -40,7 +42,11 @@
           'unhandledrejection',
           function (event) {
             var msg = event && event.reason && (event.reason.message || String(event.reason));
-            if (msg && msg.indexOf('Cannot set property fetch') !== -1) {
+            if (
+              msg &&
+              (msg.indexOf('Cannot set property fetch') !== -1 ||
+                msg.indexOf('ServiceWorker') !== -1)
+            ) {
               event.stopImmediatePropagation();
               event.preventDefault();
             }
@@ -49,18 +55,30 @@
         );
         try {
           if ('caches' in window) {
-            caches.keys().then(function (keys) {
-              keys.forEach(function (k) {
-                if (k !== 'xor-bit-v2.1.0') caches.delete(k);
-              });
-            });
+            caches
+              .keys()
+              .then(function (keys) {
+                keys.forEach(function (k) {
+                  if (k !== 'xor-bit-v2.1.0') caches.delete(k).catch(function () {});
+                });
+              })
+              .catch(function () {});
           }
           if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.getRegistrations().then(function (regs) {
-              regs.forEach(function (r) {
-                r.update();
-              });
-            });
+            var isPreviewHost =
+              window.location.hostname.indexOf('.run.app') !== -1 || window.self !== window.top;
+            navigator.serviceWorker
+              .getRegistrations()
+              .then(function (regs) {
+                regs.forEach(function (r) {
+                  if (isPreviewHost) {
+                    r.unregister().catch(function () {});
+                  } else {
+                    r.update().catch(function () {});
+                  }
+                });
+              })
+              .catch(function () {});
           }
         } catch (e) {}
       })();

@@ -24227,7 +24227,10 @@ var AppWithAuth = () => {
 		}
 	});
 	import_react.useEffect(() => {
-		if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+		try {
+			const isPreviewHost = window.location.hostname.includes(".run.app") || window.self !== window.top;
+			if ("serviceWorker" in navigator && !isPreviewHost) navigator.serviceWorker.register("./sw.js").catch(() => {});
+		} catch {}
 	}, []);
 	if (!authed) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SignInScreen, { onAuth: () => setAuthed(true) });
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NexoraApp, {});
