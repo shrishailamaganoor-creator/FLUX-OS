@@ -1,11 +1,13 @@
-const CACHE_NAME = 'flux-v2.6.0';
+const CACHE_NAME = 'flux-v2.7.0';
 
 const PRECACHE_ASSETS = [
   './',
   './index.html',
   './manifest.webmanifest',
+  './favicon.ico',
   './icon.svg',
   './icon-192.png',
+  './icon-256.png',
   './icon-512.png',
   './icon-maskable-512.png',
   './apple-touch-icon.png'

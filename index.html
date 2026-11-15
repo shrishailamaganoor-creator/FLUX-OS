@@ -59,7 +59,7 @@
               .keys()
               .then(function (keys) {
                 keys.forEach(function (k) {
-                  if (k !== 'flux-v2.6.0') caches.delete(k).catch(function () {});
+                  if (k !== 'flux-v2.7.0') caches.delete(k).catch(function () {});
                 });
               })
               .catch(function () {});
@@ -99,10 +99,14 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="FLUX" />
     <meta name="application-name" content="FLUX" />
-    <link rel="manifest" href="/manifest.webmanifest?v=2.4.0" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png?v=2.4.0" />
-    <link rel="icon" type="image/svg+xml" href="/icon.svg?v=2.4.0" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2.4.0" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="shortcut icon" href="./favicon.ico" />
+    <link rel="icon" type="image/x-icon" href="./favicon.ico" />
+    <link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png" />
+    <link rel="icon" type="image/png" sizes="256x256" href="./icon-256.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
     <meta name="theme-color" content="#09090B" />
     <title>FLUX — Personal Life & Engineering OS</title>
     <meta name="description" content="A single-file, offline-first dashboard that runs your studies, habits, money, focus and projects." />
@@ -128,11 +132,11 @@
       if (window.location.hostname.endsWith('github.io')) {
         var link = document.createElement('link');
         link.rel = 'stylesheet';
-        link.href = './compiled/app.css?v=2.6.0';
+        link.href = './compiled/app.css?v=2.7.0';
         document.head.appendChild(link);
         var s = document.createElement('script');
         s.type = 'module';
-        s.src = './compiled/app.js?v=2.6.0';
+        s.src = './compiled/app.js?v=2.7.0';
         document.body.appendChild(s);
       }
     </script>

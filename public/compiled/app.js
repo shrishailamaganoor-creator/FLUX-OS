@@ -19417,14 +19417,14 @@ var SettingsView = () => {
 					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Install FLUX App" })]
 				})]
 			}),
-			!isInstalled && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+			!isInstalled ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 				className: "arch-panel p-5 rounded-xl space-y-3",
 				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 					className: "flex flex-wrap items-center justify-between gap-4",
 					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 						className: "flex items-center gap-3 min-w-0",
 						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
-							src: "./icon-192.png?v=2.4.0",
+							src: "./icon-192.png?v=2.7.0",
 							alt: "FLUX",
 							className: "w-10 h-10 rounded-xl object-cover shrink-0 border",
 							style: { borderColor: "var(--border-elevated)" }
@@ -19437,7 +19437,7 @@ var SettingsView = () => {
 							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 								className: "text-xs mt-0.5",
 								style: { color: "var(--ink-secondary)" },
-								children: "Install FLUX on your device for instant offline launch, dedicated window mode, and home screen access."
+								children: "Install FLUX on your device for instant offline launch, dedicated window mode, and Start Menu / home screen icon."
 							})]
 						})]
 					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
@@ -19496,11 +19496,33 @@ var SettingsView = () => {
 							" / ",
 							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Add to Home screen" }),
 							" (or ",
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Cast, save, and share → Install page as app" }),
-							" on desktop Chrome/Edge)."
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Apps → Install this site as an app" }),
+							" in Edge/Chrome)."
 						] })]
 					})]
 				})]
+			}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+				className: "arch-panel p-4 rounded-xl flex flex-wrap items-center justify-between gap-3",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "flex items-center gap-3 min-w-0",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
+						src: "./icon-192.png?v=2.7.0",
+						alt: "FLUX",
+						className: "w-9 h-9 rounded-xl object-cover shrink-0 border",
+						style: { borderColor: "var(--border-elevated)" }
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "min-w-0",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+							className: "font-mono text-[11px] uppercase",
+							style: { color: "var(--status-ok)" },
+							children: "STANDALONE APP INSTALLED"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+							className: "text-[11px] mt-0.5",
+							style: { color: "var(--ink-secondary)" },
+							children: "If Windows Start Menu still shows an older “F” tile from an earlier install, uninstall the app once from Start Menu (Options → Uninstall) and reinstall from your browser to refresh the Windows .ico cache."
+						})]
+					})]
+				})
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 				className: "arch-panel p-5 rounded-xl space-y-4",

@@ -6259,12 +6259,12 @@ const NexoraContext = createContext(null);
               )}
             </div>
 
-            {!isInstalled && (
+            {!isInstalled ? (
               <div className="arch-panel p-5 rounded-xl space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div className="flex items-center gap-3 min-w-0">
                     <img
-                      src="./icon-192.png?v=2.4.0"
+                      src="./icon-192.png?v=2.7.0"
                       alt="FLUX"
                       className="w-10 h-10 rounded-xl object-cover shrink-0 border"
                       style={{ borderColor: 'var(--border-elevated)' }}
@@ -6274,7 +6274,7 @@ const NexoraContext = createContext(null);
                         DEVICE INSTALLATION // BROWSER SESSION DETECTED
                       </div>
                       <p className="text-xs mt-0.5" style={{ color: 'var(--ink-secondary)' }}>
-                        Install FLUX on your device for instant offline launch, dedicated window mode, and home screen access.
+                        Install FLUX on your device for instant offline launch, dedicated window mode, and Start Menu / home screen icon.
                       </p>
                     </div>
                   </div>
@@ -6313,11 +6313,30 @@ const NexoraContext = createContext(null);
                     ) : (
                       <ol className="list-decimal list-inside space-y-1 text-[11px]" style={{ color: 'var(--ink-secondary)' }}>
                         <li>Click the <strong>Install FLUX</strong> icon on the right side of your browser address bar, or open the browser menu (<strong>⋮</strong>).</li>
-                        <li>Select <strong>Install app</strong> / <strong>Add to Home screen</strong> (or <strong>Cast, save, and share → Install page as app</strong> on desktop Chrome/Edge).</li>
+                        <li>Select <strong>Install app</strong> / <strong>Add to Home screen</strong> (or <strong>Apps → Install this site as an app</strong> in Edge/Chrome).</li>
                       </ol>
                     )}
                   </div>
                 )}
+              </div>
+            ) : (
+              <div className="arch-panel p-4 rounded-xl flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <img
+                    src="./icon-192.png?v=2.7.0"
+                    alt="FLUX"
+                    className="w-9 h-9 rounded-xl object-cover shrink-0 border"
+                    style={{ borderColor: 'var(--border-elevated)' }}
+                  />
+                  <div className="min-w-0">
+                    <div className="font-mono text-[11px] uppercase" style={{ color: 'var(--status-ok)' }}>
+                      STANDALONE APP INSTALLED
+                    </div>
+                    <p className="text-[11px] mt-0.5" style={{ color: 'var(--ink-secondary)' }}>
+                      If Windows Start Menu still shows an older &ldquo;F&rdquo; tile from an earlier install, uninstall the app once from Start Menu (Options → Uninstall) and reinstall from your browser to refresh the Windows .ico cache.
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
 
