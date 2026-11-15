@@ -1,0 +1,296 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-serif: 'Instrument Serif', Georgia, serif;
+}
+
+/* ============================================================================
+   DIRECTION A: OBSIDIAN PRECISION (Linear / Raycast / Fey)
+   Matte Carbon #09090B, Pure Monochrome #FAFAFA Action Buttons, Zero Green Neon
+   ============================================================================ */
+:root,
+[data-theme="obsidian"] {
+  --bg-canvas: #09090B;
+  --bg-surface: #111113;
+  --bg-elevated: #18181B;
+  --bg-active: #222226;
+
+  --border-hairline: rgba(255, 255, 255, 0.07);
+  --border-elevated: rgba(255, 255, 255, 0.13);
+  --border-strong: rgba(255, 255, 255, 0.24);
+  --specular-top: rgba(255, 255, 255, 0.10);
+
+  --ink-primary: #FAFAFA;
+  --ink-secondary: #A1A1AA;
+  --ink-muted: #71717A;
+  --ink-dim: #52525B;
+
+  --accent: #FAFAFA;
+  --accent-fg: #09090B;
+  --accent-subtle: rgba(250, 250, 250, 0.08);
+  --accent-border: rgba(250, 250, 250, 0.24);
+  --spotlight: rgba(255, 255, 255, 0.045);
+  --dot-matrix-color: rgba(255, 255, 255, 0.07);
+
+  --status-ok: #FAFAFA;
+  --status-warn: #F59E0B;
+  --status-err: #F43F5E;
+}
+
+/* ============================================================================
+   DIRECTION B: EDITORIAL PAPER (Stripe Press / Read.cv / Anthropic)
+   Warm Alabaster #FAF8F5, Crisp White Cards, Deep Warm Ink #1A1917
+   ============================================================================ */
+[data-theme="paper"] {
+  --bg-canvas: #FAF8F5;
+  --bg-surface: #FFFFFF;
+  --bg-elevated: #F2EFE9;
+  --bg-active: #E8E4DC;
+
+  --border-hairline: rgba(26, 25, 23, 0.09);
+  --border-elevated: rgba(26, 25, 23, 0.15);
+  --border-strong: rgba(26, 25, 23, 0.28);
+  --specular-top: rgba(255, 255, 255, 0.85);
+
+  --ink-primary: #1A1917;
+  --ink-secondary: #52514E;
+  --ink-muted: #85837E;
+  --ink-dim: #A3A09A;
+
+  --accent: #1A1917;
+  --accent-fg: #FAF8F5;
+  --accent-subtle: rgba(26, 25, 23, 0.07);
+  --accent-border: rgba(26, 25, 23, 0.22);
+  --spotlight: rgba(26, 25, 23, 0.03);
+  --dot-matrix-color: rgba(26, 25, 23, 0.08);
+
+  --status-ok: #15803D;
+  --status-warn: #B45309;
+  --status-err: #BE123C;
+}
+
+* {
+  box-sizing: border-box;
+  border-color: var(--border-hairline);
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-canvas);
+  color: var(--ink-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  transition: background-color 180ms cubic-bezier(0.22, 1, 0.36, 1), color 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.heading-tight {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+.micro-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+/* Telemetry Cards with Top-Edge Specular Highlight & Mouse Spotlight */
+.arch-panel {
+  position: relative;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-hairline);
+  box-shadow: inset 0 1px 0 0 var(--specular-top), 0 4px 16px -6px rgba(0, 0, 0, 0.18);
+  transition: border-color 150ms cubic-bezier(0.22, 1, 0.36, 1), background-color 150ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.arch-panel:hover {
+  border-color: var(--border-elevated);
+}
+
+.arch-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(380px circle at var(--mouse-x, -500px) var(--mouse-y, -500px), var(--spotlight), transparent 45%);
+  z-index: 0;
+}
+
+.arch-panel > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Elevated Inputs with Smooth Hover & Focus Ring */
+.arch-input {
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-elevated);
+  color: var(--ink-primary);
+  transition: border-color 150ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 150ms cubic-bezier(0.22, 1, 0.36, 1), background-color 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.arch-input:hover {
+  border-color: var(--border-strong);
+}
+.arch-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-subtle);
+}
+.arch-input::placeholder {
+  color: var(--ink-dim);
+}
+
+/* Primary Action Button — Theme-Aware (#FAFAFA in Obsidian, #1A1917 in Paper, #FF4F00 in Industrial) */
+.arch-btn-primary {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 600;
+  background-color: var(--accent);
+  color: var(--accent-fg);
+  border: 1px solid var(--accent);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.18), 0 1px 3px rgba(0, 0, 0, 0.15);
+  transition: all 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.arch-btn-primary:hover {
+  opacity: 0.92;
+}
+.arch-btn-primary:active {
+  transform: scale(0.98);
+}
+
+/* Ghost / Secondary Pill Controls */
+.arch-btn-ghost {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 500;
+  background-color: var(--bg-elevated);
+  color: var(--ink-secondary);
+  border: 1px solid var(--border-hairline);
+  transition: all 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.arch-btn-ghost:hover {
+  background-color: var(--bg-active);
+  color: var(--ink-primary);
+  border-color: var(--border-strong);
+}
+.arch-btn-ghost:active {
+  transform: scale(0.98);
+}
+
+/* Active Sidebar Module Pill with Theme-Aware Left Accent Bar */
+.arch-nav-active {
+  position: relative;
+  background-color: var(--accent-subtle);
+  color: var(--ink-primary);
+  border: 1px solid var(--accent-border);
+  transition: all 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.arch-nav-active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 5px;
+  bottom: 5px;
+  width: 2.5px;
+  border-radius: 0 2px 2px 0;
+  background-color: var(--accent);
+}
+
+.arch-nav-idle {
+  background-color: transparent;
+  color: var(--ink-secondary);
+  border: 1px solid transparent;
+  transition: all 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.arch-nav-idle:hover {
+  background-color: var(--bg-elevated);
+  color: var(--ink-primary);
+  border-color: var(--border-hairline);
+}
+.arch-nav-idle:active,
+.arch-nav-active:active {
+  transform: scale(0.98);
+}
+
+/* Exposed 1px Structural Grid + Calibrated Card Depth */
+.hairline-grid {
+  background-color: var(--border-hairline);
+  gap: 1px;
+  border: 1px solid var(--border-hairline);
+  box-shadow: inset 0 1px 0 0 var(--specular-top), 0 4px 16px -6px rgba(0, 0, 0, 0.16);
+}
+.hairline-cell {
+  background-color: var(--bg-surface);
+  box-shadow: inset 0 1px 0 0 var(--specular-top);
+  transition: background-color 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.hairline-cell:hover {
+  background-color: var(--bg-elevated);
+}
+
+/* Engineered Dot-Matrix Empty State Backdrop */
+.arch-dot-matrix {
+  background-image: radial-gradient(var(--dot-matrix-color) 1px, transparent 1px);
+  background-size: 14px 14px;
+}
+
+/* Custom Theme-Aware Tactical Checkbox */
+input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  display: inline-grid;
+  place-content: center;
+  transition: all 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+input[type="checkbox"]:hover {
+  border-color: var(--ink-primary);
+}
+input[type="checkbox"]::before {
+  content: "";
+  width: 0.55em;
+  height: 0.55em;
+  transform: scale(0);
+  transition: 120ms transform cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow: inset 1em 1em var(--accent-fg);
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+}
+input[type="checkbox"]:checked {
+  background-color: var(--accent);
+  border-color: var(--accent);
+}
+input[type="checkbox"]:checked::before {
+  transform: scale(1);
+}
+input[type="checkbox"]:active {
+  transform: scale(0.92);
+}
+
+/* Custom subtle scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-elevated);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
