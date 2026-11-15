@@ -11457,43 +11457,6 @@ var STORAGE_KEY = "NEXORA_ARCHITECTURAL_OS_V1";
 var IDB_NAME = "NexoraStyleVaultDB";
 var IDB_STORE = "garmentMedia";
 var AUTH_KEY = "XOR_BIT_AUTH_V1";
-var DEFAULT_DAY_TYPES = [
-	{
-		id: "productive",
-		label: "Logged / Productive Day",
-		color: "#10B981"
-	},
-	{
-		id: "hackathon",
-		label: "Hackathon / Deep Build Day",
-		color: "#F59E0B"
-	},
-	{
-		id: "chill",
-		label: "Movie / Chill Day",
-		color: "#EAB308"
-	},
-	{
-		id: "travel",
-		label: "Outing / Travel Day",
-		color: "#06B6D4"
-	},
-	{
-		id: "deadline",
-		label: "Holiday / Exam / Deadline",
-		color: "#F43F5E"
-	},
-	{
-		id: "rest",
-		label: "Rest / Recharge Day",
-		color: "#A855F7"
-	},
-	{
-		id: "zeroday",
-		label: "Zero Day",
-		color: "#71717A"
-	}
-];
 var EMPTY_STATE = {
 	habitDesigns: [],
 	identityVotes: [],
@@ -11665,6 +11628,329 @@ function ensureWritableFetch(target = typeof window !== "undefined" ? window : v
 		return false;
 	}
 }
+// src/utils/dayflowState.ts
+var DAYFLOW_STORAGE_KEY = "flux_os_dayflow";
+var DAYFLOW_CATEGORIES = [
+	{
+		id: "lecture",
+		label: "Lecture / Class",
+		color: "#3B82F6",
+		bgSoft: "rgba(59, 130, 246, 0.14)",
+		borderSoft: "rgba(59, 130, 246, 0.38)"
+	},
+	{
+		id: "lab",
+		label: "Engineering Lab",
+		color: "#A855F7",
+		bgSoft: "rgba(168, 85, 247, 0.14)",
+		borderSoft: "rgba(168, 85, 247, 0.38)"
+	},
+	{
+		id: "deepwork",
+		label: "Deep Work / Build",
+		color: "#10B981",
+		bgSoft: "rgba(16, 185, 129, 0.14)",
+		borderSoft: "rgba(16, 185, 129, 0.38)"
+	},
+	{
+		id: "assignment",
+		label: "Exam / Deadline",
+		color: "#F59E0B",
+		bgSoft: "rgba(245, 158, 11, 0.14)",
+		borderSoft: "rgba(245, 158, 11, 0.38)"
+	},
+	{
+		id: "personal",
+		label: "Personal / Errand",
+		color: "#06B6D4",
+		bgSoft: "rgba(6, 182, 212, 0.14)",
+		borderSoft: "rgba(6, 182, 212, 0.38)"
+	},
+	{
+		id: "health",
+		label: "Health / Training",
+		color: "#F43F5E",
+		bgSoft: "rgba(244, 63, 94, 0.14)",
+		borderSoft: "rgba(244, 63, 94, 0.38)"
+	}
+];
+var DAY_STATUS_OPTIONS = [
+	{
+		id: "free",
+		label: "Free Day",
+		shortLabel: "FREE DAY",
+		color: "#10B981",
+		suppressClasses: false
+	},
+	{
+		id: "holiday",
+		label: "Holiday / No Class",
+		shortLabel: "HOLIDAY • NO CLASS",
+		color: "#F59E0B",
+		suppressClasses: true
+	},
+	{
+		id: "focus",
+		label: "Focus Day",
+		shortLabel: "FOCUS DAY",
+		color: "#3B82F6",
+		suppressClasses: false
+	}
+];
+var DEFAULT_DAYFLOW_STATE = {
+	config: {
+		wakeStartHour: 6,
+		wakeEndHour: 23
+	},
+	recurringClasses: [],
+	tasks: [],
+	inbox: [],
+	dayOverrides: {}
+};
+function formatYMDLocal(d) {
+	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function parseYMDLocal(ymd) {
+	const [y, m, d] = (ymd || "").split("-").map(Number);
+	if (!y || !m || !d) return /* @__PURE__ */ new Date();
+	return new Date(y, m - 1, d);
+}
+/**
+* Returns ISO weekday 1 (Mon) .. 7 (Sun)
+*/
+function getIsoWeekday(d) {
+	const day = d.getDay();
+	return day === 0 ? 7 : day;
+}
+function timeToMinutes(hhmm) {
+	const parts = (hhmm || "00:00").split(":").map(Number);
+	const h = Number.isFinite(parts[0]) ? Math.max(0, Math.min(23, parts[0])) : 0;
+	const m = Number.isFinite(parts[1]) ? Math.max(0, Math.min(59, parts[1])) : 0;
+	return h * 60 + m;
+}
+function minutesToTime(totalMin) {
+	const clamped = Math.max(0, Math.min(1440, Math.round(totalMin)));
+	const h = Math.floor(clamped / 60) % 24;
+	const m = clamped % 60;
+	return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+function formatTime12h(hhmm) {
+	const mins = timeToMinutes(hhmm);
+	const h24 = Math.floor(mins / 60) % 24;
+	const m = mins % 60;
+	const period = h24 >= 12 ? "PM" : "AM";
+	return `${h24 % 12 === 0 ? 12 : h24 % 12}:${String(m).padStart(2, "0")} ${period}`;
+}
+function formatDurationCompact(durationMin) {
+	const mins = Math.max(0, Math.round(durationMin));
+	const h = Math.floor(mins / 60);
+	const m = mins % 60;
+	if (h > 0 && m > 0) return `${h}h ${m}m`;
+	if (h > 0) return `${h}h`;
+	return `${m}m`;
+}
+function getCategoryMeta(catId) {
+	return DAYFLOW_CATEGORIES.find((c) => c.id === catId) || DAYFLOW_CATEGORIES[0];
+}
+function getDayStatusMeta(status) {
+	if (!status) return null;
+	return DAY_STATUS_OPTIONS.find((s) => s.id === status) || null;
+}
+function loadDayflowState() {
+	try {
+		if (typeof localStorage === "undefined") return DEFAULT_DAYFLOW_STATE;
+		const raw = localStorage.getItem(DAYFLOW_STORAGE_KEY);
+		if (!raw) return DEFAULT_DAYFLOW_STATE;
+		return normalizeDayflowState(JSON.parse(raw));
+	} catch {
+		return DEFAULT_DAYFLOW_STATE;
+	}
+}
+function saveDayflowState(state) {
+	try {
+		if (typeof localStorage === "undefined") return false;
+		localStorage.setItem(DAYFLOW_STORAGE_KEY, JSON.stringify(state));
+		return true;
+	} catch {
+		return false;
+	}
+}
+function normalizeDayflowState(candidate) {
+	if (!candidate || typeof candidate !== "object") return DEFAULT_DAYFLOW_STATE;
+	const rawStart = Number(candidate.config?.wakeStartHour);
+	const rawEnd = Number(candidate.config?.wakeEndHour);
+	const wakeStartHour = Number.isFinite(rawStart) ? Math.max(0, Math.min(22, Math.floor(rawStart))) : 6;
+	return {
+		config: {
+			wakeStartHour,
+			wakeEndHour: Number.isFinite(rawEnd) ? Math.max(wakeStartHour + 1, Math.min(24, Math.floor(rawEnd))) : 23
+		},
+		recurringClasses: Array.isArray(candidate.recurringClasses) ? candidate.recurringClasses : [],
+		tasks: Array.isArray(candidate.tasks) ? candidate.tasks : [],
+		inbox: Array.isArray(candidate.inbox) ? candidate.inbox : [],
+		dayOverrides: candidate.dayOverrides && typeof candidate.dayOverrides === "object" && !Array.isArray(candidate.dayOverrides) ? candidate.dayOverrides : {}
+	};
+}
+/**
+* Computes all scheduled blocks (recurring classes + date tasks) for a given YYYY-MM-DD date,
+* sorted chronologically by startMin.
+* If the date has a 'holiday' override, recurring classes are suppressed for that date.
+*/
+function getBlocksForDate(state, dateKey) {
+	const isoDay = getIsoWeekday(parseYMDLocal(dateKey));
+	const classBlocks = state.dayOverrides?.[dateKey] === "holiday" ? [] : (state.recurringClasses || []).filter((cls) => {
+		const repeats = Array.isArray(cls.repeatDays) && cls.repeatDays.includes(isoDay);
+		const skipped = Array.isArray(cls.skippedDates) && cls.skippedDates.includes(dateKey);
+		return repeats && !skipped;
+	}).map((cls) => {
+		const startMin = timeToMinutes(cls.startTime);
+		const durationMin = Math.max(15, Number(cls.durationMin) || 60);
+		const endMin = Math.min(1440, startMin + durationMin);
+		return {
+			id: `cls-${cls.id}-${dateKey}`,
+			sourceId: cls.id,
+			title: cls.title,
+			kind: "class",
+			category: cls.category || "lecture",
+			startTime: minutesToTime(startMin),
+			endTime: minutesToTime(endMin),
+			startMin,
+			endMin,
+			durationMin: endMin - startMin,
+			repeatDays: cls.repeatDays,
+			roomOrNote: cls.roomOrNote
+		};
+	});
+	const taskBlocks = (state.tasks || []).filter((t) => t.date === dateKey).map((t) => {
+		const startMin = timeToMinutes(t.startTime);
+		const durationMin = Math.max(15, Number(t.durationMin) || 30);
+		const endMin = Math.min(1440, startMin + durationMin);
+		return {
+			id: t.id,
+			sourceId: t.id,
+			title: t.title,
+			kind: "task",
+			category: t.category || "deepwork",
+			startTime: minutesToTime(startMin),
+			endTime: minutesToTime(endMin),
+			startMin,
+			endMin,
+			durationMin: endMin - startMin,
+			completed: Boolean(t.completed),
+			roomOrNote: t.note
+		};
+	});
+	return [...classBlocks, ...taskBlocks].sort((a, b) => {
+		if (a.startMin !== b.startMin) return a.startMin - b.startMin;
+		return a.endMin - b.endMin;
+	});
+}
+/**
+* Calculates every open free-time gap (>= minGapMinutes) within waking hours for a date's blocks.
+*/
+function calculateFreeTimeGaps(blocks, wakeStartHour = 6, wakeEndHour = 23, minGapMinutes = 15) {
+	const windowStart = Math.max(0, Math.min(23, wakeStartHour)) * 60;
+	const windowEnd = Math.max(windowStart + 60, Math.min(24, wakeEndHour) * 60);
+	if (!blocks || blocks.length === 0) {
+		const durationMin = windowEnd - windowStart;
+		return [{
+			startMin: windowStart,
+			endMin: windowEnd,
+			startTime: minutesToTime(windowStart),
+			endTime: minutesToTime(windowEnd),
+			durationMin,
+			label: `${formatDurationCompact(durationMin)} free • + Add`
+		}];
+	}
+	const intervals = blocks.map((b) => ({
+		start: Math.max(windowStart, b.startMin),
+		end: Math.min(windowEnd, b.endMin)
+	})).filter((iv) => iv.end > iv.start).sort((a, b) => a.start - b.start);
+	const merged = [];
+	for (const iv of intervals) if (merged.length === 0 || iv.start > merged[merged.length - 1].end) merged.push({ ...iv });
+	else merged[merged.length - 1].end = Math.max(merged[merged.length - 1].end, iv.end);
+	const gaps = [];
+	let cursor = windowStart;
+	for (const busy of merged) {
+		if (busy.start - cursor >= minGapMinutes) {
+			const durationMin = busy.start - cursor;
+			gaps.push({
+				startMin: cursor,
+				endMin: busy.start,
+				startTime: minutesToTime(cursor),
+				endTime: minutesToTime(busy.start),
+				durationMin,
+				label: `${formatDurationCompact(durationMin)} free • + Add`
+			});
+		}
+		cursor = Math.max(cursor, busy.end);
+	}
+	if (windowEnd - cursor >= minGapMinutes) {
+		const durationMin = windowEnd - cursor;
+		gaps.push({
+			startMin: cursor,
+			endMin: windowEnd,
+			startTime: minutesToTime(cursor),
+			endTime: minutesToTime(windowEnd),
+			durationMin,
+			label: `${formatDurationCompact(durationMin)} free • + Add`
+		});
+	}
+	return gaps;
+}
+function getDayAvailabilitySummary(state, dateKey) {
+	const wakeStart = state.config?.wakeStartHour ?? 6;
+	const wakeEnd = state.config?.wakeEndHour ?? 23;
+	const totalWakingMinutes = Math.max(60, (wakeEnd - wakeStart) * 60);
+	const blocks = getBlocksForDate(state, dateKey);
+	const gaps = calculateFreeTimeGaps(blocks, wakeStart, wakeEnd, 15);
+	const freeMinutes = gaps.reduce((acc, g) => acc + g.durationMin, 0);
+	const busyMinutes = Math.max(0, totalWakingMinutes - freeMinutes);
+	const statusOverride = state.dayOverrides?.[dateKey];
+	let density = "free";
+	if (busyMinutes === 0) density = "free";
+	else if (busyMinutes <= 180) density = "light";
+	else if (busyMinutes <= 360) density = "moderate";
+	else density = "heavy";
+	const freeSummaryLabel = busyMinutes === 0 ? "Completely Free" : freeMinutes <= 0 ? "Fully Booked" : `${formatDurationCompact(freeMinutes)} free`;
+	return {
+		dateKey,
+		blocks,
+		gaps,
+		busyMinutes,
+		freeMinutes,
+		totalWakingMinutes,
+		density,
+		statusOverride,
+		freeSummaryLabel
+	};
+}
+/**
+* Returns the 7 dates (Mon..Sun) of the ISO week containing `anchorDate`
+*/
+function getMondayToSundayWeek(anchorDate) {
+	const iso = getIsoWeekday(anchorDate);
+	const monday = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate() - (iso - 1));
+	const DAY_NAMES = [
+		"MON",
+		"TUE",
+		"WED",
+		"THU",
+		"FRI",
+		"SAT",
+		"SUN"
+	];
+	return Array.from({ length: 7 }).map((_, idx) => {
+		const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + idx);
+		return {
+			date: d,
+			key: formatYMDLocal(d),
+			isoDay: idx + 1,
+			shortDay: DAY_NAMES[idx],
+			dayNum: d.getDate()
+		};
+	});
+}
 // node_modules/react/cjs/react-jsx-runtime.production.js
 /**
 * @license React
@@ -11699,10 +11985,1793 @@ var require_react_jsx_runtime_production = /* @__PURE__ */ __commonJSMin(((expor
 	exports.jsx = jsxProd;
 	exports.jsxs = jsxProd;
 }));
-// src/NexoraOS.jsx
+// src/components/DayflowView.tsx
 var import_jsx_runtime = (/* @__PURE__ */ __commonJSMin(((exports, module) => {
 	module.exports = require_react_jsx_runtime_production();
 })))();
+var WEEKDAY_BUTTONS = [
+	{
+		iso: 1,
+		short: "Mon",
+		label: "M"
+	},
+	{
+		iso: 2,
+		short: "Tue",
+		label: "T"
+	},
+	{
+		iso: 3,
+		short: "Wed",
+		label: "W"
+	},
+	{
+		iso: 4,
+		short: "Thu",
+		label: "T"
+	},
+	{
+		iso: 5,
+		short: "Fri",
+		label: "F"
+	},
+	{
+		iso: 6,
+		short: "Sat",
+		label: "S"
+	},
+	{
+		iso: 7,
+		short: "Sun",
+		label: "S"
+	}
+];
+var DURATION_PRESETS = [
+	{
+		label: "15m",
+		min: 15
+	},
+	{
+		label: "30m",
+		min: 30
+	},
+	{
+		label: "45m",
+		min: 45
+	},
+	{
+		label: "1h",
+		min: 60
+	},
+	{
+		label: "1.5h",
+		min: 90
+	},
+	{
+		label: "2h",
+		min: 120
+	}
+];
+var DayflowView = ({ soundEnabled = true, onAwardXP, onNotify, onPlayClick }) => {
+	const [state, setState] = (0, import_react.useState)(loadDayflowState);
+	const [viewMode, setViewMode] = (0, import_react.useState)("day");
+	const todayDate = (0, import_react.useMemo)(() => /* @__PURE__ */ new Date(), []);
+	const todayKey = (0, import_react.useMemo)(() => formatYMDLocal(todayDate), [todayDate]);
+	const [selectedDateKey, setSelectedDateKey] = (0, import_react.useState)(todayKey);
+	const [monthCursor, setMonthCursor] = (0, import_react.useState)(() => new Date(todayDate.getFullYear(), todayDate.getMonth(), 1));
+	const [nowMinutes, setNowMinutes] = (0, import_react.useState)(() => {
+		const n = /* @__PURE__ */ new Date();
+		return n.getHours() * 60 + n.getMinutes();
+	});
+	(0, import_react.useEffect)(() => {
+		const interval = setInterval(() => {
+			const n = /* @__PURE__ */ new Date();
+			setNowMinutes(n.getHours() * 60 + n.getMinutes());
+		}, 3e4);
+		return () => clearInterval(interval);
+	}, []);
+	(0, import_react.useEffect)(() => {
+		saveDayflowState(state);
+	}, [state]);
+	const [inboxOpen, setInboxOpen] = (0, import_react.useState)(true);
+	const [inboxTitle, setInboxTitle] = (0, import_react.useState)("");
+	const [inboxCategory, setInboxCategory] = (0, import_react.useState)("deepwork");
+	const [inboxDuration, setInboxDuration] = (0, import_react.useState)(45);
+	const [configModalOpen, setConfigModalOpen] = (0, import_react.useState)(false);
+	const [draftWakeStart, setDraftWakeStart] = (0, import_react.useState)(state.config.wakeStartHour);
+	const [draftWakeEnd, setDraftWakeEnd] = (0, import_react.useState)(state.config.wakeEndHour);
+	const [modalOpen, setModalOpen] = (0, import_react.useState)(false);
+	const [editingId, setEditingId] = (0, import_react.useState)(null);
+	const [fromInboxId, setFromInboxId] = (0, import_react.useState)(null);
+	const [formKind, setFormKind] = (0, import_react.useState)("task");
+	const [formTitle, setFormTitle] = (0, import_react.useState)("");
+	const [formCategory, setFormCategory] = (0, import_react.useState)("deepwork");
+	const [formDate, setFormDate] = (0, import_react.useState)(todayKey);
+	const [formStartTime, setFormStartTime] = (0, import_react.useState)("09:00");
+	const [formDuration, setFormDuration] = (0, import_react.useState)(60);
+	const [formGapMaxMin, setFormGapMaxMin] = (0, import_react.useState)(null);
+	const [formRepeatDays, setFormRepeatDays] = (0, import_react.useState)([
+		1,
+		2,
+		3,
+		4,
+		5
+	]);
+	const [formRoomOrNote, setFormRoomOrNote] = (0, import_react.useState)("");
+	const [formError, setFormError] = (0, import_react.useState)("");
+	const clickSound = (pitch = 820, dur = 12) => {
+		if (onPlayClick) onPlayClick(soundEnabled, pitch, dur);
+	};
+	const selectedDateObj = (0, import_react.useMemo)(() => parseYMDLocal(selectedDateKey), [selectedDateKey]);
+	const weekDays = (0, import_react.useMemo)(() => getMondayToSundayWeek(selectedDateObj), [selectedDateObj]);
+	const activeDaySummary = (0, import_react.useMemo)(() => getDayAvailabilitySummary(state, selectedDateKey), [state, selectedDateKey]);
+	const stepDate = (deltaDays) => {
+		clickSound(740, 10);
+		const next = new Date(selectedDateObj.getFullYear(), selectedDateObj.getMonth(), selectedDateObj.getDate() + deltaDays);
+		const nextKey = formatYMDLocal(next);
+		setSelectedDateKey(nextKey);
+		setMonthCursor(new Date(next.getFullYear(), next.getMonth(), 1));
+	};
+	const jumpToToday = () => {
+		clickSound(880, 12);
+		const now = /* @__PURE__ */ new Date();
+		const k = formatYMDLocal(now);
+		setSelectedDateKey(k);
+		setMonthCursor(new Date(now.getFullYear(), now.getMonth(), 1));
+	};
+	const openQuickAdd = (opts) => {
+		clickSound(860, 12);
+		const targetDate = opts?.dateKey || selectedDateKey;
+		const targetIsoDay = getIsoWeekday(parseYMDLocal(targetDate));
+		setEditingId(null);
+		setFromInboxId(opts?.inboxItemId || null);
+		setFormKind(opts?.kind || "task");
+		setFormTitle(opts?.title || "");
+		setFormCategory(opts?.category || (opts?.kind === "class" ? "lecture" : "deepwork"));
+		setFormDate(targetDate);
+		setFormStartTime(opts?.startTime || "09:00");
+		setFormDuration(opts?.durationMin || 60);
+		setFormGapMaxMin(opts?.gapMaxMin ?? null);
+		setFormRepeatDays([targetIsoDay]);
+		setFormRoomOrNote("");
+		setFormError("");
+		setModalOpen(true);
+	};
+	const openEditBlock = (block) => {
+		clickSound(820, 12);
+		setFormError("");
+		setFromInboxId(null);
+		setFormGapMaxMin(null);
+		if (block.kind === "class") {
+			const cls = state.recurringClasses.find((c) => c.id === block.sourceId);
+			if (!cls) return;
+			setEditingId(cls.id);
+			setFormKind("class");
+			setFormTitle(cls.title);
+			setFormCategory(cls.category);
+			setFormDate(selectedDateKey);
+			setFormStartTime(cls.startTime);
+			setFormDuration(cls.durationMin);
+			setFormRepeatDays(cls.repeatDays.length > 0 ? cls.repeatDays : [1]);
+			setFormRoomOrNote(cls.roomOrNote || "");
+			setModalOpen(true);
+		} else {
+			const tsk = state.tasks.find((t) => t.id === block.sourceId);
+			if (!tsk) return;
+			setEditingId(tsk.id);
+			setFormKind("task");
+			setFormTitle(tsk.title);
+			setFormCategory(tsk.category);
+			setFormDate(tsk.date);
+			setFormStartTime(tsk.startTime);
+			setFormDuration(tsk.durationMin);
+			setFormRepeatDays([getIsoWeekday(parseYMDLocal(tsk.date))]);
+			setFormRoomOrNote(tsk.note || "");
+			setModalOpen(true);
+		}
+	};
+	const handleSaveModal = (e) => {
+		e.preventDefault();
+		if (!formTitle.trim()) {
+			setFormError("Enter a title for this schedule block.");
+			return;
+		}
+		const cleanDuration = Math.max(10, Math.min(720, Number(formDuration) || 60));
+		if (formKind === "class") {
+			const days = formRepeatDays.length > 0 ? [...formRepeatDays].sort() : [getIsoWeekday(parseYMDLocal(formDate))];
+			if (editingId) {
+				setState((prev) => ({
+					...prev,
+					recurringClasses: prev.recurringClasses.map((c) => c.id === editingId ? {
+						...c,
+						title: formTitle.trim(),
+						category: formCategory,
+						startTime: formStartTime,
+						durationMin: cleanDuration,
+						repeatDays: days,
+						roomOrNote: formRoomOrNote.trim()
+					} : c)
+				}));
+				onNotify?.("Updated recurring class in Dayflow");
+			} else {
+				const newCls = {
+					id: "df-cls-" + Date.now(),
+					title: formTitle.trim(),
+					category: formCategory,
+					startTime: formStartTime,
+					durationMin: cleanDuration,
+					repeatDays: days,
+					skippedDates: [],
+					roomOrNote: formRoomOrNote.trim()
+				};
+				setState((prev) => ({
+					...prev,
+					recurringClasses: [...prev.recurringClasses, newCls]
+				}));
+				onNotify?.("Added weekly recurring class to Dayflow");
+			}
+		} else if (editingId) {
+			setState((prev) => ({
+				...prev,
+				tasks: prev.tasks.map((t) => t.id === editingId ? {
+					...t,
+					title: formTitle.trim(),
+					category: formCategory,
+					date: formDate,
+					startTime: formStartTime,
+					durationMin: cleanDuration,
+					note: formRoomOrNote.trim()
+				} : t)
+			}));
+			onNotify?.("Updated scheduled task");
+		} else {
+			const newTask = {
+				id: "df-tsk-" + Date.now(),
+				title: formTitle.trim(),
+				category: formCategory,
+				date: formDate,
+				startTime: formStartTime,
+				durationMin: cleanDuration,
+				completed: false,
+				note: formRoomOrNote.trim()
+			};
+			setState((prev) => ({
+				...prev,
+				tasks: [...prev.tasks, newTask],
+				inbox: fromInboxId ? prev.inbox.filter((i) => i.id !== fromInboxId) : prev.inbox
+			}));
+			setSelectedDateKey(formDate);
+			onNotify?.(`Scheduled "${newTask.title}" at ${formatTime12h(formStartTime)}`);
+		}
+		clickSound(940, 14);
+		setModalOpen(false);
+		setEditingId(null);
+		setFromInboxId(null);
+	};
+	const handleDeleteFromModal = () => {
+		if (!editingId) return;
+		clickSound(520, 14);
+		if (formKind === "class") {
+			setState((prev) => ({
+				...prev,
+				recurringClasses: prev.recurringClasses.filter((c) => c.id !== editingId)
+			}));
+			onNotify?.("Removed recurring class");
+		} else {
+			setState((prev) => ({
+				...prev,
+				tasks: prev.tasks.filter((t) => t.id !== editingId)
+			}));
+			onNotify?.("Removed task from timeline");
+		}
+		setModalOpen(false);
+		setEditingId(null);
+	};
+	const toggleTaskCompleted = (taskId) => {
+		const target = state.tasks.find((t) => t.id === taskId);
+		if (!target) return;
+		const nextDone = !target.completed;
+		clickSound(nextDone ? 980 : 620, 14);
+		setState((prev) => ({
+			...prev,
+			tasks: prev.tasks.map((t) => t.id === taskId ? {
+				...t,
+				completed: nextDone
+			} : t)
+		}));
+		if (nextDone) onAwardXP?.(15, `Completed Dayflow Block: ${target.title}`);
+	};
+	const deleteTaskDirect = (taskId) => {
+		clickSound(520, 12);
+		setState((prev) => ({
+			...prev,
+			tasks: prev.tasks.filter((t) => t.id !== taskId)
+		}));
+		onNotify?.("Deleted task block");
+	};
+	const skipClassOnDate = (classId, dateKey) => {
+		clickSound(640, 12);
+		setState((prev) => ({
+			...prev,
+			recurringClasses: prev.recurringClasses.map((cls) => {
+				if (cls.id !== classId) return cls;
+				const skipped = Array.isArray(cls.skippedDates) ? cls.skippedDates : [];
+				if (skipped.includes(dateKey)) return cls;
+				return {
+					...cls,
+					skippedDates: [...skipped, dateKey]
+				};
+			})
+		}));
+		onNotify?.(`Skipped class for ${dateKey}`);
+	};
+	const setDayStatusOverride = (dateKey, status) => {
+		clickSound(840, 12);
+		setState((prev) => {
+			const nextOverrides = { ...prev.dayOverrides || {} };
+			if (!status || nextOverrides[dateKey] === status) {
+				delete nextOverrides[dateKey];
+				onNotify?.(`Cleared day status for ${dateKey}`);
+			} else {
+				nextOverrides[dateKey] = status;
+				const meta = getDayStatusMeta(status);
+				onNotify?.(`Marked ${dateKey} as ${meta?.label || status}`);
+			}
+			return {
+				...prev,
+				dayOverrides: nextOverrides
+			};
+		});
+	};
+	const handleAddInboxItem = (e) => {
+		e.preventDefault();
+		if (!inboxTitle.trim()) return;
+		clickSound(880, 12);
+		const item = {
+			id: "df-inb-" + Date.now(),
+			title: inboxTitle.trim(),
+			category: inboxCategory,
+			durationMin: Math.max(15, Number(inboxDuration) || 45),
+			createdAt: todayKey
+		};
+		setState((prev) => ({
+			...prev,
+			inbox: [item, ...prev.inbox]
+		}));
+		setInboxTitle("");
+		onNotify?.("Added task to Dayflow Inbox");
+	};
+	const scheduleInboxIntoGap = (item) => {
+		const gaps = activeDaySummary.gaps;
+		let chosenStart = (gaps.find((g) => g.durationMin >= item.durationMin) || gaps[0] || {
+			startTime: `${String(state.config.wakeStartHour).padStart(2, "0")}:00`,
+			durationMin: item.durationMin
+		}).startTime;
+		if (selectedDateKey === todayKey) {
+			const roundedNow = Math.ceil(nowMinutes / 15) * 15;
+			const futureGap = gaps.find((g) => g.endMin - Math.max(g.startMin, roundedNow) >= item.durationMin);
+			if (futureGap) chosenStart = minutesToTime(Math.max(futureGap.startMin, roundedNow));
+		}
+		openQuickAdd({
+			kind: "task",
+			dateKey: selectedDateKey,
+			startTime: chosenStart,
+			durationMin: item.durationMin,
+			title: item.title,
+			category: item.category,
+			inboxItemId: item.id
+		});
+	};
+	const deleteInboxItem = (id) => {
+		clickSound(520, 12);
+		setState((prev) => ({
+			...prev,
+			inbox: prev.inbox.filter((i) => i.id !== id)
+		}));
+	};
+	const saveWakingHoursConfig = (e) => {
+		e.preventDefault();
+		const s = Math.max(0, Math.min(22, Number(draftWakeStart) || 6));
+		const end = Math.max(s + 1, Math.min(24, Number(draftWakeEnd) || 23));
+		setState((prev) => ({
+			...prev,
+			config: {
+				wakeStartHour: s,
+				wakeEndHour: end
+			}
+		}));
+		setConfigModalOpen(false);
+		onNotify?.(`Updated waking hours: ${formatTime12h(`${s}:00`)} – ${formatTime12h(`${end === 24 ? 23 : end}:${end === 24 ? "59" : "00"}`)}`);
+	};
+	const dayStreamItems = (0, import_react.useMemo)(() => {
+		const items = [];
+		activeDaySummary.blocks.forEach((b) => {
+			items.push({
+				type: "block",
+				sortMin: b.startMin,
+				block: b
+			});
+		});
+		activeDaySummary.gaps.forEach((g) => {
+			items.push({
+				type: "gap",
+				sortMin: g.startMin + .1,
+				gap: g
+			});
+		});
+		return items.sort((a, b) => a.sortMin - b.sortMin);
+	}, [activeDaySummary]);
+	const monthCells = (0, import_react.useMemo)(() => {
+		const year = monthCursor.getFullYear();
+		const month = monthCursor.getMonth();
+		const firstIso = getIsoWeekday(new Date(year, month, 1));
+		const daysInMonth = new Date(year, month + 1, 0).getDate();
+		const cells = [];
+		for (let i = 1; i < firstIso; i++) cells.push(null);
+		for (let d = 1; d <= daysInMonth; d++) {
+			const key = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+			cells.push({
+				day: d,
+				key,
+				summary: getDayAvailabilitySummary(state, key)
+			});
+		}
+		return cells;
+	}, [monthCursor, state]);
+	state.config.wakeStartHour * 60;
+	state.config.wakeEndHour * 60;
+	const isSelectedToday = selectedDateKey === todayKey;
+	const currentStatusMeta = getDayStatusMeta(activeDaySummary.statusOverride);
+	const headerTitle = (0, import_react.useMemo)(() => {
+		if (viewMode === "month") return monthCursor.toLocaleDateString("en-US", {
+			month: "long",
+			year: "numeric"
+		});
+		if (viewMode === "week") {
+			const first = weekDays[0]?.date;
+			const last = weekDays[6]?.date;
+			if (!first || !last) return "";
+			return `${first.toLocaleDateString("en-US", {
+				month: "short",
+				day: "numeric"
+			})} – ${last.toLocaleDateString("en-US", {
+				month: "short",
+				day: "numeric",
+				year: "numeric"
+			})}`;
+		}
+		return selectedDateObj.toLocaleDateString("en-US", {
+			weekday: "long",
+			month: "short",
+			day: "numeric",
+			year: "numeric"
+		});
+	}, [
+		viewMode,
+		monthCursor,
+		weekDays,
+		selectedDateObj
+	]);
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "space-y-5",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "arch-panel rounded-xl p-4 sm:p-5 space-y-4",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "flex flex-col lg:flex-row lg:items-center justify-between gap-4",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "flex items-center gap-2",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+							className: "font-mono text-[11px] uppercase tracking-widest",
+							style: { color: "var(--ink-muted)" },
+							children: "04 // STRUCTURED TIMELINE & AVAILABILITY PLANNER"
+						}), isSelectedToday && viewMode === "day" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+							className: "px-2 py-0.5 rounded-full text-[10px] font-mono uppercase font-semibold border",
+							style: {
+								color: "var(--status-ok)",
+								borderColor: "var(--status-ok)",
+								backgroundColor: "rgba(16, 185, 129, 0.1)"
+							},
+							children: "LIVE TODAY"
+						})]
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "flex flex-wrap items-center gap-3 mt-1",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h1", {
+							className: "text-xl sm:text-2xl font-semibold heading-tight",
+							children: ["Dayflow — ", headerTitle]
+						}), currentStatusMeta && viewMode === "day" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+							className: "px-2.5 py-0.5 rounded-md font-mono text-[10px] font-semibold uppercase border",
+							style: {
+								color: currentStatusMeta.color,
+								borderColor: currentStatusMeta.color,
+								backgroundColor: "var(--bg-canvas)"
+							},
+							children: currentStatusMeta.shortLabel
+						})]
+					})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "flex flex-wrap items-center gap-2",
+						children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+								className: "inline-flex rounded-lg border p-0.5 font-mono text-xs",
+								style: {
+									backgroundColor: "var(--bg-canvas)",
+									borderColor: "var(--border-hairline)"
+								},
+								role: "tablist",
+								"aria-label": "Dayflow View Switcher",
+								children: [
+									"day",
+									"week",
+									"month"
+								].map((mode) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+									type: "button",
+									role: "tab",
+									"aria-selected": viewMode === mode,
+									onClick: () => {
+										clickSound(780, 10);
+										setViewMode(mode);
+									},
+									className: `px-3 py-1.5 rounded-md uppercase transition font-medium ${viewMode === mode ? "arch-btn-primary" : "arch-btn-ghost border-transparent"}`,
+									children: mode
+								}, mode))
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "inline-flex items-center gap-1",
+								children: [
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+										type: "button",
+										"aria-label": "Previous period",
+										onClick: () => {
+											if (viewMode === "month") setMonthCursor(new Date(monthCursor.getFullYear(), monthCursor.getMonth() - 1, 1));
+											else if (viewMode === "week") stepDate(-7);
+											else stepDate(-1);
+										},
+										className: "arch-btn-ghost px-2.5 py-1.5 rounded-md font-mono text-xs",
+										children: "<"
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+										type: "button",
+										onClick: jumpToToday,
+										className: "arch-btn-ghost px-3 py-1.5 rounded-md font-mono text-xs font-medium",
+										children: "Today"
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+										type: "button",
+										"aria-label": "Next period",
+										onClick: () => {
+											if (viewMode === "month") setMonthCursor(new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 1));
+											else if (viewMode === "week") stepDate(7);
+											else stepDate(1);
+										},
+										className: "arch-btn-ghost px-2.5 py-1.5 rounded-md font-mono text-xs",
+										children: ">"
+									})
+								]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+								type: "button",
+								onClick: () => setInboxOpen((o) => !o),
+								className: `px-3 py-1.5 rounded-md font-mono text-xs inline-flex items-center gap-1.5 border transition ${inboxOpen ? "arch-btn-primary" : "arch-btn-ghost"}`,
+								title: "Toggle Unscheduled Inbox Tray",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Inbox" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+									className: "px-1.5 py-0.2 rounded text-[10px] border tabular-nums",
+									children: state.inbox.length
+								})]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+								type: "button",
+								onClick: () => {
+									setDraftWakeStart(state.config.wakeStartHour);
+									setDraftWakeEnd(state.config.wakeEndHour);
+									setConfigModalOpen(true);
+								},
+								"aria-label": "Configure Timetable and Waking Hours",
+								title: "Configure Timetable / Waking Hours",
+								className: "arch-btn-ghost px-3 py-1.5 rounded-md font-mono text-xs inline-flex items-center gap-1.5",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", {
+									width: "14",
+									height: "14",
+									viewBox: "0 0 24 24",
+									fill: "none",
+									stroke: "currentColor",
+									strokeWidth: "1.75",
+									strokeLinecap: "round",
+									strokeLinejoin: "round",
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("circle", {
+										cx: "12",
+										cy: "12",
+										r: "3"
+									}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" })]
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+									className: "hidden sm:inline",
+									children: "Timetable / Hours"
+								})]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+								type: "button",
+								onClick: () => openQuickAdd({ dateKey: selectedDateKey }),
+								className: "arch-btn-primary px-3.5 py-1.5 rounded-md font-mono text-xs font-semibold inline-flex items-center gap-1.5",
+								children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "+ Add Block" })
+							})
+						]
+					})]
+				}), viewMode === "day" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "pt-3 border-t space-y-3",
+					style: { borderColor: "var(--border-hairline)" },
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+						className: "grid grid-cols-7 gap-1.5 sm:gap-2",
+						children: weekDays.map((wd) => {
+							const daySum = getDayAvailabilitySummary(state, wd.key);
+							const isSelected = wd.key === selectedDateKey;
+							const isToday = wd.key === todayKey;
+							const statusMeta = getDayStatusMeta(daySum.statusOverride);
+							return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+								type: "button",
+								onClick: () => {
+									clickSound(720, 10);
+									setSelectedDateKey(wd.key);
+								},
+								className: `p-2 sm:p-2.5 rounded-lg border text-left transition flex flex-col justify-between ${isSelected ? "arch-btn-primary" : "arch-btn-ghost"}`,
+								style: !isSelected ? {
+									backgroundColor: isToday ? "var(--bg-elevated)" : "var(--bg-canvas)",
+									borderColor: isToday ? "var(--border-strong)" : "var(--border-hairline)"
+								} : void 0,
+								children: [
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "flex items-center justify-between w-full",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+											className: "font-mono text-[10px] uppercase opacity-75",
+											children: wd.shortDay
+										}), isToday && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+											className: "w-1.5 h-1.5 rounded-full",
+											style: { backgroundColor: isSelected ? "var(--accent-fg)" : "var(--status-ok)" }
+										})]
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+										className: "font-mono text-sm sm:text-base font-bold tabular-nums my-0.5",
+										children: String(wd.dayNum).padStart(2, "0")
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "flex items-center justify-between gap-1 w-full mt-1",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+											className: "flex items-center gap-1 overflow-hidden",
+											children: daySum.blocks.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+												className: "font-mono text-[9px] opacity-65 truncate",
+												children: "FREE"
+											}) : daySum.blocks.slice(0, 4).map((b) => {
+												const cat = getCategoryMeta(b.category);
+												return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+													className: "w-1.5 h-1.5 rounded-full shrink-0",
+													style: { backgroundColor: isSelected ? "currentColor" : cat.color }
+												}, b.id);
+											})
+										}), statusMeta && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+											className: "w-2 h-2 rounded-sm shrink-0",
+											title: statusMeta.label,
+											style: { backgroundColor: statusMeta.color }
+										})]
+									})
+								]
+							}, wd.key);
+						})
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "flex flex-wrap items-center justify-between gap-3 pt-1 text-xs font-mono",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "flex flex-wrap items-center gap-3 tabular-nums",
+							children: [
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+										style: { color: "var(--ink-muted)" },
+										children: "SCHEDULED: "
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: formatDurationCompact(activeDaySummary.busyMinutes) }),
+									" (",
+									activeDaySummary.blocks.length,
+									" blocks)"
+								] }),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+									style: { color: "var(--ink-muted)" },
+									children: "•"
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+									style: { color: "var(--ink-muted)" },
+									children: "AVAILABLE: "
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", {
+									style: { color: "var(--status-ok)" },
+									children: activeDaySummary.freeSummaryLabel
+								})] }),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+									style: { color: "var(--ink-muted)" },
+									children: "•"
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+									style: { color: "var(--ink-muted)" },
+									children: [
+										"HOURS: ",
+										formatTime12h(`${state.config.wakeStartHour}:00`),
+										" –",
+										" ",
+										formatTime12h(`${state.config.wakeEndHour === 24 ? 23 : state.config.wakeEndHour}:${state.config.wakeEndHour === 24 ? "59" : "00"}`)
+									]
+								})
+							]
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "flex flex-wrap items-center gap-1.5",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								className: "text-[10px] uppercase",
+								style: { color: "var(--ink-muted)" },
+								children: "DAY STATUS:"
+							}), DAY_STATUS_OPTIONS.map((opt) => {
+								const active = activeDaySummary.statusOverride === opt.id;
+								return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+									type: "button",
+									onClick: () => setDayStatusOverride(selectedDateKey, active ? null : opt.id),
+									className: `px-2.5 py-1 rounded text-[10px] font-mono border transition ${active ? "font-semibold" : "opacity-75 hover:opacity-100"}`,
+									style: {
+										borderColor: active ? opt.color : "var(--border-hairline)",
+										color: active ? opt.color : "var(--ink-secondary)",
+										backgroundColor: active ? "var(--bg-elevated)" : "var(--bg-canvas)"
+									},
+									children: active ? `✓ ${opt.label}` : opt.label
+								}, opt.id);
+							})]
+						})]
+					})]
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "grid grid-cols-1 lg:grid-cols-12 gap-5 items-start",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: inboxOpen ? "lg:col-span-8 xl:col-span-9" : "lg:col-span-12",
+					children: [
+						viewMode === "day" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "arch-panel rounded-xl p-4 sm:p-6 space-y-4",
+							children: [
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "flex items-center justify-between border-b pb-3",
+									style: { borderColor: "var(--border-hairline)" },
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+										className: "font-mono text-[10px] uppercase tracking-widest block",
+										style: { color: "var(--ink-muted)" },
+										children: "PROPORTIONAL DAILY TIMELINE & IN-BETWEEN FREE GAPS"
+									}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h2", {
+										className: "text-sm font-mono font-semibold mt-0.5",
+										children: [
+											selectedDateKey,
+											" // ",
+											activeDaySummary.freeSummaryLabel
+										]
+									})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+										type: "button",
+										onClick: () => openQuickAdd({
+											dateKey: selectedDateKey,
+											kind: "class"
+										}),
+										className: "arch-btn-ghost px-2.5 py-1 rounded text-[11px] font-mono",
+										children: "+ Add Recurring Class"
+									})]
+								}),
+								isSelectedToday && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "flex items-center gap-3 px-3 py-2 rounded-lg border",
+									style: {
+										borderColor: "rgba(16, 185, 129, 0.45)",
+										backgroundColor: "rgba(16, 185, 129, 0.07)"
+									},
+									children: [
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+											className: "w-2.5 h-2.5 rounded-full animate-pulse shrink-0",
+											style: {
+												backgroundColor: "#10B981",
+												boxShadow: "0 0 10px #10B981"
+											}
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+											className: "flex-1 h-[1px]",
+											style: {
+												backgroundColor: "#10B981",
+												opacity: .5
+											}
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+											className: "font-mono text-[11px] font-semibold tabular-nums",
+											style: { color: "#10B981" },
+											children: ["LIVE NOW • ", formatTime12h(minutesToTime(nowMinutes))]
+										})
+									]
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "relative pl-2 sm:pl-4 space-y-2.5",
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+										className: "absolute left-5 sm:left-7 top-3 bottom-3 w-[2px] pointer-events-none",
+										style: { backgroundColor: "var(--border-hairline)" }
+									}), dayStreamItems.map((item, idx) => {
+										if (item.type === "gap") {
+											const { gap } = item;
+											const showNowLineInGap = isSelectedToday && nowMinutes >= gap.startMin && nowMinutes < gap.endMin;
+											return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+												className: "relative pl-7 sm:pl-9 py-1",
+												children: [
+													/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+														className: "Jw-2 h-2 w-2 rounded-full border absolute left-[13px] sm:left-[21px] top-1/2 -translate-y-1/2",
+														style: {
+															backgroundColor: "var(--bg-canvas)",
+															borderColor: "var(--border-strong)"
+														}
+													}),
+													showNowLineInGap && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+														className: "flex items-center gap-2 my-1.5",
+														children: [
+															/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+																className: "w-2 h-2 rounded-full",
+																style: {
+																	backgroundColor: "#10B981",
+																	boxShadow: "0 0 8px #10B981"
+																}
+															}),
+															/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+																className: "flex-1 h-[1px]",
+																style: { backgroundColor: "#10B981" }
+															}),
+															/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+																className: "font-mono text-[10px] px-1.5 py-0.5 rounded",
+																style: { color: "#10B981" },
+																children: formatTime12h(minutesToTime(nowMinutes))
+															})
+														]
+													}),
+													/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+														type: "button",
+														onClick: () => openQuickAdd({
+															kind: "task",
+															dateKey: selectedDateKey,
+															startTime: gap.startTime,
+															durationMin: Math.min(60, gap.durationMin),
+															gapMaxMin: gap.durationMin
+														}),
+														className: "w-full rounded-lg border border-dashed px-3.5 py-2.5 text-left transition flex flex-wrap items-center justify-between gap-2 group hover:border-solid",
+														style: {
+															backgroundColor: "var(--bg-canvas)",
+															borderColor: "var(--border-elevated)"
+														},
+														children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+															className: "flex items-center gap-2.5 font-mono text-xs",
+															children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+																className: "tabular-nums opacity-65",
+																children: [
+																	formatTime12h(gap.startTime),
+																	" – ",
+																	formatTime12h(gap.endTime)
+																]
+															}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+																className: "px-2.5 py-0.5 rounded-full text-[11px] font-semibold border transition",
+																style: {
+																	color: "var(--status-ok)",
+																	borderColor: "rgba(16, 185, 129, 0.35)",
+																	backgroundColor: "rgba(16, 185, 129, 0.08)"
+																},
+																children: gap.label
+															})]
+														}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+															className: "font-mono text-[10px] uppercase tracking-wider opacity-60 group-hover:opacity-100",
+															style: { color: "var(--ink-secondary)" },
+															children: "Click to schedule in gap →"
+														})]
+													})
+												]
+											}, `gap-${gap.startMin}-${idx}`);
+										}
+										const { block } = item;
+										const cat = getCategoryMeta(block.category);
+										const isClass = block.kind === "class";
+										const isDone = Boolean(block.completed);
+										const minHeightPx = Math.max(64, Math.min(180, Math.round(block.durationMin * .85)));
+										const isNowInsideBlock = isSelectedToday && nowMinutes >= block.startMin && nowMinutes < block.endMin;
+										return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+											className: "relative pl-7 sm:pl-9",
+											children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+												className: "w-3 h-3 rounded-full absolute left-[11px] sm:left-[19px] top-5 border-2",
+												style: {
+													backgroundColor: isDone ? "var(--status-ok)" : cat.color,
+													borderColor: "var(--bg-surface)",
+													boxShadow: isNowInsideBlock ? `0 0 10px ${cat.color}` : void 0
+												}
+											}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+												className: "rounded-xl border p-3.5 sm:p-4 transition flex flex-col justify-between gap-2",
+												style: {
+													minHeight: `${minHeightPx}px`,
+													backgroundColor: isClass ? cat.bgSoft : "var(--bg-canvas)",
+													borderColor: isNowInsideBlock ? cat.color : isClass ? cat.borderSoft : "var(--border-hairline)",
+													borderLeftWidth: "4px",
+													borderLeftColor: cat.color,
+													opacity: isDone ? .68 : 1
+												},
+												children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+													className: "flex flex-wrap items-start justify-between gap-2",
+													children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+														className: "flex items-start gap-2.5 min-w-0",
+														children: [!isClass ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+															type: "button",
+															role: "checkbox",
+															"aria-checked": isDone,
+															"aria-label": `Mark "${block.title}" as ${isDone ? "incomplete" : "complete"}`,
+															onClick: () => toggleTaskCompleted(block.sourceId),
+															className: "mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 transition",
+															style: {
+																backgroundColor: isDone ? "var(--status-ok)" : "transparent",
+																borderColor: isDone ? "var(--status-ok)" : cat.color,
+																color: "#09090B"
+															},
+															children: isDone && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("svg", {
+																width: "11",
+																height: "11",
+																viewBox: "0 0 24 24",
+																fill: "none",
+																stroke: "currentColor",
+																strokeWidth: "3",
+																children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("polyline", { points: "20 6 9 17 4 12" })
+															})
+														}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+															className: "mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-mono uppercase font-bold shrink-0",
+															style: {
+																backgroundColor: cat.color,
+																color: "#09090B"
+															},
+															children: "CLASS"
+														}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+															className: "min-w-0",
+															children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+																className: "flex flex-wrap items-center gap-2",
+																children: [
+																	/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+																		onClick: () => openEditBlock(block),
+																		className: `text-sm font-semibold cursor-pointer hover:underline ${isDone ? "line-through opacity-75" : ""}`,
+																		children: block.title
+																	}),
+																	/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+																		className: "px-2 py-0.2 rounded text-[10px] font-mono border",
+																		style: {
+																			color: cat.color,
+																			borderColor: cat.borderSoft,
+																			backgroundColor: "var(--bg-surface)"
+																		},
+																		children: cat.label
+																	}),
+																	isNowInsideBlock && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+																		className: "px-1.5 py-0.2 rounded text-[9px] font-mono uppercase font-bold",
+																		style: {
+																			backgroundColor: "#10B981",
+																			color: "#09090B"
+																		},
+																		children: "ACTIVE NOW"
+																	})
+																]
+															}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+																className: "font-mono text-[11px] tabular-nums mt-1 flex flex-wrap items-center gap-2",
+																style: { color: "var(--ink-secondary)" },
+																children: [
+																	/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+																		formatTime12h(block.startTime),
+																		" – ",
+																		formatTime12h(block.endTime)
+																	] }),
+																	/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "•" }),
+																	/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: formatDurationCompact(block.durationMin) }),
+																	block.roomOrNote && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "•" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: block.roomOrNote })] })
+																]
+															})]
+														})]
+													}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+														className: "flex items-center gap-1.5 shrink-0",
+														children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+															type: "button",
+															onClick: () => openEditBlock(block),
+															className: "arch-btn-ghost px-2 py-1 rounded text-[10px] font-mono",
+															children: "Edit"
+														}), isClass ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+															type: "button",
+															onClick: () => skipClassOnDate(block.sourceId, selectedDateKey),
+															className: "arch-btn-ghost px-2 py-1 rounded text-[10px] font-mono",
+															title: "Skip this recurring class for this date only",
+															children: "Skip Today"
+														}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+															type: "button",
+															onClick: () => deleteTaskDirect(block.sourceId),
+															className: "arch-btn-ghost px-2 py-1 rounded text-[10px] font-mono",
+															style: { color: "var(--status-err)" },
+															children: "Delete"
+														})]
+													})]
+												})
+											})]
+										}, block.id);
+									})]
+								})
+							]
+						}),
+						viewMode === "week" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "arch-panel rounded-xl p-4 sm:p-5 space-y-4",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+								className: "flex flex-wrap items-center justify-between gap-2 border-b pb-3",
+								style: { borderColor: "var(--border-hairline)" },
+								children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+									className: "font-mono text-[10px] uppercase tracking-widest block",
+									style: { color: "var(--ink-muted)" },
+									children: "7-COLUMN WEEKLY BUSY VS. OPEN FREE-TIME OVERVIEW"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
+									className: "text-sm font-mono font-semibold mt-0.5",
+									children: "Click any free gap pill to schedule or toggle day status below"
+								})] })
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+								className: "grid grid-cols-1 md:grid-cols-7 gap-2.5",
+								children: weekDays.map((wd) => {
+									const sum = getDayAvailabilitySummary(state, wd.key);
+									const isToday = wd.key === todayKey;
+									const isSelected = wd.key === selectedDateKey;
+									getDayStatusMeta(sum.statusOverride);
+									return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "rounded-xl border p-2.5 flex flex-col justify-between space-y-2.5",
+										style: {
+											backgroundColor: "var(--bg-canvas)",
+											borderColor: isSelected ? "var(--ink-primary)" : isToday ? "var(--status-ok)" : "var(--border-hairline)"
+										},
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+											className: "space-y-2",
+											children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+												className: "pb-2 border-b",
+												style: { borderColor: "var(--border-hairline)" },
+												children: [
+													/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+														className: "flex items-center justify-between",
+														children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+															type: "button",
+															onClick: () => {
+																setSelectedDateKey(wd.key);
+																setViewMode("day");
+															},
+															className: "font-mono text-xs font-bold hover:underline flex items-center gap-1",
+															children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: wd.shortDay }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: String(wd.dayNum).padStart(2, "0") })]
+														}), isToday && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+															className: "px-1.5 py-0.2 rounded text-[9px] font-mono uppercase",
+															style: {
+																backgroundColor: "rgba(16, 185, 129, 0.16)",
+																color: "var(--status-ok)"
+															},
+															children: "TODAY"
+														})]
+													}),
+													/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+														className: "mt-1.5 px-2 py-1 rounded text-[10px] font-mono font-semibold text-center border",
+														style: {
+															color: sum.busyMinutes === 0 ? "var(--status-ok)" : "var(--ink-primary)",
+															borderColor: sum.busyMinutes === 0 ? "rgba(16, 185, 129, 0.4)" : "var(--border-elevated)",
+															backgroundColor: sum.busyMinutes === 0 ? "rgba(16, 185, 129, 0.08)" : "var(--bg-surface)"
+														},
+														children: sum.freeSummaryLabel
+													}),
+													/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+														className: "mt-1.5 flex flex-wrap gap-1",
+														children: DAY_STATUS_OPTIONS.map((opt) => {
+															const active = sum.statusOverride === opt.id;
+															return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+																type: "button",
+																onClick: () => setDayStatusOverride(wd.key, active ? null : opt.id),
+																className: "px-1.5 py-0.5 rounded text-[9px] font-mono border transition",
+																style: {
+																	borderColor: active ? opt.color : "var(--border-hairline)",
+																	color: active ? opt.color : "var(--ink-muted)",
+																	backgroundColor: active ? "var(--bg-elevated)" : "transparent"
+																},
+																title: `Toggle ${opt.label}`,
+																children: opt.id === "holiday" ? "Holiday" : opt.id === "free" ? "Free" : "Focus"
+															}, opt.id);
+														})
+													})
+												]
+											}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+												className: "space-y-1.5 max-h-64 overflow-y-auto pr-0.5",
+												children: [sum.blocks.map((b) => {
+													const cat = getCategoryMeta(b.category);
+													return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+														type: "button",
+														onClick: () => {
+															setSelectedDateKey(wd.key);
+															openEditBlock(b);
+														},
+														className: "w-full text-left p-2 rounded-md border text-[11px] space-y-0.5 transition hover:opacity-90",
+														style: {
+															backgroundColor: b.kind === "class" ? cat.bgSoft : "var(--bg-surface)",
+															borderColor: cat.borderSoft,
+															borderLeftWidth: "3px",
+															borderLeftColor: cat.color
+														},
+														children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+															className: "font-semibold truncate",
+															children: b.title
+														}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+															className: "font-mono text-[9px] tabular-nums opacity-75",
+															children: [
+																formatTime12h(b.startTime),
+																" • ",
+																formatDurationCompact(b.durationMin)
+															]
+														})]
+													}, b.id);
+												}), sum.gaps.slice(0, 3).map((g, gIdx) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+													type: "button",
+													onClick: () => openQuickAdd({
+														kind: "task",
+														dateKey: wd.key,
+														startTime: g.startTime,
+														durationMin: Math.min(60, g.durationMin),
+														gapMaxMin: g.durationMin
+													}),
+													className: "w-full text-left px-2 py-1.5 rounded border border-dashed font-mono text-[10px] transition hover:border-solid",
+													style: {
+														borderColor: "var(--border-elevated)",
+														color: "var(--status-ok)"
+													},
+													children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [formatDurationCompact(g.durationMin), " free • + Add"] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+														className: "text-[9px] opacity-65 tabular-nums",
+														children: formatTime12h(g.startTime)
+													})]
+												}, `wk-gap-${wd.key}-${gIdx}`))]
+											})]
+										}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+											type: "button",
+											onClick: () => {
+												setSelectedDateKey(wd.key);
+												setViewMode("day");
+											},
+											className: "w-full arch-btn-ghost py-1 rounded text-[10px] font-mono",
+											children: "Open Day →"
+										})]
+									}, wd.key);
+								})
+							})]
+						}),
+						viewMode === "month" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "arch-panel rounded-xl p-4 sm:p-5 space-y-4",
+							children: [
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "p-3.5 rounded-xl border flex flex-wrap items-center justify-between gap-3",
+									style: {
+										backgroundColor: "var(--bg-canvas)",
+										borderColor: "var(--border-elevated)"
+									},
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "space-y-0.5",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+											className: "font-mono text-[10px] uppercase",
+											style: { color: "var(--ink-muted)" },
+											children: ["EDITING SELECTED DATE // ", selectedDateKey]
+										}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+											className: "text-xs font-mono",
+											children: [
+												/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: activeDaySummary.freeSummaryLabel }),
+												" (",
+												activeDaySummary.blocks.length,
+												" ",
+												"scheduled blocks)"
+											]
+										})]
+									}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "flex flex-wrap items-center gap-1.5",
+										children: [
+											DAY_STATUS_OPTIONS.map((opt) => {
+												const active = activeDaySummary.statusOverride === opt.id;
+												return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+													type: "button",
+													onClick: () => setDayStatusOverride(selectedDateKey, active ? null : opt.id),
+													className: "px-2.5 py-1 rounded text-[10px] font-mono border transition",
+													style: {
+														borderColor: active ? opt.color : "var(--border-hairline)",
+														color: active ? opt.color : "var(--ink-secondary)",
+														backgroundColor: active ? "var(--bg-elevated)" : "var(--bg-surface)"
+													},
+													children: active ? `✓ ${opt.label}` : opt.label
+												}, opt.id);
+											}),
+											/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+												type: "button",
+												onClick: () => openQuickAdd({ dateKey: selectedDateKey }),
+												className: "arch-btn-ghost px-2.5 py-1 rounded text-[10px] font-mono",
+												children: "+ Add Task"
+											}),
+											/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+												type: "button",
+												onClick: () => setViewMode("day"),
+												className: "arch-btn-primary px-3 py-1 rounded text-[10px] font-mono",
+												children: "Open Timeline →"
+											})
+										]
+									})]
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+									className: "grid grid-cols-7 gap-1.5 text-center font-mono text-[10px] uppercase",
+									style: { color: "var(--ink-muted)" },
+									children: [
+										"MON",
+										"TUE",
+										"WED",
+										"THU",
+										"FRI",
+										"SAT",
+										"SUN"
+									].map((d) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+										className: "py-1",
+										children: d
+									}, d))
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+									className: "grid grid-cols-7 gap-1.5 sm:gap-2",
+									children: monthCells.map((cell, idx) => {
+										if (!cell) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+											className: "min-h-[88px] rounded-lg border opacity-20",
+											style: { backgroundColor: "var(--bg-canvas)" }
+										}, `m-empty-${idx}`);
+										const { day, key, summary } = cell;
+										const isToday = key === todayKey;
+										const isSelected = key === selectedDateKey;
+										const statusMeta = getDayStatusMeta(summary.statusOverride);
+										const isCompletelyFree = summary.density === "free";
+										const isLightDay = summary.density === "light";
+										return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+											type: "button",
+											onClick: () => {
+												clickSound(720, 10);
+												setSelectedDateKey(key);
+											},
+											onDoubleClick: () => {
+												setSelectedDateKey(key);
+												setViewMode("day");
+											},
+											className: "min-h-[92px] p-2 rounded-lg border text-left transition flex flex-col justify-between",
+											style: {
+												backgroundColor: isCompletelyFree ? "rgba(16, 185, 129, 0.06)" : "var(--bg-canvas)",
+												borderColor: isSelected ? "var(--ink-primary)" : statusMeta ? statusMeta.color : isCompletelyFree ? "rgba(16, 185, 129, 0.35)" : "var(--border-hairline)"
+											},
+											children: [
+												/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+													className: "flex items-center justify-between w-full",
+													children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+														className: `font-mono text-xs tabular-nums ${isToday ? "font-bold underline" : ""}`,
+														children: String(day).padStart(2, "0")
+													}), statusMeta ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+														className: "px-1 py-0.2 rounded text-[8px] font-mono uppercase font-semibold",
+														style: {
+															color: statusMeta.color,
+															border: `1px solid ${statusMeta.color}`
+														},
+														children: statusMeta.id.toUpperCase()
+													}) : isCompletelyFree ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+														className: "px-1 py-0.2 rounded text-[8px] font-mono uppercase font-semibold",
+														style: { color: "var(--status-ok)" },
+														children: "FREE DAY"
+													}) : isLightDay ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+														className: "px-1 py-0.2 rounded text-[8px] font-mono uppercase",
+														style: { color: "#06B6D4" },
+														children: "LIGHT"
+													}) : null]
+												}),
+												/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+													className: "space-y-0.5 my-1 w-full overflow-hidden",
+													children: [summary.blocks.slice(0, 2).map((b) => {
+														const cat = getCategoryMeta(b.category);
+														return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+															className: "truncate text-[9px] font-mono px-1 py-0.2 rounded",
+															style: {
+																backgroundColor: cat.bgSoft,
+																color: "var(--ink-primary)"
+															},
+															children: b.title
+														}, b.id);
+													}), summary.blocks.length > 2 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+														className: "text-[8px] font-mono opacity-65",
+														children: [
+															"+",
+															summary.blocks.length - 2,
+															" more"
+														]
+													})]
+												}),
+												/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+													className: "flex items-center justify-between w-full font-mono text-[9px] tabular-nums opacity-75",
+													children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: summary.freeSummaryLabel })
+												})
+											]
+										}, key);
+									})
+								})
+							]
+						})
+					]
+				}), inboxOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "lg:col-span-4 xl:col-span-3 arch-panel rounded-xl p-4 sm:p-5 space-y-4",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "flex items-center justify-between border-b pb-3",
+							style: { borderColor: "var(--border-hairline)" },
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								className: "font-mono text-[10px] uppercase tracking-widest block",
+								style: { color: "var(--ink-muted)" },
+								children: "UNSCHEDULED BACKLOG"
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h2", {
+								className: "text-sm font-mono font-semibold mt-0.5",
+								children: [
+									"Dayflow Inbox (",
+									state.inbox.length,
+									")"
+								]
+							})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+								type: "button",
+								onClick: () => setInboxOpen(false),
+								className: "arch-btn-ghost px-2 py-0.5 rounded text-[10px] font-mono",
+								children: "Hide"
+							})]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
+							onSubmit: handleAddInboxItem,
+							className: "space-y-2.5",
+							children: [
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+									type: "text",
+									value: inboxTitle,
+									onChange: (e) => setInboxTitle(e.target.value),
+									placeholder: "Dump unscheduled task...",
+									className: "w-full arch-input rounded-md px-3 py-2 text-xs font-mono"
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "grid grid-cols-2 gap-2",
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", {
+										value: inboxCategory,
+										onChange: (e) => setInboxCategory(e.target.value),
+										"aria-label": "Inbox task category",
+										className: "arch-input rounded-md px-2 py-1.5 text-[11px] font-mono",
+										children: DAYFLOW_CATEGORIES.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+											value: c.id,
+											children: c.label
+										}, c.id))
+									}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", {
+										value: inboxDuration,
+										onChange: (e) => setInboxDuration(Number(e.target.value)),
+										"aria-label": "Inbox task duration",
+										className: "arch-input rounded-md px-2 py-1.5 text-[11px] font-mono tabular-nums",
+										children: DURATION_PRESETS.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+											value: p.min,
+											children: p.label
+										}, p.min))
+									})]
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+									type: "submit",
+									className: "w-full arch-btn-primary py-2 rounded-md text-xs font-mono font-medium",
+									children: "+ Add to Inbox"
+								})
+							]
+						}),
+						state.inbox.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "p-4 rounded-lg border border-dashed text-center space-y-1",
+							style: { borderColor: "var(--border-elevated)" },
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+								className: "font-mono text-xs",
+								style: { color: "var(--ink-muted)" },
+								children: "INBOX CLEAR"
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+								className: "text-[11px]",
+								style: { color: "var(--ink-secondary)" },
+								children: "Dump tasks without a time here, then click “Slot into Gap” to place them into open free time."
+							})]
+						}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+							className: "space-y-2 max-h-[420px] overflow-y-auto pr-1",
+							children: state.inbox.map((item) => {
+								const cat = getCategoryMeta(item.category);
+								return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "p-3 rounded-lg border space-y-2",
+									style: {
+										backgroundColor: "var(--bg-canvas)",
+										borderColor: "var(--border-hairline)",
+										borderLeftWidth: "3px",
+										borderLeftColor: cat.color
+									},
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "flex items-start justify-between gap-2",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+											className: "text-xs font-semibold",
+											children: item.title
+										}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+											className: "font-mono text-[10px] mt-0.5",
+											style: { color: "var(--ink-muted)" },
+											children: [
+												cat.label,
+												" • ",
+												formatDurationCompact(item.durationMin)
+											]
+										})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+											type: "button",
+											onClick: () => deleteInboxItem(item.id),
+											"aria-label": `Delete inbox item ${item.title}`,
+											className: "arch-btn-ghost px-1.5 py-0.5 rounded text-[10px] font-mono",
+											children: "×"
+										})]
+									}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+										type: "button",
+										onClick: () => scheduleInboxIntoGap(item),
+										className: "w-full arch-btn-ghost py-1.5 rounded text-[11px] font-mono font-medium",
+										style: { color: "var(--status-ok)" },
+										children: [
+											"Slot into Free Gap (",
+											selectedDateKey,
+											") →"
+										]
+									})]
+								}, item.id);
+							})
+						})
+					]
+				})]
+			}),
+			modalOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+				className: "fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4",
+				onClick: () => setModalOpen(false),
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "arch-panel rounded-xl w-full max-w-lg p-5 space-y-4 max-h-[90vh] overflow-y-auto",
+					onClick: (e) => e.stopPropagation(),
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "flex items-center justify-between border-b pb-3",
+						style: { borderColor: "var(--border-hairline)" },
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+							className: "font-mono text-[10px] uppercase tracking-widest block",
+							style: { color: "var(--ink-muted)" },
+							children: "DAYFLOW SCHEDULER"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
+							className: "text-base font-semibold",
+							children: editingId ? "Edit Schedule Block" : "Schedule Block in Dayflow"
+						})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+							type: "button",
+							onClick: () => setModalOpen(false),
+							className: "arch-btn-ghost px-2.5 py-1 rounded text-xs font-mono",
+							children: "ESC"
+						})]
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
+						onSubmit: handleSaveModal,
+						className: "space-y-4",
+						children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "grid grid-cols-2 gap-2",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+									type: "button",
+									onClick: () => setFormKind("task"),
+									className: `py-2 rounded-md font-mono text-xs border transition ${formKind === "task" ? "arch-btn-primary" : "arch-btn-ghost"}`,
+									children: "Actionable Task (One-Off)"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+									type: "button",
+									onClick: () => setFormKind("class"),
+									className: `py-2 rounded-md font-mono text-xs border transition ${formKind === "class" ? "arch-btn-primary" : "arch-btn-ghost"}`,
+									children: "Recurring Weekly Class"
+								})]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("label", {
+								className: "block font-mono text-[10px] uppercase mb-1",
+								style: { color: "var(--ink-muted)" },
+								children: "TITLE"
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+								type: "text",
+								autoFocus: true,
+								value: formTitle,
+								onChange: (e) => {
+									setFormTitle(e.target.value);
+									setFormError("");
+								},
+								placeholder: formKind === "class" ? "e.g., CS-301 Operating Systems Lecture" : "e.g., Solve 2 Graph Problems / Project Sprint",
+								className: "w-full arch-input rounded-md px-3 py-2 text-xs font-mono"
+							})] }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("label", {
+								className: "block font-mono text-[10px] uppercase mb-1.5",
+								style: { color: "var(--ink-muted)" },
+								children: "CATEGORY & COLOR TAG"
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+								className: "grid grid-cols-2 sm:grid-cols-3 gap-1.5",
+								children: DAYFLOW_CATEGORIES.map((cat) => {
+									const active = formCategory === cat.id;
+									return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+										type: "button",
+										onClick: () => setFormCategory(cat.id),
+										className: "px-2.5 py-1.5 rounded-md border text-left font-mono text-[11px] flex items-center gap-2 transition",
+										style: {
+											borderColor: active ? cat.color : "var(--border-hairline)",
+											backgroundColor: active ? cat.bgSoft : "var(--bg-canvas)",
+											color: "var(--ink-primary)"
+										},
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+											className: "w-2.5 h-2.5 rounded-full shrink-0",
+											style: { backgroundColor: cat.color }
+										}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+											className: "truncate",
+											children: cat.label
+										})]
+									}, cat.id);
+								})
+							})] }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "grid grid-cols-1 sm:grid-cols-2 gap-3",
+								children: [formKind === "task" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("label", {
+									className: "block font-mono text-[10px] uppercase mb-1",
+									style: { color: "var(--ink-muted)" },
+									children: "DATE"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+									type: "date",
+									value: formDate,
+									onChange: (e) => setFormDate(e.target.value),
+									className: "w-full arch-input rounded-md px-3 py-2 text-xs font-mono"
+								})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: formKind === "class" ? "sm:col-span-2" : "",
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("label", {
+										className: "block font-mono text-[10px] uppercase mb-1",
+										style: { color: "var(--ink-muted)" },
+										children: "START TIME"
+									}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+										type: "time",
+										value: formStartTime,
+										onChange: (e) => setFormStartTime(e.target.value),
+										className: "w-full arch-input rounded-md px-3 py-2 text-xs font-mono tabular-nums"
+									})]
+								})]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "flex items-center justify-between mb-1.5",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
+									className: "font-mono text-[10px] uppercase",
+									style: { color: "var(--ink-muted)" },
+									children: [
+										"DURATION (",
+										formatDurationCompact(formDuration),
+										")"
+									]
+								}), formGapMaxMin && formGapMaxMin > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+									type: "button",
+									onClick: () => setFormDuration(formGapMaxMin),
+									className: "font-mono text-[10px] underline",
+									style: { color: "var(--status-ok)" },
+									children: [
+										"Fill Full Gap (",
+										formatDurationCompact(formGapMaxMin),
+										")"
+									]
+								})]
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "flex flex-wrap items-center gap-1.5",
+								children: [
+									DURATION_PRESETS.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+										type: "button",
+										onClick: () => setFormDuration(p.min),
+										className: `px-2.5 py-1 rounded text-xs font-mono tabular-nums border ${formDuration === p.min ? "arch-btn-primary" : "arch-btn-ghost"}`,
+										children: p.label
+									}, p.min)),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+										type: "number",
+										min: "10",
+										max: "720",
+										step: "5",
+										value: formDuration,
+										onChange: (e) => setFormDuration(Number(e.target.value)),
+										"aria-label": "Custom duration in minutes",
+										className: "w-20 arch-input rounded px-2 py-1 text-xs font-mono tabular-nums"
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+										className: "font-mono text-[10px]",
+										style: { color: "var(--ink-muted)" },
+										children: "min"
+									})
+								]
+							})] }),
+							formKind === "class" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("label", {
+								className: "block font-mono text-[10px] uppercase mb-1.5",
+								style: { color: "var(--ink-muted)" },
+								children: "REPEAT DAYS (WEEKLY TIMETABLE)"
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+								className: "grid grid-cols-7 gap-1.5",
+								children: WEEKDAY_BUTTONS.map((w) => {
+									const active = formRepeatDays.includes(w.iso);
+									return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+										type: "button",
+										onClick: () => setFormRepeatDays((prev) => prev.includes(w.iso) ? prev.filter((d) => d !== w.iso) : [...prev, w.iso]),
+										className: `py-2 rounded-md font-mono text-xs border transition ${active ? "arch-btn-primary" : "arch-btn-ghost"}`,
+										children: w.short
+									}, w.iso);
+								})
+							})] }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("label", {
+								className: "block font-mono text-[10px] uppercase mb-1",
+								style: { color: "var(--ink-muted)" },
+								children: "ROOM / CONTEXT NOTE (OPTIONAL)"
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+								type: "text",
+								value: formRoomOrNote,
+								onChange: (e) => setFormRoomOrNote(e.target.value),
+								placeholder: "e.g., Room LH-204 / Lab 3 / Chapter 4",
+								className: "w-full arch-input rounded-md px-3 py-2 text-xs font-mono"
+							})] }),
+							formError && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+								className: "text-xs font-mono",
+								style: { color: "var(--status-err)" },
+								children: formError
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "flex items-center justify-between gap-2 pt-2 border-t",
+								style: { borderColor: "var(--border-hairline)" },
+								children: [editingId ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+									type: "button",
+									onClick: handleDeleteFromModal,
+									className: "arch-btn-ghost px-3 py-2 rounded-md text-xs font-mono",
+									style: { color: "var(--status-err)" },
+									children: "Delete Block"
+								}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "flex items-center gap-2",
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+										type: "button",
+										onClick: () => setModalOpen(false),
+										className: "arch-btn-ghost px-3.5 py-2 rounded-md text-xs font-mono",
+										children: "Cancel"
+									}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+										type: "submit",
+										className: "arch-btn-primary px-4 py-2 rounded-md text-xs font-mono font-semibold",
+										children: editingId ? "Save Changes" : "Add to Timeline"
+									})]
+								})]
+							})
+						]
+					})]
+				})
+			}),
+			configModalOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+				className: "fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4",
+				onClick: () => setConfigModalOpen(false),
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "arch-panel rounded-xl w-full max-w-lg p-5 space-y-4 max-h-[90vh] overflow-y-auto",
+					onClick: (e) => e.stopPropagation(),
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "flex items-center justify-between border-b pb-3",
+							style: { borderColor: "var(--border-hairline)" },
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								className: "font-mono text-[10px] uppercase tracking-widest block",
+								style: { color: "var(--ink-muted)" },
+								children: "DAYFLOW CONFIGURATION"
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
+								className: "text-base font-semibold",
+								children: "Waking Hours & Recurring Classes"
+							})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+								type: "button",
+								onClick: () => setConfigModalOpen(false),
+								className: "arch-btn-ghost px-2.5 py-1 rounded text-xs font-mono",
+								children: "ESC"
+							})]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
+							onSubmit: saveWakingHoursConfig,
+							className: "space-y-4",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "grid grid-cols-2 gap-3",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("label", {
+									className: "block font-mono text-[10px] uppercase mb-1",
+									style: { color: "var(--ink-muted)" },
+									children: "DAY START HOUR (0–22)"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", {
+									value: draftWakeStart,
+									onChange: (e) => setDraftWakeStart(Number(e.target.value)),
+									className: "w-full arch-input rounded-md px-3 py-2 text-xs font-mono",
+									children: Array.from({ length: 16 }).map((_, idx) => {
+										const h = idx + 4;
+										return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("option", {
+											value: h,
+											children: [
+												formatTime12h(`${h}:00`),
+												" (",
+												String(h).padStart(2, "0"),
+												":00)"
+											]
+										}, h);
+									})
+								})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("label", {
+									className: "block font-mono text-[10px] uppercase mb-1",
+									style: { color: "var(--ink-muted)" },
+									children: "DAY END HOUR (1–24)"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", {
+									value: draftWakeEnd,
+									onChange: (e) => setDraftWakeEnd(Number(e.target.value)),
+									className: "w-full arch-input rounded-md px-3 py-2 text-xs font-mono",
+									children: Array.from({ length: 12 }).map((_, idx) => {
+										const h = idx + 13;
+										return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+											value: h,
+											children: h === 24 ? "12:00 AM (Midnight)" : `${formatTime12h(`${h}:00`)} (${h}:00)`
+										}, h);
+									})
+								})] })]
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+								type: "submit",
+								className: "w-full arch-btn-primary py-2 rounded-md text-xs font-mono font-semibold",
+								children: "Save Waking Hours"
+							})]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "pt-3 border-t space-y-2.5",
+							style: { borderColor: "var(--border-hairline)" },
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "flex items-center justify-between",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+									className: "font-mono text-[10px] uppercase",
+									style: { color: "var(--ink-muted)" },
+									children: [
+										"RECURRING WEEKLY CLASSES (",
+										state.recurringClasses.length,
+										")"
+									]
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+									type: "button",
+									onClick: () => {
+										setConfigModalOpen(false);
+										openQuickAdd({
+											kind: "class",
+											dateKey: selectedDateKey
+										});
+									},
+									className: "arch-btn-ghost px-2.5 py-1 rounded text-[11px] font-mono",
+									children: "+ New Class"
+								})]
+							}), state.recurringClasses.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+								className: "p-3 rounded border border-dashed text-center font-mono text-xs",
+								style: { color: "var(--ink-muted)" },
+								children: "No recurring weekly classes configured yet."
+							}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+								className: "space-y-2 max-h-56 overflow-y-auto pr-1",
+								children: state.recurringClasses.map((cls) => {
+									const cat = getCategoryMeta(cls.category);
+									const daysLabel = WEEKDAY_BUTTONS.filter((w) => cls.repeatDays.includes(w.iso)).map((w) => w.short).join(", ");
+									return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "p-2.5 rounded-lg border flex items-center justify-between gap-2 text-xs",
+										style: {
+											backgroundColor: "var(--bg-canvas)",
+											borderColor: "var(--border-hairline)"
+										},
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+											className: "font-semibold flex items-center gap-2",
+											children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+												className: "w-2 h-2 rounded-full",
+												style: { backgroundColor: cat.color }
+											}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: cls.title })]
+										}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+											className: "font-mono text-[10px] mt-0.5",
+											style: { color: "var(--ink-muted)" },
+											children: [
+												daysLabel,
+												" • ",
+												formatTime12h(cls.startTime),
+												" (",
+												formatDurationCompact(cls.durationMin),
+												")"
+											]
+										})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+											type: "button",
+											onClick: () => setState((prev) => ({
+												...prev,
+												recurringClasses: prev.recurringClasses.filter((c) => c.id !== cls.id)
+											})),
+											className: "arch-btn-ghost px-2 py-1 rounded text-[10px] font-mono",
+											style: { color: "var(--status-err)" },
+											children: "Remove"
+										})]
+									}, cls.id);
+								})
+							})]
+						})
+					]
+				})
+			})
+		]
+	});
+};
+// src/NexoraOS.jsx
 var NexoraContext = (0, import_react.createContext)(null);
 function openMediaDB() {
 	return new Promise((resolve) => {
@@ -12279,500 +14348,6 @@ var EmptyState = ({ code, title, subtitle, actionLabel, onAction }) => /* @__PUR
 		})
 	]
 });
-var VectorSnakeGame = ({ bestScore, onNewBest, soundEnabled, onUnlockVault }) => {
-	const [running, setRunning] = (0, import_react.useState)(false);
-	const [gameOver, setGameOver] = (0, import_react.useState)(false);
-	const [score, setScore] = (0, import_react.useState)(0);
-	const [speedMs, setSpeedMs] = (0, import_react.useState)(145);
-	const canvasRef = (0, import_react.useRef)(null);
-	const secretSeqRef = (0, import_react.useRef)({
-		armedH: false,
-		timestamp: 0
-	});
-	const hoveredRef = (0, import_react.useRef)(false);
-	const stateRef = (0, import_react.useRef)({
-		snake: [
-			{
-				x: 8,
-				y: 6
-			},
-			{
-				x: 7,
-				y: 6
-			},
-			{
-				x: 6,
-				y: 6
-			}
-		],
-		dir: {
-			x: 1,
-			y: 0
-		},
-		nextDir: {
-			x: 1,
-			y: 0
-		},
-		food: {
-			x: 12,
-			y: 6
-		},
-		score: 0
-	});
-	(0, import_react.useEffect)(() => {
-		const handleSecretKey = (e) => {
-			const tag = (e.target?.tagName || "").toLowerCase();
-			if (tag === "input" || tag === "textarea" || tag === "select") return;
-			const k = e.key.toLowerCase();
-			const now = Date.now();
-			if (k === "h" && (e.ctrlKey || e.metaKey || hoveredRef.current || running)) {
-				e.preventDefault();
-				secretSeqRef.current = {
-					armedH: true,
-					timestamp: now
-				};
-				return;
-			}
-			if (k === "o" && secretSeqRef.current.armedH && now - secretSeqRef.current.timestamp < 2500) {
-				e.preventDefault();
-				secretSeqRef.current = {
-					armedH: false,
-					timestamp: 0
-				};
-				playTactileClick(soundEnabled, 1240, 30);
-				if (onUnlockVault) onUnlockVault();
-				return;
-			}
-			if (k !== "control" && k !== "meta" && k !== "shift") secretSeqRef.current = {
-				armedH: false,
-				timestamp: 0
-			};
-		};
-		window.addEventListener("keydown", handleSecretKey);
-		return () => window.removeEventListener("keydown", handleSecretKey);
-	}, [
-		running,
-		soundEnabled,
-		onUnlockVault
-	]);
-	const drawBoard = (0, import_react.useCallback)(() => {
-		const ctx = canvasRef.current?.getContext("2d");
-		if (!ctx) return;
-		const st = stateRef.current;
-		ctx.fillStyle = "#09090B";
-		ctx.fillRect(0, 0, 240, 180);
-		ctx.strokeStyle = "rgba(255,255,255,0.04)";
-		ctx.lineWidth = 1;
-		for (let x = 0; x <= 240; x += 15) {
-			ctx.beginPath();
-			ctx.moveTo(x, 0);
-			ctx.lineTo(x, 180);
-			ctx.stroke();
-		}
-		for (let y = 0; y <= 180; y += 15) {
-			ctx.beginPath();
-			ctx.moveTo(0, y);
-			ctx.lineTo(240, y);
-			ctx.stroke();
-		}
-		ctx.fillStyle = "#10B981";
-		ctx.fillRect(st.food.x * 15 + 2, st.food.y * 15 + 2, 11, 11);
-		st.snake.forEach((seg, idx) => {
-			ctx.fillStyle = idx === 0 ? "#FAFAFA" : "#A1A1AA";
-			ctx.fillRect(seg.x * 15 + 1, seg.y * 15 + 1, 13, 13);
-		});
-	}, []);
-	(0, import_react.useEffect)(() => {
-		drawBoard();
-	}, [drawBoard]);
-	(0, import_react.useEffect)(() => {
-		if (!running) return;
-		const onKey = (e) => {
-			const tag = (e.target?.tagName || "").toLowerCase();
-			if (tag === "input" || tag === "textarea") return;
-			const d = stateRef.current.dir;
-			if ((e.key === "ArrowUp" || e.key === "w") && d.y === 0) {
-				e.preventDefault();
-				stateRef.current.nextDir = {
-					x: 0,
-					y: -1
-				};
-			} else if ((e.key === "ArrowDown" || e.key === "s") && d.y === 0) {
-				e.preventDefault();
-				stateRef.current.nextDir = {
-					x: 0,
-					y: 1
-				};
-			} else if ((e.key === "ArrowLeft" || e.key === "a") && d.x === 0) {
-				e.preventDefault();
-				stateRef.current.nextDir = {
-					x: -1,
-					y: 0
-				};
-			} else if ((e.key === "ArrowRight" || e.key === "d") && d.x === 0) {
-				e.preventDefault();
-				stateRef.current.nextDir = {
-					x: 1,
-					y: 0
-				};
-			}
-		};
-		window.addEventListener("keydown", onKey, { passive: false });
-		const timer = setInterval(() => {
-			const st = stateRef.current;
-			st.dir = st.nextDir;
-			const head = {
-				x: (st.snake[0].x + st.dir.x + 16) % 16,
-				y: (st.snake[0].y + st.dir.y + 12) % 12
-			};
-			if (st.snake.some((seg) => seg.x === head.x && seg.y === head.y)) {
-				playTactileClick(soundEnabled, 260, 40);
-				setRunning(false);
-				setGameOver(true);
-				return;
-			}
-			const nextSnake = [head, ...st.snake];
-			if (head.x === st.food.x && head.y === st.food.y) {
-				playTactileClick(soundEnabled, 940, 15);
-				const ns = (st.score || 0) + 10;
-				st.score = ns;
-				setScore(ns);
-				if (ns > bestScore) onNewBest(ns);
-				st.food = {
-					x: Math.floor(Math.random() * 16),
-					y: Math.floor(Math.random() * 12)
-				};
-			} else nextSnake.pop();
-			st.snake = nextSnake;
-			drawBoard();
-		}, speedMs);
-		return () => {
-			window.removeEventListener("keydown", onKey);
-			clearInterval(timer);
-		};
-	}, [
-		running,
-		speedMs,
-		bestScore,
-		onNewBest,
-		soundEnabled,
-		drawBoard
-	]);
-	const start = () => {
-		stateRef.current = {
-			snake: [
-				{
-					x: 8,
-					y: 6
-				},
-				{
-					x: 7,
-					y: 6
-				},
-				{
-					x: 6,
-					y: 6
-				}
-			],
-			dir: {
-				x: 1,
-				y: 0
-			},
-			nextDir: {
-				x: 1,
-				y: 0
-			},
-			food: {
-				x: 12,
-				y: 6
-			},
-			score: 0
-		};
-		setScore(0);
-		setGameOver(false);
-		setRunning(true);
-		drawBoard();
-	};
-	const steer = (dx, dy) => {
-		const d = stateRef.current.dir;
-		if (dx !== 0 && d.x === 0) stateRef.current.nextDir = {
-			x: dx,
-			y: 0
-		};
-		if (dy !== 0 && d.y === 0) stateRef.current.nextDir = {
-			x: 0,
-			y: dy
-		};
-	};
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-		className: "space-y-3",
-		onMouseEnter: () => {
-			hoveredRef.current = true;
-		},
-		onMouseLeave: () => {
-			hoveredRef.current = false;
-		},
-		children: [
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-				className: "flex justify-between items-center text-xs font-mono tabular-nums",
-				children: [
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-						style: { color: "var(--ink-secondary)" },
-						children: ["SCORE: ", score]
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-						className: "flex items-center gap-1",
-						children: [
-							{
-								label: "CHILL",
-								ms: 185
-							},
-							{
-								label: "NORM",
-								ms: 140
-							},
-							{
-								label: "FAST",
-								ms: 95
-							}
-						].map((sp) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-							type: "button",
-							onClick: () => setSpeedMs(sp.ms),
-							className: `px-1.5 py-0.5 rounded text-[9px] font-mono ${speedMs === sp.ms ? "arch-btn-primary" : "arch-btn-ghost"}`,
-							children: sp.label
-						}, sp.label))
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-						style: { color: "var(--ink-muted)" },
-						children: ["MAX: ", bestScore]
-					})
-				]
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-				className: "relative",
-				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("canvas", {
-					ref: canvasRef,
-					width: 240,
-					height: 180,
-					className: "w-full h-40 rounded-md bg-[#09090B] border block"
-				}), !running && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-					className: "absolute inset-0 bg-black/65 flex flex-col items-center justify-center p-3 text-center rounded-md",
-					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-						className: "font-mono text-xs font-semibold mb-1",
-						children: gameOver ? `COLLISION // SCORE ${score}` : "VECTOR SNAKE STANDBY"
-					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-						type: "button",
-						onClick: start,
-						className: "arch-btn-primary px-3 py-1 rounded text-xs font-mono mt-1",
-						children: gameOver ? "PLAY AGAIN" : "START SNAKE"
-					})]
-				})]
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-				className: "flex items-center justify-between gap-2",
-				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-					type: "button",
-					onClick: () => running ? setRunning(false) : start(),
-					className: "arch-btn-ghost px-2.5 py-1 rounded text-xs font-mono",
-					children: running ? "PAUSE" : "RESET"
-				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-					className: "flex gap-1",
-					children: [
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-							type: "button",
-							onClick: () => steer(0, -1),
-							className: "arch-btn-ghost px-2.5 py-1 rounded text-[10px] font-mono",
-							children: "U"
-						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-							type: "button",
-							onClick: () => steer(-1, 0),
-							className: "arch-btn-ghost px-2.5 py-1 rounded text-[10px] font-mono",
-							children: "L"
-						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-							type: "button",
-							onClick: () => steer(0, 1),
-							className: "arch-btn-ghost px-2.5 py-1 rounded text-[10px] font-mono",
-							children: "D"
-						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-							type: "button",
-							onClick: () => steer(1, 0),
-							className: "arch-btn-ghost px-2.5 py-1 rounded text-[10px] font-mono",
-							children: "R"
-						})
-					]
-				})]
-			})
-		]
-	});
-};
-var ReactionLatencyTest = ({ bestMs, onNewBest, soundEnabled, onAwardXP }) => {
-	const [mode, setMode] = (0, import_react.useState)("reflex");
-	const [phase, setPhase] = (0, import_react.useState)("idle");
-	const [ms, setMs] = (0, import_react.useState)(null);
-	const [history, setHistory] = (0, import_react.useState)([]);
-	const startRef = (0, import_react.useRef)(0);
-	const timerRef = (0, import_react.useRef)(null);
-	const [seq, setSeq] = (0, import_react.useState)([]);
-	const [userStep, setUserStep] = (0, import_react.useState)(0);
-	const [flashTile, setFlashTile] = (0, import_react.useState)(null);
-	const [patternStatus, setPatternStatus] = (0, import_react.useState)("IDLE // LVL 0");
-	const scheduledTimeoutsRef = (0, import_react.useRef)(/* @__PURE__ */ new Set());
-	const scheduleTimeout = (callback, delay) => {
-		const timerId = window.setTimeout(() => {
-			scheduledTimeoutsRef.current.delete(timerId);
-			callback();
-		}, delay);
-		scheduledTimeoutsRef.current.add(timerId);
-		return timerId;
-	};
-	const cancelScheduledTimeout = (timerId) => {
-		if (timerId === null || timerId === void 0) return;
-		window.clearTimeout(timerId);
-		scheduledTimeoutsRef.current.delete(timerId);
-	};
-	(0, import_react.useEffect)(() => () => {
-		scheduledTimeoutsRef.current.forEach((timerId) => window.clearTimeout(timerId));
-		scheduledTimeoutsRef.current.clear();
-	}, []);
-	(0, import_react.useEffect)(() => () => cancelScheduledTimeout(timerRef.current), []);
-	const triggerReflex = () => {
-		if (phase === "idle" || phase === "result" || phase === "early") {
-			setPhase("waiting");
-			timerRef.current = scheduleTimeout(() => {
-				startRef.current = performance.now();
-				playTactileClick(soundEnabled, 1020, 15);
-				setPhase("ready");
-			}, 1e3 + Math.random() * 1700);
-		} else if (phase === "waiting") {
-			cancelScheduledTimeout(timerRef.current);
-			playTactileClick(soundEnabled, 300, 30);
-			setPhase("early");
-		} else if (phase === "ready") {
-			const delta = Math.max(12, Math.round(performance.now() - startRef.current));
-			playTactileClick(soundEnabled, 880, 15);
-			setMs(delta);
-			setHistory((prev) => [delta, ...prev].slice(0, 5));
-			setPhase("result");
-			if (bestMs === 0 || delta < bestMs) onNewBest(delta);
-		}
-	};
-	const playSequence = (nextSeq) => {
-		setPatternStatus(`WATCH PATTERN (${nextSeq.length})`);
-		nextSeq.forEach((tileIdx, i) => {
-			scheduleTimeout(() => {
-				setFlashTile(tileIdx);
-				playTactileClick(soundEnabled, 520 + tileIdx * 60, 18);
-				scheduleTimeout(() => setFlashTile(null), 320);
-			}, (i + 1) * 520);
-		});
-		scheduleTimeout(() => {
-			setPatternStatus(`REPEAT ${nextSeq.length} NODES`);
-		}, (nextSeq.length + 1) * 520);
-	};
-	const startPatternGame = () => {
-		const first = [Math.floor(Math.random() * 9)];
-		setSeq(first);
-		setUserStep(0);
-		playSequence(first);
-	};
-	const handleTileClick = (idx) => {
-		if (seq.length === 0 || patternStatus.startsWith("WATCH")) return;
-		playTactileClick(soundEnabled, 520 + idx * 60, 14);
-		setFlashTile(idx);
-		scheduleTimeout(() => setFlashTile(null), 160);
-		if (idx === seq[userStep]) {
-			if (userStep + 1 === seq.length) {
-				const nextLen = seq.length + 1;
-				if (nextLen % 3 === 0 && onAwardXP) onAwardXP(25, `Pattern Matrix Level ${nextLen}`);
-				const nextSeq = [...seq, Math.floor(Math.random() * 9)];
-				setSeq(nextSeq);
-				setUserStep(0);
-				scheduleTimeout(() => playSequence(nextSeq), 400);
-			} else setUserStep(userStep + 1);
-		} else {
-			playTactileClick(soundEnabled, 240, 45);
-			setPatternStatus(`FAILED AT LVL ${seq.length} // RESET`);
-			setSeq([]);
-			setUserStep(0);
-		}
-	};
-	const avgMs = history.length > 0 ? Math.round(history.reduce((a, b) => a + b, 0) / history.length) : null;
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-		className: "space-y-3",
-		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-			className: "flex justify-between items-center text-xs font-mono tabular-nums",
-			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-				className: "flex gap-1",
-				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-					type: "button",
-					onClick: () => setMode("reflex"),
-					className: `px-2 py-0.5 rounded text-[10px] ${mode === "reflex" ? "arch-btn-primary" : "arch-btn-ghost"}`,
-					children: "REFLEX"
-				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-					type: "button",
-					onClick: () => setMode("pattern"),
-					className: `px-2 py-0.5 rounded text-[10px] ${mode === "pattern" ? "arch-btn-primary" : "arch-btn-ghost"}`,
-					children: "3x3 MATRIX"
-				})]
-			}), mode === "reflex" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-				style: { color: "var(--ink-muted)" },
-				children: [
-					"AVG: ",
-					avgMs ? `${avgMs}ms` : "--",
-					" | BEST: ",
-					bestMs ? `${bestMs}ms` : "--"
-				]
-			}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-				style: { color: "var(--ink-muted)" },
-				children: patternStatus
-			})]
-		}), mode === "reflex" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
-			type: "button",
-			onClick: triggerReflex,
-			className: "w-full h-40 rounded-md border font-mono text-xs uppercase tracking-wider flex flex-col items-center justify-center gap-1.5 transition p-3 text-center",
-			style: {
-				backgroundColor: phase === "ready" ? "var(--status-ok)" : phase === "waiting" ? "rgba(245, 158, 11, 0.16)" : phase === "early" ? "rgba(244, 63, 94, 0.18)" : "var(--bg-canvas)",
-				color: phase === "ready" ? "#09090B" : "var(--ink-primary)"
-			},
-			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-				className: "font-semibold",
-				children: [
-					phase === "idle" && "CLICK TO ARM OPTICAL SENSOR",
-					phase === "waiting" && "STEADY... WAIT FOR GREEN PULSE",
-					phase === "ready" && "PULSE ACTIVE — CLICK NOW!",
-					phase === "early" && "FALSE START! CLICK TO RE-ARM",
-					phase === "result" && `${ms} MS RECORDED — CLICK FOR NEXT SAMPLE`
-				]
-			}), history.length > 0 && phase !== "ready" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-				className: "text-[10px] opacity-75",
-				children: ["RECENT: ", history.map((h) => `${h}ms`).join(" / ")]
-			})]
-		}) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-			className: "space-y-2",
-			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-				className: "grid grid-cols-3 gap-1.5 h-32",
-				children: Array.from({ length: 9 }).map((_, idx) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
-					type: "button",
-					onClick: () => handleTileClick(idx),
-					className: "rounded border transition font-mono text-[10px]",
-					style: {
-						backgroundColor: flashTile === idx ? "var(--status-ok)" : "var(--bg-canvas)",
-						color: flashTile === idx ? "#09090B" : "var(--ink-muted)"
-					},
-					children: ["N", idx + 1]
-				}, idx))
-			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-				type: "button",
-				onClick: startPatternGame,
-				className: "w-full arch-btn-primary py-1 rounded text-xs font-mono",
-				children: seq.length > 0 ? `RESTART MATRIX (LVL ${seq.length})` : "INITIALIZE PATTERN SEQUENCE"
-			})]
-		})]
-	});
-};
 var ExecutionHubSubNav = ({ current, onSelect }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 	className: "flex flex-wrap items-center gap-1.5 p-1.5 rounded-lg border",
 	style: { backgroundColor: "var(--bg-surface)" },
@@ -12795,11 +14370,6 @@ var ExecutionHubSubNav = ({ current, onSelect }) => /* @__PURE__ */ (0, import_j
 			id: "academy",
 			label: "Academy Matrix",
 			icon: "academy"
-		},
-		{
-			id: "calendar",
-			label: "Unified Calendar",
-			icon: "calendar"
 		}
 	].map((tab) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
 		type: "button",
@@ -16193,12 +17763,27 @@ var SecretVaultView = () => {
 					className: "text-xs font-mono",
 					style: { color: "var(--ink-secondary)" },
 					children: [
-						"Press ",
+						"Shortcut: ",
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("kbd", {
+							className: "px-1 py-0.5 border rounded",
+							children: "H"
+						}),
+						" then ",
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("kbd", {
+							className: "px-1 py-0.5 border rounded",
+							children: "O"
+						}),
+						" (or ",
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("kbd", {
+							className: "px-1 py-0.5 border rounded",
+							children: "Alt+V"
+						}),
+						"). Press ",
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("kbd", {
 							className: "px-1 py-0.5 border rounded",
 							children: "Esc"
 						}),
-						" or switch any sidebar module to immediately lock this vault."
+						" to lock immediately."
 					]
 				})] })]
 			}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -16218,7 +17803,7 @@ var SecretVaultView = () => {
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 						type: "button",
-						onClick: () => setActiveTab("arcade"),
+						onClick: () => setActiveTab("dashboard"),
 						className: "arch-btn-ghost px-3 py-1.5 rounded-md text-xs font-mono",
 						style: { color: "var(--status-err)" },
 						children: "LOCK VAULT [ESC]"
@@ -16226,302 +17811,6 @@ var SecretVaultView = () => {
 				]
 			})]
 		}), vaultSection === "memory" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MemoryVaultView, {}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ExperiencesView, {})]
-	});
-};
-var CalendarView = () => {
-	const { awardXP, data, focusLabel, focusMinutes, mediaMap, notify, secondsLeft, setActiveTab, setConfirmResetModal, setData, setFocusLabel, setFocusMinutes, setMediaMap, setProfileModal, setSecondsLeft, setTimerRunning, telemetry, timerRunning } = (0, import_react.useContext)(NexoraContext);
-	const [evTitle, setEvTitle] = (0, import_react.useState)("");
-	const [evDate, setEvDate] = (0, import_react.useState)((/* @__PURE__ */ new Date()).toISOString().split("T")[0]);
-	const [evCat, setEvCat] = (0, import_react.useState)("Exams");
-	const today = /* @__PURE__ */ new Date();
-	const [calCursor, setCalCursor] = (0, import_react.useState)(new Date(today.getFullYear(), today.getMonth(), 1));
-	const [activeBrush, setActiveBrush] = (0, import_react.useState)("productive");
-	const [customLabel, setCustomLabel] = (0, import_react.useState)("");
-	const [customColor, setCustomColor] = (0, import_react.useState)("#3B82F6");
-	const allDayTypes = (0, import_react.useMemo)(() => [...DEFAULT_DAY_TYPES, ...data.customDayTypes || []], [data.customDayTypes]);
-	const paintDate = (dateKey) => {
-		playTactileClick(data.profile.soundEnabled, 780, 10);
-		setData((prev) => {
-			const nextTags = { ...prev.dayTags || {} };
-			if (nextTags[dateKey] === activeBrush) delete nextTags[dateKey];
-			else nextTags[dateKey] = activeBrush;
-			return {
-				...prev,
-				dayTags: nextTags
-			};
-		});
-	};
-	const addCustomDayType = (e) => {
-		e.preventDefault();
-		if (!customLabel.trim()) return;
-		const newType = {
-			id: "custom-" + Date.now(),
-			label: customLabel.trim(),
-			color: customColor
-		};
-		setData((prev) => ({
-			...prev,
-			customDayTypes: [...prev.customDayTypes || [], newType]
-		}));
-		setActiveBrush(newType.id);
-		setCustomLabel("");
-		notify(`Created Day Type: ${newType.label}`);
-	};
-	const monthCells = (0, import_react.useMemo)(() => {
-		const y = calCursor.getFullYear();
-		const m = calCursor.getMonth();
-		const firstDow = new Date(y, m, 1).getDay();
-		const totalDays = new Date(y, m + 1, 0).getDate();
-		const arr = [];
-		for (let i = 0; i < firstDow; i++) arr.push(null);
-		for (let d = 1; d <= totalDays; d++) {
-			const key = `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-			arr.push({
-				day: d,
-				key
-			});
-		}
-		return arr;
-	}, [calCursor]);
-	const unifiedEvents = (0, import_react.useMemo)(() => {
-		const list = [...data.calendarEvents];
-		data.subjects.forEach((s) => {
-			list.push({
-				id: `exam-${s.id}`,
-				title: `${s.code} Exam: ${s.name}`,
-				date: s.examDate,
-				category: "Course Exam"
-			});
-		});
-		data.tasks.forEach((t) => {
-			if (!t.completed) list.push({
-				id: `task-${t.id}`,
-				title: `Mission: ${t.title}`,
-				date: t.dueDate,
-				category: t.category
-			});
-		});
-		return list.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
-	}, [
-		data.calendarEvents,
-		data.subjects,
-		data.tasks
-	]);
-	const addEvent = (e) => {
-		e.preventDefault();
-		if (!evTitle.trim()) return;
-		setData((prev) => ({
-			...prev,
-			calendarEvents: [...prev.calendarEvents, {
-				id: "ev-" + Date.now(),
-				title: evTitle.trim(),
-				date: evDate,
-				category: evCat
-			}]
-		}));
-		setEvTitle("");
-		notify("Scheduled on Unified Calendar");
-	};
-	const calMonthName = calCursor.toLocaleDateString("en-US", {
-		month: "long",
-		year: "numeric"
-	});
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-		className: "space-y-6",
-		children: [
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ExecutionHubSubNav, {
-				current: "calendar",
-				onSelect: setActiveTab
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-				className: "font-mono text-[11px] uppercase tracking-widest",
-				style: { color: "var(--ink-muted)" },
-				children: "10 // COLOR-CODED LIFE CALENDAR & MASTER CHRONOLOGY"
-			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", {
-				className: "text-2xl font-semibold heading-tight mt-1",
-				children: "Unified Calendar & Day Type Matrix"
-			})] }),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-				className: "arch-panel p-5 rounded-xl space-y-4",
-				children: [
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: "flex flex-wrap items-center justify-between gap-2",
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-							className: "font-mono text-[11px] uppercase tracking-wider",
-							style: { color: "var(--ink-muted)" },
-							children: "01 // SELECT DAY TYPE BRUSH & CLICK ANY DATE BELOW TO TAG"
-						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-							className: "flex items-center gap-1.5",
-							children: [
-								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-									type: "button",
-									onClick: () => setCalCursor(new Date(calCursor.getFullYear(), calCursor.getMonth() - 1, 1)),
-									className: "arch-btn-ghost px-2.5 py-1 rounded text-xs font-mono",
-									children: "< PREV"
-								}),
-								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-									className: "font-mono text-xs font-semibold px-2 uppercase",
-									children: calMonthName
-								}),
-								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-									type: "button",
-									onClick: () => setCalCursor(new Date(calCursor.getFullYear(), calCursor.getMonth() + 1, 1)),
-									className: "arch-btn-ghost px-2.5 py-1 rounded text-xs font-mono",
-									children: "NEXT >"
-								})
-							]
-						})]
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-						className: "flex flex-wrap gap-2",
-						children: allDayTypes.map((dt) => {
-							const selected = activeBrush === dt.id;
-							return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
-								type: "button",
-								onClick: () => setActiveBrush(dt.id),
-								className: `px-3 py-1.5 rounded-md text-xs font-mono inline-flex items-center gap-2 border transition ${selected ? "arch-btn-primary" : "arch-btn-ghost"}`,
-								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-									className: "w-2.5 h-2.5 rounded-full shrink-0",
-									style: { backgroundColor: dt.color }
-								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: dt.label })]
-							}, dt.id);
-						})
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
-						onSubmit: addCustomDayType,
-						className: "flex flex-wrap items-center gap-2 pt-2 border-t",
-						children: [
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-								className: "font-mono text-[10px] uppercase",
-								style: { color: "var(--ink-muted)" },
-								children: "+ ADD CUSTOM DAY TYPE:"
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-								value: customLabel,
-								onChange: (e) => setCustomLabel(e.target.value),
-								placeholder: "Custom Tag Name (e.g. Fest / Competition)",
-								className: "arch-input rounded-md px-2.5 py-1 text-xs"
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-								type: "color",
-								value: customColor,
-								onChange: (e) => setCustomColor(e.target.value),
-								className: "w-8 h-7 rounded cursor-pointer bg-transparent border"
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-								type: "submit",
-								className: "arch-btn-ghost px-3 py-1 rounded-md text-xs font-mono",
-								children: "+ Save Tag"
-							})
-						]
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-						className: "grid grid-cols-7 gap-1.5 text-center font-mono text-[10px] uppercase pt-2",
-						style: { color: "var(--ink-muted)" },
-						children: [
-							"SUN",
-							"MON",
-							"TUE",
-							"WED",
-							"THU",
-							"FRI",
-							"SAT"
-						].map((d) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { children: d }, d))
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-						className: "grid grid-cols-7 gap-1.5",
-						children: monthCells.map((cell, idx) => {
-							if (!cell) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-								className: "h-14 rounded border opacity-20",
-								style: { backgroundColor: "var(--bg-canvas)" }
-							}, `empty-${idx}`);
-							const tagId = data.dayTags?.[cell.key];
-							const tagObj = allDayTypes.find((t) => t.id === tagId);
-							const dayEvents = unifiedEvents.filter((e) => e.date === cell.key);
-							return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
-								type: "button",
-								onClick: () => paintDate(cell.key),
-								className: "h-14 p-1.5 rounded border text-left font-mono transition flex flex-col justify-between overflow-hidden",
-								style: {
-									backgroundColor: tagObj ? `${tagObj.color}22` : "var(--bg-canvas)",
-									borderColor: tagObj ? tagObj.color : "var(--border-hairline)"
-								},
-								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-									className: "flex items-center justify-between w-full",
-									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-										className: "text-xs font-semibold tabular-nums",
-										children: String(cell.day).padStart(2, "0")
-									}), tagObj && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-										className: "w-2 h-2 rounded-full",
-										style: { backgroundColor: tagObj.color }
-									})]
-								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-									className: "truncate text-[9px] w-full",
-									style: { color: tagObj ? tagObj.color : "var(--ink-muted)" },
-									children: tagObj ? tagObj.label.split("/")[0] : dayEvents[0]?.title || ""
-								})]
-							}, cell.key);
-						})
-					})
-				]
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
-				onSubmit: addEvent,
-				className: "arch-panel p-4 rounded-xl grid grid-cols-1 md:grid-cols-12 gap-2.5",
-				children: [
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-						value: evTitle,
-						onChange: (e) => setEvTitle(e.target.value),
-						placeholder: "Event Title",
-						className: "md:col-span-5 arch-input rounded-md px-3 py-2 text-xs"
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-						type: "date",
-						value: evDate,
-						onChange: (e) => setEvDate(e.target.value),
-						className: "md:col-span-3 arch-input rounded-md px-3 py-2 text-xs font-mono tabular-nums"
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", {
-						value: evCat,
-						onChange: (e) => setEvCat(e.target.value),
-						className: "md:col-span-2 arch-input rounded-md px-2.5 py-2 text-xs",
-						children: [
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Exams" }),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Milestone" }),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Campus Event" }),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Personal" })
-						]
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-						type: "submit",
-						className: "md:col-span-2 arch-btn-primary rounded-md py-2 text-xs font-medium",
-						children: "+ Schedule"
-					})
-				]
-			}),
-			unifiedEvents.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyState, {
-				code: "CALENDAR.AGENDA // 0_EVENTS",
-				title: "No chronological events scheduled",
-				subtitle: "Events added here—along with course exam dates and active mission deadlines—automatically merge into this timeline."
-			}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-				className: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4",
-				children: unifiedEvents.map((ev) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-					className: "arch-panel p-4 rounded-xl flex items-center justify-between gap-3",
-					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-						className: "text-[10px] font-mono uppercase",
-						style: { color: "var(--ink-muted)" },
-						children: ev.category
-					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-						className: "text-xs font-semibold mt-0.5",
-						children: ev.title
-					})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-						className: "font-mono text-xs tabular-nums px-2.5 py-1 rounded border",
-						style: { backgroundColor: "var(--bg-canvas)" },
-						children: ev.date
-					})]
-				}, ev.id))
-			})
-		]
 	});
 };
 var HabitsView = () => {
@@ -17392,181 +18681,6 @@ var HabitsView = () => {
 					})
 				})
 			})]
-		})]
-	});
-};
-var ArcadeView = () => {
-	const { awardXP, data, focusLabel, focusMinutes, mediaMap, notify, secondsLeft, setActiveTab, setConfirmResetModal, setData, setFocusLabel, setFocusMinutes, setMediaMap, setProfileModal, setSecondsLeft, setTimerRunning, telemetry, timerRunning } = (0, import_react.useContext)(NexoraContext);
-	const PUZZLES = (0, import_react.useMemo)(() => [
-		{
-			q: "n × (n + 1) progression: 2, 6, 12, 20, 30, 42, ?",
-			ans: "56",
-			hint: "7 × 8"
-		},
-		{
-			q: "Bitwise Left Shift: 1 << 6 evaluates to ?",
-			ans: "64",
-			hint: "2^6"
-		},
-		{
-			q: "Fibonacci progression: 3, 5, 8, 13, 21, 34, ?",
-			ans: "55",
-			hint: "21 + 34"
-		},
-		{
-			q: "Bitwise XOR: (10 ^ 6) in decimal equals ?",
-			ans: "12",
-			hint: "1010 XOR 0110 = 1100"
-		},
-		{
-			q: "Primes progression: 7, 11, 13, 17, 19, 23, ?",
-			ans: "29",
-			hint: "Next prime after 23"
-		},
-		{
-			q: "Binary tree max nodes at depth k=5 (2^5 - 1) =",
-			ans: "31",
-			hint: "32 - 1"
-		}
-	], []);
-	const [puzzleIdx, setPuzzleIdx] = (0, import_react.useState)(0);
-	const [logicAns, setLogicAns] = (0, import_react.useState)("");
-	const [showHint, setShowHint] = (0, import_react.useState)(false);
-	const currentPuzzle = PUZZLES[puzzleIdx % PUZZLES.length];
-	const verifyPuzzle = (e) => {
-		e.preventDefault();
-		if (logicAns.trim() === currentPuzzle.ans) {
-			playTactileClick(data.profile.soundEnabled, 1040, 20);
-			awardXP(50, `Solved Logic Benchmark #${puzzleIdx + 1}`);
-			setLogicAns("");
-			setShowHint(false);
-			setPuzzleIdx((i) => i + 1);
-		} else {
-			playTactileClick(data.profile.soundEnabled, 280, 30);
-			notify(`Mismatch — Hint: ${currentPuzzle.hint}`, "err");
-		}
-	};
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-		className: "space-y-6",
-		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-			className: "flex flex-wrap items-end justify-between gap-4",
-			children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-				className: "font-mono text-[11px] uppercase tracking-widest",
-				style: { color: "var(--ink-muted)" },
-				children: "13 // COGNITIVE & TELEMETRY SANDBOX"
-			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", {
-				className: "text-2xl font-semibold heading-tight mt-1",
-				children: "Simulation Deck"
-			})] })
-		}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-			className: "grid grid-cols-1 md:grid-cols-3 gap-4",
-			children: [
-				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-					className: "arch-panel p-4 rounded-xl",
-					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-						className: "font-mono text-xs uppercase mb-2",
-						style: { color: "var(--ink-muted)" },
-						children: "SIM.01 // VECTOR SNAKE"
-					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(VectorSnakeGame, {
-						bestScore: data.arcadeScores.snakeHigh,
-						soundEnabled: data.profile.soundEnabled,
-						onNewBest: (sc) => setData((prev) => ({
-							...prev,
-							arcadeScores: {
-								...prev.arcadeScores,
-								snakeHigh: sc
-							}
-						})),
-						onUnlockVault: () => {
-							notify("Classified Vault Trapdoor Unlocked");
-							setActiveTab("secret-vault");
-						}
-					})]
-				}),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-					className: "arch-panel p-4 rounded-xl",
-					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-						className: "font-mono text-xs uppercase mb-2",
-						style: { color: "var(--ink-muted)" },
-						children: "SIM.02 // REFLEX & 3x3 MATRIX"
-					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReactionLatencyTest, {
-						bestMs: data.arcadeScores.reactionBestMs,
-						soundEnabled: data.profile.soundEnabled,
-						onAwardXP: awardXP,
-						onNewBest: (ms) => setData((prev) => ({
-							...prev,
-							arcadeScores: {
-								...prev.arcadeScores,
-								reactionBestMs: ms
-							}
-						}))
-					})]
-				}),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-					className: "arch-panel p-4 rounded-xl flex flex-col justify-between space-y-3",
-					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-							className: "flex items-center justify-between mb-2",
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-								className: "font-mono text-xs uppercase",
-								style: { color: "var(--ink-muted)" },
-								children: "SIM.03 // ALGORITHMIC SYNTH"
-							}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-								className: "font-mono text-[10px] px-1.5 py-0.5 rounded border",
-								children: [
-									"#",
-									puzzleIdx + 1,
-									" / ",
-									PUZZLES.length
-								]
-							})]
-						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-							className: "p-3 rounded-md border font-mono text-xs leading-relaxed",
-							style: { backgroundColor: "var(--bg-canvas)" },
-							children: currentPuzzle.q
-						}),
-						showHint && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-							className: "mt-2 font-mono text-[11px]",
-							style: { color: "var(--status-warn)" },
-							children: ["HINT: ", currentPuzzle.hint]
-						})
-					] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
-						onSubmit: verifyPuzzle,
-						className: "space-y-2",
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-							className: "flex gap-2",
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-								value: logicAns,
-								onChange: (e) => setLogicAns(e.target.value),
-								placeholder: "Enter result...",
-								className: "flex-1 arch-input rounded-md px-3 py-1.5 text-xs font-mono tabular-nums"
-							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-								type: "submit",
-								className: "arch-btn-primary px-3 py-1.5 rounded-md text-xs font-mono",
-								children: "VERIFY"
-							})]
-						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-							className: "flex justify-between",
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-								type: "button",
-								onClick: () => setShowHint((h) => !h),
-								className: "arch-btn-ghost px-2 py-1 rounded text-[10px] font-mono",
-								children: showHint ? "HIDE HINT" : "SHOW HINT"
-							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-								type: "button",
-								onClick: () => {
-									setShowHint(false);
-									setLogicAns("");
-									setPuzzleIdx((i) => i + 1);
-								},
-								className: "arch-btn-ghost px-2 py-1 rounded text-[10px] font-mono",
-								children: "SKIP →"
-							})]
-						})]
-					})]
-				})
-			]
 		})]
 	});
 };
@@ -18810,10 +19924,12 @@ var SettingsView = () => {
 	const exportJSON = async () => {
 		try {
 			const storedMedia = await loadAllMediaFromIDB();
+			const dayflowData = loadDayflowState();
 			const backup = {
 				format: "FLUX_BACKUP_V1",
 				exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
 				data,
+				dayflow: dayflowData,
 				media: {
 					...storedMedia,
 					...mediaMap
@@ -18826,7 +19942,7 @@ var SettingsView = () => {
 			a.download = `flux-backup-${(/* @__PURE__ */ new Date()).toISOString().split("T")[0]}.json`;
 			a.click();
 			window.setTimeout(() => URL.revokeObjectURL(url), 1e3);
-			notify("Exported FLUX backup with media");
+			notify("Exported FLUX backup with media & Dayflow");
 		} catch (err) {
 			notify("Could not create backup", "err");
 		}
@@ -18846,6 +19962,7 @@ var SettingsView = () => {
 				const hasMedia = hasEnvelope && Object.prototype.hasOwnProperty.call(parsed, "media");
 				const restoredMedia = hasMedia ? validateImportedMedia(parsed.media) : null;
 				if (restoredMedia) await replaceAllMediaInIDB(restoredMedia);
+				if (hasEnvelope && parsed.dayflow) saveDayflowState(normalizeDayflowState(parsed.dayflow));
 				setData(restoredData);
 				if (restoredMedia) setMediaMap(restoredMedia);
 				notify(hasMedia ? "Restored backup and uploaded media" : "Restored backup data");
@@ -19194,6 +20311,11 @@ var SettingsView = () => {
 					})
 				]
 			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(StartupPasswordManager, {
+				operatorName: data.profile.name,
+				onNotify: notify,
+				onOpenVault: () => setActiveTab("secret-vault")
+			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 				className: "arch-panel p-5 rounded-xl space-y-4",
 				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
@@ -19239,6 +20361,191 @@ var SettingsView = () => {
 							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Wipe All Local Data" })]
 						})
 					]
+				})]
+			})
+		]
+	});
+};
+var StartupPasswordManager = ({ operatorName, onNotify, onOpenVault }) => {
+	const [authRecord, setAuthRecord] = (0, import_react.useState)(() => getAuth());
+	const [newPin, setNewPin] = (0, import_react.useState)("");
+	const [confirmPin, setConfirmPin] = (0, import_react.useState)("");
+	const [showSecret, setShowSecret] = (0, import_react.useState)(false);
+	const [errorMsg, setErrorMsg] = (0, import_react.useState)("");
+	const isPasswordEnabled = Boolean(authRecord && !authRecord.disabled && authRecord.hash);
+	const handleSavePassword = async (e) => {
+		e.preventDefault();
+		setErrorMsg("");
+		if (newPin.trim().length < 4) {
+			setErrorMsg("Password / PIN must be at least 4 characters or digits.");
+			return;
+		}
+		if (newPin !== confirmPin) {
+			setErrorMsg("Passwords / PINs do not match.");
+			return;
+		}
+		const hash = await sha256hex(newPin);
+		const nextAuth = {
+			username: operatorName || authRecord?.username || "Shrishaila M",
+			hash,
+			disabled: false
+		};
+		saveAuth(nextAuth);
+		setAuthRecord(nextAuth);
+		setNewPin("");
+		setConfirmPin("");
+		onNotify(isPasswordEnabled ? "Updated startup password / PIN" : "Enabled startup password / PIN");
+	};
+	const handleRemovePassword = () => {
+		const nextAuth = {
+			username: operatorName || authRecord?.username || "Shrishaila M",
+			hash: "",
+			disabled: true
+		};
+		saveAuth(nextAuth);
+		setAuthRecord(nextAuth);
+		setNewPin("");
+		setConfirmPin("");
+		setErrorMsg("");
+		onNotify("Startup password removed — FLUX will open directly without asking for a PIN");
+	};
+	const handleLockNow = () => {
+		if (!isPasswordEnabled) {
+			onNotify("Set a password below before locking the app", "err");
+			return;
+		}
+		window.dispatchEvent(new Event("flux-lock-now"));
+	};
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "arch-panel p-5 rounded-xl space-y-4",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "flex flex-wrap items-center justify-between gap-3",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+					className: "font-mono text-xs uppercase",
+					style: { color: "var(--ink-muted)" },
+					children: "ACCESS SECURITY // STARTUP PASSWORD & CLASSIFIED VAULT SHORTCUT"
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "text-[11px] mt-1",
+					style: { color: "var(--ink-secondary)" },
+					children: "Keep, change, or remove the password/PIN required when opening FLUX."
+				})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: "px-2.5 py-1 rounded-md font-mono text-[10px] font-semibold uppercase border",
+					style: {
+						color: isPasswordEnabled ? "var(--status-ok)" : "var(--ink-secondary)",
+						borderColor: isPasswordEnabled ? "var(--status-ok)" : "var(--border-hairline)",
+						backgroundColor: "var(--bg-canvas)"
+					},
+					children: isPasswordEnabled ? "PASSWORD ACTIVE ON STARTUP" : "NO PASSWORD (OPENS DIRECTLY)"
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
+				onSubmit: handleSavePassword,
+				className: "grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "sm:col-span-4",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("label", {
+							className: "text-[10px] font-mono uppercase block mb-1",
+							style: { color: "var(--ink-muted)" },
+							children: isPasswordEnabled ? "New Password / PIN" : "Set Password / PIN"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+							type: showSecret ? "text" : "password",
+							value: newPin,
+							onChange: (e) => {
+								setNewPin(e.target.value);
+								setErrorMsg("");
+							},
+							placeholder: "Min 4 chars / digits",
+							className: "w-full arch-input rounded-md px-3 py-2 text-xs font-mono"
+						})]
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "sm:col-span-4",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("label", {
+							className: "text-[10px] font-mono uppercase block mb-1",
+							style: { color: "var(--ink-muted)" },
+							children: "Confirm Password / PIN"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+							type: showSecret ? "text" : "password",
+							value: confirmPin,
+							onChange: (e) => {
+								setConfirmPin(e.target.value);
+								setErrorMsg("");
+							},
+							placeholder: "Repeat password / PIN",
+							className: "w-full arch-input rounded-md px-3 py-2 text-xs font-mono"
+						})]
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "sm:col-span-4 flex items-center gap-2",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+							type: "button",
+							onClick: () => setShowSecret((s) => !s),
+							className: "arch-btn-ghost px-2.5 py-2 rounded-md text-[10px] font-mono",
+							children: showSecret ? "HIDE" : "SHOW"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+							type: "submit",
+							className: "flex-1 arch-btn-primary py-2 px-3 rounded-md text-xs font-mono font-semibold",
+							children: isPasswordEnabled ? "Update Password" : "Enable Password"
+						})]
+					})
+				]
+			}),
+			errorMsg && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+				className: "text-xs font-mono",
+				style: { color: "var(--status-err)" },
+				children: errorMsg
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "flex flex-wrap items-center justify-between gap-2 pt-2 border-t",
+				style: { borderColor: "var(--border-hairline)" },
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+					className: "flex flex-wrap items-center gap-2",
+					children: isPasswordEnabled && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+						type: "button",
+						onClick: handleLockNow,
+						className: "arch-btn-ghost px-3 py-1.5 rounded-md text-xs font-mono inline-flex items-center gap-1.5",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
+							name: "lock",
+							size: 13
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Keep & Lock App Now" })]
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+						type: "button",
+						onClick: handleRemovePassword,
+						className: "arch-btn-ghost px-3 py-1.5 rounded-md text-xs font-mono inline-flex items-center gap-1.5",
+						style: { color: "var(--status-err)" },
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
+							name: "unlock",
+							size: 13
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Remove Password (Turn Off Lock)" })]
+					})] })
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "flex flex-wrap items-center gap-2 font-mono text-[11px]",
+					style: { color: "var(--ink-secondary)" },
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+						"Classified Vault Shortcut: press ",
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("kbd", {
+							className: "px-1.5 py-0.5 border rounded",
+							children: "H"
+						}),
+						" then ",
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("kbd", {
+							className: "px-1.5 py-0.5 border rounded",
+							children: "O"
+						}),
+						" (or ",
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("kbd", {
+							className: "px-1.5 py-0.5 border rounded",
+							children: "Alt+V"
+						}),
+						")"
+					] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+						type: "button",
+						onClick: onOpenVault,
+						className: "arch-btn-ghost px-2.5 py-1 rounded text-[10px] font-mono",
+						children: "Open Vault →"
+					})]
 				})]
 			})
 		]
@@ -21529,579 +22836,6 @@ var FocusDisciplineView = () => {
 		]
 	});
 };
-var LearningEngineView = () => {
-	const { data, setData, notify, awardXP } = (0, import_react.useContext)(NexoraContext);
-	const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-	const todayKey = ymd(/* @__PURE__ */ new Date());
-	const subjects = data.subjects || [];
-	const feynmanNotes = data.feynmanNotes || [];
-	const recallQs = data.recallQs || [];
-	const [editingId, setEditingId] = (0, import_react.useState)(null);
-	const [topic, setTopic] = (0, import_react.useState)("");
-	const [subjectName, setSubjectName] = (0, import_react.useState)("");
-	const [eli12, setEli12] = (0, import_react.useState)("");
-	const [gaps, setGaps] = (0, import_react.useState)("");
-	const [status, setStatus] = (0, import_react.useState)("Confusing");
-	const [qText, setQText] = (0, import_react.useState)("");
-	const [aText, setAText] = (0, import_react.useState)("");
-	const [quizActive, setQuizActive] = (0, import_react.useState)(false);
-	const [quizId, setQuizId] = (0, import_react.useState)(null);
-	const [showAnswer, setShowAnswer] = (0, import_react.useState)(false);
-	const resetFeynmanForm = () => {
-		setEditingId(null);
-		setTopic("");
-		setSubjectName("");
-		setEli12("");
-		setGaps("");
-		setStatus("Confusing");
-	};
-	const saveFeynmanNote = (e) => {
-		e.preventDefault();
-		if (!topic.trim() || !eli12.trim()) return;
-		playTactileClick(data.profile.soundEnabled, 880, 12);
-		if (editingId) {
-			const existing = feynmanNotes.find((n) => n.id === editingId);
-			const giveXp = status === "Mastered" && existing && !existing.masteredXpAwarded;
-			setData((prev) => ({
-				...prev,
-				feynmanNotes: (prev.feynmanNotes || []).map((n) => n.id === editingId ? {
-					...n,
-					topic: topic.trim(),
-					subject: subjectName,
-					eli12: eli12.trim(),
-					gaps: gaps.trim(),
-					status,
-					masteredXpAwarded: n.masteredXpAwarded || status === "Mastered"
-				} : n)
-			}));
-			if (giveXp) awardXP(20, `Mastered Feynman Note: ${topic.trim()}`);
-			else notify("Feynman note updated");
-			resetFeynmanForm();
-		} else {
-			const isMastered = status === "Mastered";
-			const newNote = {
-				id: "fn-" + Date.now(),
-				topic: topic.trim(),
-				subject: subjectName,
-				eli12: eli12.trim(),
-				gaps: gaps.trim(),
-				status,
-				masteredXpAwarded: isMastered,
-				date: todayKey
-			};
-			setData((prev) => ({
-				...prev,
-				feynmanNotes: [newNote, ...prev.feynmanNotes || []]
-			}));
-			if (isMastered) awardXP(20, `Mastered Feynman Note: ${newNote.topic}`);
-			else notify("Feynman note saved");
-			resetFeynmanForm();
-		}
-	};
-	const startEditNote = (note) => {
-		playTactileClick(data.profile.soundEnabled, 880, 12);
-		setEditingId(note.id);
-		setTopic(note.topic || "");
-		setSubjectName(note.subject || "");
-		setEli12(note.eli12 || "");
-		setGaps(note.gaps || "");
-		setStatus(note.status || "Confusing");
-	};
-	const setNoteStatus = (note, nextStatus) => {
-		playTactileClick(data.profile.soundEnabled, 880, 12);
-		const giveXp = nextStatus === "Mastered" && !note.masteredXpAwarded;
-		setData((prev) => ({
-			...prev,
-			feynmanNotes: (prev.feynmanNotes || []).map((n) => n.id === note.id ? {
-				...n,
-				status: nextStatus,
-				masteredXpAwarded: n.masteredXpAwarded || nextStatus === "Mastered"
-			} : n)
-		}));
-		if (giveXp) awardXP(20, `Mastered Feynman Note: ${note.topic}`);
-	};
-	const deleteFeynmanNote = (id) => {
-		playTactileClick(data.profile.soundEnabled, 880, 12);
-		setData((prev) => ({
-			...prev,
-			feynmanNotes: (prev.feynmanNotes || []).filter((n) => n.id !== id)
-		}));
-		if (editingId === id) resetFeynmanForm();
-	};
-	const statusCounts = (0, import_react.useMemo)(() => {
-		const counts = {
-			Confusing: 0,
-			"Getting there": 0,
-			Mastered: 0
-		};
-		feynmanNotes.forEach((n) => {
-			if (counts[n.status] !== void 0) counts[n.status]++;
-		});
-		return counts;
-	}, [feynmanNotes]);
-	const addRecallQ = (e) => {
-		e.preventDefault();
-		if (!qText.trim() || !aText.trim()) return;
-		playTactileClick(data.profile.soundEnabled, 880, 12);
-		const newQ = {
-			id: "rq-" + Date.now(),
-			question: qText.trim(),
-			answer: aText.trim(),
-			correct: 0,
-			missed: 0,
-			date: todayKey
-		};
-		setData((prev) => ({
-			...prev,
-			recallQs: [newQ, ...prev.recallQs || []]
-		}));
-		setQText("");
-		setAText("");
-		notify("Question added to Recall Bank");
-	};
-	const deleteRecallQ = (id) => {
-		playTactileClick(data.profile.soundEnabled, 880, 12);
-		setData((prev) => ({
-			...prev,
-			recallQs: (prev.recallQs || []).filter((q) => q.id !== id)
-		}));
-		if (quizId === id) {
-			setQuizId(null);
-			setShowAnswer(false);
-		}
-	};
-	const pickRandomQuestion = (excludeId = null) => {
-		if (recallQs.length === 0) return;
-		const pool = recallQs.length > 1 && excludeId ? recallQs.filter((q) => q.id !== excludeId) : recallQs;
-		const chosen = pool[Math.floor(Math.random() * pool.length)];
-		setQuizId(chosen.id);
-		setShowAnswer(false);
-		setQuizActive(true);
-	};
-	const recordQuizResult = (id, gotIt) => {
-		playTactileClick(data.profile.soundEnabled, 880, 12);
-		setData((prev) => ({
-			...prev,
-			recallQs: (prev.recallQs || []).map((q) => q.id === id ? {
-				...q,
-				correct: gotIt ? (Number(q.correct) || 0) + 1 : Number(q.correct) || 0,
-				missed: !gotIt ? (Number(q.missed) || 0) + 1 : Number(q.missed) || 0
-			} : q)
-		}));
-		pickRandomQuestion(id);
-	};
-	const recallStats = (0, import_react.useMemo)(() => {
-		let totalCorrect = 0;
-		let totalMissed = 0;
-		recallQs.forEach((q) => {
-			totalCorrect += Number(q.correct) || 0;
-			totalMissed += Number(q.missed) || 0;
-		});
-		const totalAttempts = totalCorrect + totalMissed;
-		const accuracy = totalAttempts > 0 ? Math.round(totalCorrect / totalAttempts * 100) : 0;
-		return {
-			totalCorrect,
-			totalMissed,
-			totalAttempts,
-			accuracy
-		};
-	}, [recallQs]);
-	const weakestQuestions = (0, import_react.useMemo)(() => {
-		return [...recallQs].filter((q) => (Number(q.missed) || 0) > 0).sort((a, b) => b.missed - b.correct - (a.missed - a.correct)).slice(0, 5);
-	}, [recallQs]);
-	const currentQuizItem = recallQs.find((q) => q.id === quizId) || recallQs[0] || null;
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-		className: "space-y-5 pt-6 border-t",
-		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-			className: "font-mono text-[11px] uppercase tracking-widest",
-			style: { color: "var(--ink-muted)" },
-			children: "COGNITIVE COMPRESSION & ACTIVE RETRIEVAL"
-		}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
-			className: "text-lg font-semibold heading-tight mt-0.5",
-			children: "Feynman Synthesis & Active Recall Engine"
-		})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-			className: "grid grid-cols-1 lg:grid-cols-12 gap-5",
-			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-				className: "lg:col-span-6 arch-panel rounded-xl p-5 space-y-4",
-				children: [
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: "flex items-center justify-between",
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-							className: "font-mono text-[11px] uppercase tracking-wider",
-							style: { color: "var(--ink-muted)" },
-							children: "01 // FEYNMAN TECHNIQUE SYNTHESIS"
-						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-							className: "font-mono text-[11px] tabular-nums",
-							style: { color: "var(--ink-secondary)" },
-							children: [feynmanNotes.length, " NOTES"]
-						})]
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: "hairline-grid grid grid-cols-3 rounded-lg overflow-hidden text-center",
-						children: [
-							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-								className: "hairline-cell p-2.5",
-								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-									className: "font-mono text-[10px] uppercase",
-									style: { color: "var(--ink-muted)" },
-									children: "CONFUSING"
-								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-									className: "font-mono text-base font-semibold tabular-nums mt-0.5",
-									style: { color: "var(--status-err)" },
-									children: statusCounts["Confusing"]
-								})]
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-								className: "hairline-cell p-2.5",
-								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-									className: "font-mono text-[10px] uppercase",
-									style: { color: "var(--ink-muted)" },
-									children: "GETTING THERE"
-								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-									className: "font-mono text-base font-semibold tabular-nums mt-0.5",
-									style: { color: "var(--status-warn)" },
-									children: statusCounts["Getting there"]
-								})]
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-								className: "hairline-cell p-2.5",
-								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-									className: "font-mono text-[10px] uppercase",
-									style: { color: "var(--ink-muted)" },
-									children: "MASTERED"
-								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-									className: "font-mono text-base font-semibold tabular-nums mt-0.5",
-									style: { color: "var(--status-ok)" },
-									children: statusCounts["Mastered"]
-								})]
-							})
-						]
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
-						onSubmit: saveFeynmanNote,
-						className: "space-y-2.5",
-						children: [
-							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-								className: "grid grid-cols-1 sm:grid-cols-12 gap-2",
-								children: [
-									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-										value: topic,
-										onChange: (e) => setTopic(e.target.value),
-										placeholder: "Concept / Topic...",
-										className: "sm:col-span-5 arch-input rounded-md px-3 py-1.5 text-xs"
-									}),
-									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", {
-										value: subjectName,
-										onChange: (e) => setSubjectName(e.target.value),
-										className: "sm:col-span-4 arch-input rounded-md px-2 py-1.5 text-xs font-mono",
-										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
-											value: "",
-											children: "-- Optional Course --"
-										}), subjects.map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
-											value: s.name,
-											children: s.name
-										}, s.id))]
-									}),
-									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", {
-										value: status,
-										onChange: (e) => setStatus(e.target.value),
-										className: "sm:col-span-3 arch-input rounded-md px-2 py-1.5 text-xs font-mono",
-										children: [
-											/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
-												value: "Confusing",
-												children: "Confusing"
-											}),
-											/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
-												value: "Getting there",
-												children: "Getting there"
-											}),
-											/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
-												value: "Mastered",
-												children: "Mastered"
-											})
-										]
-									})
-								]
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("textarea", {
-								rows: 3,
-								value: eli12,
-								onChange: (e) => setEli12(e.target.value),
-								placeholder: "Explain it like I'm 12 (plain language, zero jargon)...",
-								className: "w-full arch-input rounded-md p-2.5 text-xs leading-relaxed"
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("textarea", {
-								rows: 2,
-								value: gaps,
-								onChange: (e) => setGaps(e.target.value),
-								placeholder: "Gaps I found (where my explanation got stuck)...",
-								className: "w-full arch-input rounded-md p-2.5 text-xs leading-relaxed"
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-								className: "flex gap-2",
-								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
-									type: "submit",
-									className: "arch-btn-primary px-3.5 py-1.5 rounded-md text-xs font-mono inline-flex items-center gap-1.5",
-									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
-										name: editingId ? "check" : "plus",
-										size: 13
-									}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: editingId ? "Update Note" : "Save Feynman Note" })]
-								}), editingId && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-									type: "button",
-									onClick: resetFeynmanForm,
-									className: "arch-btn-ghost px-3 py-1.5 rounded-md text-xs font-mono",
-									children: "Cancel"
-								})]
-							})
-						]
-					}),
-					feynmanNotes.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyState, {
-						code: "FEYNMAN.LAB // 0_NOTES",
-						title: "No Feynman explanations recorded",
-						subtitle: "Pick a concept above, explain it as if teaching a 12-year-old, and pinpoint your knowledge gaps."
-					}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-						className: "space-y-2.5 max-h-72 overflow-y-auto pr-1",
-						children: feynmanNotes.map((n) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-							className: "p-3.5 rounded-lg border space-y-2",
-							style: { backgroundColor: "var(--bg-canvas)" },
-							children: [
-								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-									className: "flex flex-wrap items-start justify-between gap-2",
-									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-										className: "text-xs font-semibold",
-										children: n.topic
-									}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-										className: "font-mono text-[10px]",
-										style: { color: "var(--ink-muted)" },
-										children: [n.subject ? `${n.subject} • ` : "", n.date]
-									})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-										className: "flex items-center gap-1",
-										children: [
-											[
-												"Confusing",
-												"Getting there",
-												"Mastered"
-											].map((st) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-												type: "button",
-												onClick: () => setNoteStatus(n, st),
-												className: `px-2 py-0.5 rounded text-[10px] font-mono ${n.status === st ? "arch-btn-primary" : "arch-btn-ghost"}`,
-												children: st
-											}, st)),
-											/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-												type: "button",
-												onClick: () => startEditNote(n),
-												className: "arch-btn-ghost px-2 py-0.5 rounded text-[10px] font-mono",
-												children: "Edit"
-											}),
-											/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-												type: "button",
-												onClick: () => deleteFeynmanNote(n.id),
-												className: "arch-btn-ghost p-1 rounded",
-												title: "Delete note",
-												children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
-													name: "trash",
-													size: 12
-												})
-											})
-										]
-									})]
-								}),
-								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
-									className: "text-xs leading-relaxed",
-									style: { color: "var(--ink-primary)" },
-									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-										className: "font-mono text-[10px] uppercase mr-1.5",
-										style: { color: "var(--ink-muted)" },
-										children: "ELI12:"
-									}), n.eli12]
-								}),
-								n.gaps && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
-									className: "text-xs leading-relaxed",
-									style: { color: "var(--status-warn)" },
-									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-										className: "font-mono text-[10px] uppercase mr-1.5",
-										children: "GAPS:"
-									}), n.gaps]
-								})
-							]
-						}, n.id))
-					})
-				]
-			}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-				className: "lg:col-span-6 arch-panel rounded-xl p-5 space-y-4",
-				children: [
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: "flex flex-wrap items-center justify-between gap-2",
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-							className: "font-mono text-[11px] uppercase tracking-wider",
-							style: { color: "var(--ink-muted)" },
-							children: "02 // ACTIVE RECALL QUESTION BANK"
-						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-							className: "flex items-center gap-2 font-mono text-xs tabular-nums",
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-								className: "px-2 py-0.5 rounded border",
-								style: { color: "var(--status-ok)" },
-								children: [
-									"ACCURACY: ",
-									recallStats.accuracy,
-									"% (",
-									recallStats.totalCorrect,
-									"/",
-									recallStats.totalAttempts,
-									")"
-								]
-							}), recallQs.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-								type: "button",
-								onClick: () => {
-									playTactileClick(data.profile.soundEnabled, 880, 12);
-									if (quizActive) setQuizActive(false);
-									else pickRandomQuestion();
-								},
-								className: `px-2.5 py-1 rounded text-xs font-mono ${quizActive ? "arch-btn-primary" : "arch-btn-ghost"}`,
-								children: quizActive ? "Exit Quiz" : "Quiz Me"
-							})]
-						})]
-					}),
-					quizActive && currentQuizItem && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: "p-4 rounded-xl border space-y-3",
-						style: { backgroundColor: "var(--bg-canvas)" },
-						children: [
-							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-								className: "flex items-center justify-between font-mono text-[10px]",
-								style: { color: "var(--ink-muted)" },
-								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "ACTIVE RECALL PROMPT" }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
-									"+",
-									currentQuizItem.correct || 0,
-									" GOT IT / -",
-									currentQuizItem.missed || 0,
-									" MISSED"
-								] })]
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-								className: "text-sm font-semibold",
-								children: currentQuizItem.question
-							}),
-							showAnswer ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-								className: "space-y-3 pt-2 border-t",
-								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-									className: "text-xs leading-relaxed font-mono",
-									style: { color: "var(--ink-secondary)" },
-									children: currentQuizItem.answer
-								}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-									className: "flex gap-2",
-									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-										type: "button",
-										onClick: () => recordQuizResult(currentQuizItem.id, true),
-										className: "flex-1 arch-btn-primary py-1.5 rounded-md text-xs font-mono",
-										children: "Got it"
-									}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-										type: "button",
-										onClick: () => recordQuizResult(currentQuizItem.id, false),
-										className: "flex-1 arch-btn-ghost py-1.5 rounded-md text-xs font-mono",
-										style: { color: "var(--status-err)" },
-										children: "Missed it"
-									})]
-								})]
-							}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-								type: "button",
-								onClick: () => {
-									playTactileClick(data.profile.soundEnabled, 880, 12);
-									setShowAnswer(true);
-								},
-								className: "w-full arch-btn-ghost py-2 rounded-md text-xs font-mono",
-								children: "Show answer"
-							})
-						]
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
-						onSubmit: addRecallQ,
-						className: "space-y-2",
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-							value: qText,
-							onChange: (e) => setQText(e.target.value),
-							placeholder: "Recall question prompt...",
-							className: "w-full arch-input rounded-md px-3 py-1.5 text-xs"
-						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-							className: "flex gap-2",
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-								value: aText,
-								onChange: (e) => setAText(e.target.value),
-								placeholder: "Concise target answer...",
-								className: "flex-1 arch-input rounded-md px-3 py-1.5 text-xs"
-							}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
-								type: "submit",
-								className: "arch-btn-primary px-3.5 py-1.5 rounded-md text-xs font-mono shrink-0 inline-flex items-center gap-1.5",
-								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
-									name: "plus",
-									size: 13
-								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Add Q&A" })]
-							})]
-						})]
-					}),
-					weakestQuestions.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: "p-3 rounded-lg border space-y-1.5",
-						style: { backgroundColor: "var(--bg-canvas)" },
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-							className: "font-mono text-[10px] uppercase",
-							style: { color: "var(--status-warn)" },
-							children: "WEAKEST QUESTIONS (HIGHEST MISS RATE)"
-						}), weakestQuestions.map((wq) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-							className: "flex items-center justify-between gap-2 text-xs",
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-								className: "truncate",
-								children: wq.question
-							}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-								className: "font-mono text-[10px] tabular-nums shrink-0",
-								style: { color: "var(--status-warn)" },
-								children: [
-									"Missed ",
-									wq.missed,
-									" / Got ",
-									wq.correct
-								]
-							})]
-						}, wq.id))]
-					}),
-					recallQs.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyState, {
-						code: "RECALL.BANK // 0_QUESTIONS",
-						title: "No active recall prompts saved",
-						subtitle: "Add question-and-answer pairs above and click 'Quiz Me' to test retrieval and surface your weakest topics."
-					}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-						className: "divide-y max-h-56 overflow-y-auto pr-1",
-						children: recallQs.map((q) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-							className: "py-2.5 flex items-center justify-between gap-3",
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-								className: "min-w-0",
-								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-									className: "text-xs font-semibold truncate",
-									children: q.question
-								}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-									className: "font-mono text-[10px] tabular-nums",
-									style: { color: "var(--ink-muted)" },
-									children: [
-										"Got: ",
-										q.correct || 0,
-										" • Missed: ",
-										q.missed || 0
-									]
-								})]
-							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-								type: "button",
-								onClick: () => deleteRecallQ(q.id),
-								className: "arch-btn-ghost p-1 rounded shrink-0",
-								title: "Delete question",
-								children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
-									name: "trash",
-									size: 12
-								})
-							})]
-						}, q.id))
-					})
-				]
-			})]
-		})]
-	});
-};
 var MoneyAllocatorView = () => {
 	const { data, setData, setActiveTab, notify } = (0, import_react.useContext)(NexoraContext);
 	const lifeSettings = data.lifeSettings || {};
@@ -22635,7 +23369,14 @@ var LifeAuditView = () => {
 };
 var NexoraApp = () => {
 	const [data, setData] = (0, import_react.useState)(loadPersistedState);
-	const [activeTab, setActiveTab] = (0, import_react.useState)("dashboard");
+	const [activeTab, setActiveTab] = (0, import_react.useState)(() => {
+		try {
+			const p = (window.location.pathname || "").toLowerCase();
+			const h = (window.location.hash || "").toLowerCase();
+			if (p.endsWith("/schedule") || p.endsWith("/dayflow") || h === "#schedule" || h === "#dayflow") return "dayflow";
+		} catch (e) {}
+		return "dashboard";
+	});
 	const [sidebarCollapsed, setSidebarCollapsed] = (0, import_react.useState)(false);
 	const [cmdOpen, setCmdOpen] = (0, import_react.useState)(false);
 	const [searchQuery, setSearchQuery] = (0, import_react.useState)("");
@@ -23001,45 +23742,44 @@ var NexoraApp = () => {
 			keyHint: "1"
 		},
 		{
+			id: "dayflow",
+			label: "Dayflow",
+			icon: "calendar",
+			keyHint: "2"
+		},
+		{
 			id: "academy",
 			label: "Academy",
 			icon: "academy",
 			badge: data.subjects.length,
-			keyHint: "2"
+			keyHint: "3"
 		},
 		{
 			id: "bank",
 			label: "Wallet",
 			icon: "bank",
 			badge: data.transactions.length,
-			keyHint: "3"
+			keyHint: "4"
 		},
 		{
 			id: "innovation",
 			label: "Innovation Canvas",
 			icon: "innovation",
 			badge: (data.ideas || []).length,
-			keyHint: "4"
+			keyHint: "5"
 		},
 		{
 			id: "habits",
 			label: "Habit Matrix",
 			icon: "habits",
 			badge: data.habits.length,
-			keyHint: "5"
+			keyHint: "6"
 		},
 		{
 			id: "focus-discipline",
 			label: "Focus Discipline",
 			icon: "clock",
 			badge: (data.distractionLog || []).length,
-			keyHint: "6"
-		},
-		{
-			id: "learning-engine",
-			label: "Learning Engine",
-			icon: "memory",
-			badge: (data.feynmanNotes || []).length + (data.recallQs || []).length,
 			keyHint: "7"
 		},
 		{
@@ -23074,16 +23814,15 @@ var NexoraApp = () => {
 			badge: (data.roadmaps || []).length
 		},
 		{
-			id: "arcade",
-			label: "Simulation Deck",
-			icon: "arcade"
-		},
-		{
 			id: "settings",
 			label: "System Core",
 			icon: "settings"
 		}
 	], [data]);
+	const vaultKeySeqRef = (0, import_react.useRef)({
+		key: "",
+		time: 0
+	});
 	(0, import_react.useEffect)(() => {
 		const handleKeyDown = (e) => {
 			if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -23096,18 +23835,45 @@ var NexoraApp = () => {
 				setProfileModal(false);
 				setConfirmResetModal(false);
 				if (activeTab === "secret-vault") {
-					setActiveTab("arcade");
+					setActiveTab("dashboard");
 					notify("Vault locked");
 				}
 				return;
 			}
-			if (e.altKey && e.code === "KeyG") {
+			if (e.altKey && e.code === "KeyV" || (e.ctrlKey || e.metaKey) && e.shiftKey && e.code === "KeyV") {
 				e.preventDefault();
-				setActiveTab("arcade");
+				playTactileClick(data.profile.soundEnabled, 1080, 20);
+				if (activeTab === "secret-vault") {
+					setActiveTab("dashboard");
+					notify("Vault locked");
+				} else {
+					setActiveTab("secret-vault");
+					notify("Classified Vault Trapdoor Unlocked");
+				}
 				return;
 			}
 			const tag = (e.target?.tagName || "").toLowerCase();
 			if (tag === "input" || tag === "textarea" || tag === "select" || cmdOpen) return;
+			const lowerKey = e.key.toLowerCase();
+			const now = Date.now();
+			if (lowerKey === "h") vaultKeySeqRef.current = {
+				key: "h",
+				time: now
+			};
+			else if (lowerKey === "o" && vaultKeySeqRef.current.key === "h" && now - vaultKeySeqRef.current.time < 1500) {
+				e.preventDefault();
+				vaultKeySeqRef.current = {
+					key: "",
+					time: 0
+				};
+				playTactileClick(data.profile.soundEnabled, 1080, 20);
+				setActiveTab("secret-vault");
+				notify("Classified Vault Trapdoor Unlocked (H → O)");
+				return;
+			} else vaultKeySeqRef.current = {
+				key: "",
+				time: 0
+			};
 			if (e.key === "/") {
 				e.preventDefault();
 				setCmdOpen(true);
@@ -23196,18 +23962,26 @@ var NexoraApp = () => {
 				tab: "innovation"
 			});
 		});
-		(data.feynmanNotes || []).forEach((fn) => {
-			if ((fn.topic || "").toLowerCase().includes(q) || (fn.eli12 || "").toLowerCase().includes(q)) res.push({
-				title: `Feynman: ${fn.topic}`,
-				module: "Learning Engine",
-				tab: "learning-engine"
+		const df = loadDayflowState();
+		(df.recurringClasses || []).forEach((cls) => {
+			if ((cls.title || "").toLowerCase().includes(q)) res.push({
+				title: `Class: ${cls.title}`,
+				module: "Dayflow",
+				tab: "dayflow"
 			});
 		});
-		(data.recallQs || []).forEach((rq) => {
-			if ((rq.question || "").toLowerCase().includes(q) || (rq.answer || "").toLowerCase().includes(q)) res.push({
-				title: `Recall Q: ${rq.question}`,
-				module: "Learning Engine",
-				tab: "learning-engine"
+		(df.tasks || []).forEach((tsk) => {
+			if ((tsk.title || "").toLowerCase().includes(q)) res.push({
+				title: `Schedule: ${tsk.title}`,
+				module: "Dayflow",
+				tab: "dayflow"
+			});
+		});
+		(df.inbox || []).forEach((inb) => {
+			if ((inb.title || "").toLowerCase().includes(q)) res.push({
+				title: `Inbox: ${inb.title}`,
+				module: "Dayflow",
+				tab: "dayflow"
 			});
 		});
 		return res.slice(0, 12);
@@ -23252,17 +24026,20 @@ var NexoraApp = () => {
 	const renderActiveView = () => {
 		switch (activeTab) {
 			case "dashboard": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DashboardView, {});
+			case "dayflow": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DayflowView, {
+				soundEnabled: data.profile.soundEnabled,
+				onAwardXP: awardXP,
+				onNotify: notify,
+				onPlayClick: playTactileClick
+			});
 			case "academy": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AcademyView, {});
 			case "bank": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BankView, {});
 			case "money-allocator": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyAllocatorView, {});
 			case "missions": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MissionsView, {});
 			case "projects": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProjectsView, {});
 			case "innovation": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(InnovationCanvasView, {});
-			case "calendar": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CalendarView, {});
 			case "habits": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HabitsView, {});
 			case "focus-discipline": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FocusDisciplineView, {});
-			case "learning-engine": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LearningEngineView, {});
-			case "arcade": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ArcadeView, {});
 			case "habit-design": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HabitDesignView, {});
 			case "study-vault": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(StudyVaultView, {});
 			case "bio-state": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BioStateView, {});
@@ -23623,6 +24400,7 @@ var NexoraApp = () => {
 									type: "button",
 									onClick: async () => {
 										localStorage.removeItem("NEXORA_ARCHITECTURAL_OS_V1");
+										localStorage.removeItem("flux_os_dayflow");
 										await clearMediaIDB();
 										setData(EMPTY_STATE);
 										setMediaMap({});
@@ -23641,8 +24419,10 @@ var NexoraApp = () => {
 					})
 				}),
 				toast && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-					className: "fixed bottom-5 right-5 z-50 arch-panel px-4 py-2.5 rounded-lg text-xs font-mono shadow-lg border",
+					className: "fixed bottom-5 right-5 z-50 px-4 py-2.5 rounded-lg text-xs font-mono shadow-lg border",
 					style: {
+						position: "fixed",
+						backgroundColor: "var(--bg-surface)",
 						borderColor: toast.status === "err" ? "var(--status-err)" : "var(--status-ok)",
 						color: toast.status === "err" ? "var(--status-err)" : "var(--ink-primary)"
 					},
@@ -23880,6 +24660,20 @@ var SignInScreen = ({ onAuth }) => {
 									className: "w-full arch-btn-primary rounded-lg py-2.5 text-sm font-mono font-semibold transition-all",
 									style: { opacity: busy ? .6 : 1 },
 									children: busy ? "VERIFYING..." : isSetup ? "INITIALISE SYSTEM →" : "UNLOCK →"
+								}),
+								isSetup && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+									type: "button",
+									onClick: () => {
+										const operator = name.trim() || "Shrishaila M";
+										saveAuth({
+											username: operator,
+											hash: "",
+											disabled: true
+										});
+										onAuth(operator);
+									},
+									className: "w-full arch-btn-ghost rounded-lg py-2 text-xs font-mono",
+									children: "Skip / Open Without Password"
 								})
 							]
 						}),
@@ -23888,38 +24682,54 @@ var SignInScreen = ({ onAuth }) => {
 							onClick: () => setConfirmReset(true),
 							className: "w-full text-center font-mono text-[10px] uppercase tracking-widest mt-1",
 							style: { color: "var(--ink-muted)" },
-							children: "Forgot PIN / Reset Access"
+							children: "Forgot PIN / Reset or Remove Password"
 						}),
 						!isSetup && confirmReset && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-							className: "flex items-center justify-between gap-2 pt-2 border-t",
+							className: "flex flex-col gap-2 pt-2 border-t",
 							style: { borderColor: "var(--border-hairline)" },
 							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 								className: "font-mono text-[10px]",
 								style: { color: "var(--ink-secondary)" },
-								children: "Reset PIN? App data is kept."
+								children: "Remove or reset PIN? Your app data is kept safe."
 							}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 								className: "flex items-center gap-1.5",
-								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-									type: "button",
-									onClick: () => {
-										localStorage.removeItem("XOR_BIT_AUTH_V1");
-										setAuthState(null);
-										setConfirmReset(false);
-										setPin("");
-										setErr("");
-									},
-									className: "px-2.5 py-1 rounded text-[10px] font-mono font-semibold",
-									style: {
-										backgroundColor: "var(--status-err)",
-										color: "#fff"
-									},
-									children: "Confirm Reset"
-								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-									type: "button",
-									onClick: () => setConfirmReset(false),
-									className: "px-2 py-1 rounded text-[10px] font-mono arch-btn-ghost",
-									children: "Cancel"
-								})]
+								children: [
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+										type: "button",
+										onClick: () => {
+											saveAuth({
+												username: auth?.username || "Shrishaila M",
+												hash: "",
+												disabled: true
+											});
+											onAuth(auth?.username || "Shrishaila M");
+										},
+										className: "px-2.5 py-1 rounded text-[10px] font-mono font-semibold arch-btn-primary",
+										children: "Turn Off Password & Open"
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+										type: "button",
+										onClick: () => {
+											localStorage.removeItem("XOR_BIT_AUTH_V1");
+											setAuthState(null);
+											setConfirmReset(false);
+											setPin("");
+											setErr("");
+										},
+										className: "px-2.5 py-1 rounded text-[10px] font-mono font-semibold",
+										style: {
+											backgroundColor: "var(--status-err)",
+											color: "#fff"
+										},
+										children: "Set New PIN"
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+										type: "button",
+										onClick: () => setConfirmReset(false),
+										className: "px-2 py-1 rounded text-[10px] font-mono arch-btn-ghost",
+										children: "Cancel"
+									})
+								]
 							})]
 						})
 					]
@@ -23927,7 +24737,7 @@ var SignInScreen = ({ onAuth }) => {
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 					className: "text-center font-mono text-[10px]",
 					style: { color: "var(--ink-muted)" },
-					children: "PIN stored locally · no data leaves your device"
+					children: "PIN stored locally · manage anytime in System Core"
 				})
 			]
 		})]
@@ -23936,11 +24746,19 @@ var SignInScreen = ({ onAuth }) => {
 var AppWithAuth = () => {
 	const [authed, setAuthed] = import_react.useState(() => {
 		try {
-			return new URLSearchParams(window.location.search).get("autostart") === "1";
+			if (new URLSearchParams(window.location.search).get("autostart") === "1") return true;
+			const stored = getAuth();
+			if (stored && stored.disabled === true) return true;
+			return false;
 		} catch {
 			return false;
 		}
 	});
+	import_react.useEffect(() => {
+		const onLockNow = () => setAuthed(false);
+		window.addEventListener("flux-lock-now", onLockNow);
+		return () => window.removeEventListener("flux-lock-now", onLockNow);
+	}, []);
 	import_react.useEffect(() => {
 		try {
 			const isPreviewHost = window.location.hostname.includes(".run.app") || window.self !== window.top;

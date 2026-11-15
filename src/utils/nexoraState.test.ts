@@ -10,6 +10,13 @@ import {
   normalizeImportedState,
   validateImportedMedia,
 } from './nexoraState';
+import {
+  DEFAULT_DAYFLOW_STATE,
+  calculateFreeTimeGaps,
+  getBlocksForDate,
+  getDayAvailabilitySummary,
+  normalizeDayflowState,
+} from './dayflowState';
 
 test('isPlainObject identifies plain objects vs arrays and primitives', () => {
   assert.equal(isPlainObject({ a: 1 }), true);
@@ -96,4 +103,80 @@ test('filterCommandPaletteItems matches multi-token fuzzy queries', () => {
   assert.equal(filterCommandPaletteItems(items, 'nonexistent').length, 0);
 });
 
+test('Dayflow calculateFreeTimeGaps computes exact in-between free gaps within waking hours', () => {
+  // 2026-11-16 is a Monday (ISO weekday 1)
+  const state = normalizeDayflowState({
+    config: { wakeStartHour: 8, wakeEndHour: 18 },
+    recurringClasses: [
+      {
+        id: 'c1',
+        title: 'Operating Systems Lecture',
+        category: 'lecture',
+        startTime: '09:00',
+        durationMin: 60,
+        repeatDays: [1, 3, 5],
+      },
+    ],
+    tasks: [
+      {
+        id: 't1',
+        title: 'Kernel Lab Prep',
+        category: 'deepwork',
+        date: '2026-11-16',
+        startTime: '12:15',
+        durationMin: 45,
+        completed: false,
+      },
+    ],
+  });
 
+  const blocks = getBlocksForDate(state, '2026-11-16');
+  assert.equal(blocks.length, 2);
+  const gaps = calculateFreeTimeGaps(blocks, 8, 18, 15);
+  // Expected gaps: 08:00-09:00 (1h), 10:00-12:15 (2h 15m), 13:00-18:00 (5h)
+  assert.equal(gaps.length, 3);
+  assert.equal(gaps[0].startTime, '08:00');
+  assert.equal(gaps[0].endTime, '09:00');
+  assert.equal(gaps[0].label, '1h free • + Add');
+  assert.equal(gaps[1].startTime, '10:00');
+  assert.equal(gaps[1].endTime, '12:15');
+  assert.equal(gaps[1].label, '2h 15m free • + Add');
+  assert.equal(gaps[2].startTime, '13:00');
+  assert.equal(gaps[2].endTime, '18:00');
+  assert.equal(gaps[2].label, '5h free • + Add');
+});
+
+test('Dayflow holiday day override suppresses recurring classes while preserving explicit tasks', () => {
+  const state = normalizeDayflowState({
+    ...DEFAULT_DAYFLOW_STATE,
+    recurringClasses: [
+      {
+        id: 'c1',
+        title: 'Algorithms',
+        category: 'lecture',
+        startTime: '10:00',
+        durationMin: 60,
+        repeatDays: [1],
+      },
+    ],
+    tasks: [
+      {
+        id: 't1',
+        title: 'Personal Reading',
+        category: 'personal',
+        date: '2026-11-16',
+        startTime: '14:00',
+        durationMin: 60,
+        completed: false,
+      },
+    ],
+    dayOverrides: {
+      '2026-11-16': 'holiday',
+    },
+  });
+
+  const summary = getDayAvailabilitySummary(state, '2026-11-16');
+  assert.equal(summary.blocks.length, 1);
+  assert.equal(summary.blocks[0].kind, 'task');
+  assert.equal(summary.statusOverride, 'holiday');
+});

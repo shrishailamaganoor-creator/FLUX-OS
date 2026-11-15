@@ -13,6 +13,13 @@ import {
   loadPersistedState,
   savePersistedState,
 } from "./utils/nexoraState";
+import { DayflowView } from "./components/DayflowView";
+import {
+  DAYFLOW_STORAGE_KEY,
+  loadDayflowState,
+  saveDayflowState,
+  normalizeDayflowState,
+} from "./utils/dayflowState";
 
 const NexoraContext = createContext(null);
 
@@ -1149,7 +1156,7 @@ const NexoraContext = createContext(null);
       );
     };
 
-    // Execution Hub Sub-View Switcher Bar (Shared across Missions, Projects, Academy, Unified Calendar)
+    // Execution Hub Sub-View Switcher Bar (Shared across Missions, Projects, Academy)
     const ExecutionHubSubNav = ({ current, onSelect }) => (
       <div className="flex flex-wrap items-center gap-1.5 p-1.5 rounded-lg border" style={{ backgroundColor: 'var(--bg-surface)' }}>
         <span className="font-mono text-[10px] uppercase tracking-wider px-2" style={{ color: 'var(--ink-muted)' }}>
@@ -1158,8 +1165,7 @@ const NexoraContext = createContext(null);
         {[
           { id: 'missions', label: 'Missions & ₹ Bounties', icon: 'missions' },
           { id: 'projects', label: 'Project Lab', icon: 'projects' },
-          { id: 'academy', label: 'Academy Matrix', icon: 'academy' },
-          { id: 'calendar', label: 'Unified Calendar', icon: 'calendar' }
+          { id: 'academy', label: 'Academy Matrix', icon: 'academy' }
         ].map((tab) => (
           <button
             key={tab.id}
@@ -4362,7 +4368,7 @@ const NexoraContext = createContext(null);
                     CLASSIFIED TRAPDOOR UNLOCKED // ZERO SIDEBAR FOOTPRINT
                   </div>
                   <div className="text-xs font-mono" style={{ color: 'var(--ink-secondary)' }}>
-                    Press <kbd className="px-1 py-0.5 border rounded">Esc</kbd> or switch any sidebar module to immediately lock this vault.
+                    Shortcut: <kbd className="px-1 py-0.5 border rounded">H</kbd> then <kbd className="px-1 py-0.5 border rounded">O</kbd> (or <kbd className="px-1 py-0.5 border rounded">Alt+V</kbd>). Press <kbd className="px-1 py-0.5 border rounded">Esc</kbd> to lock immediately.
                   </div>
                 </div>
               </div>
@@ -4384,7 +4390,7 @@ const NexoraContext = createContext(null);
                 </button>
                 <button
                   type="button"
-                  onClick={() => setActiveTab('arcade')}
+                  onClick={() => setActiveTab('dashboard')}
                   className="arch-btn-ghost px-3 py-1.5 rounded-md text-xs font-mono"
                   style={{ color: 'var(--status-err)' }}
                 >
@@ -6697,10 +6703,12 @@ const NexoraContext = createContext(null);
         const exportJSON = async () => {
           try {
             const storedMedia = await loadAllMediaFromIDB();
+            const dayflowData = loadDayflowState();
             const backup = {
               format: 'FLUX_BACKUP_V1',
               exportedAt: new Date().toISOString(),
               data,
+              dayflow: dayflowData,
               media: { ...storedMedia, ...mediaMap }
             };
             const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
@@ -6710,7 +6718,7 @@ const NexoraContext = createContext(null);
             a.download = `flux-backup-${new Date().toISOString().split('T')[0]}.json`;
             a.click();
             window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-            notify('Exported FLUX backup with media');
+            notify('Exported FLUX backup with media & Dayflow');
           } catch (err) {
             notify('Could not create backup', 'err');
           }
@@ -6733,6 +6741,9 @@ const NexoraContext = createContext(null);
               const hasMedia = hasEnvelope && Object.prototype.hasOwnProperty.call(parsed, 'media');
               const restoredMedia = hasMedia ? validateImportedMedia(parsed.media) : null;
               if (restoredMedia) await replaceAllMediaInIDB(restoredMedia);
+              if (hasEnvelope && parsed.dayflow) {
+                saveDayflowState(normalizeDayflowState(parsed.dayflow));
+              }
               setData(restoredData);
               if (restoredMedia) setMediaMap(restoredMedia);
               notify(hasMedia ? 'Restored backup and uploaded media' : 'Restored backup data');
@@ -7043,6 +7054,12 @@ const NexoraContext = createContext(null);
               </div>
             </div>
 
+            <StartupPasswordManager
+              operatorName={data.profile.name}
+              onNotify={notify}
+              onOpenVault={() => setActiveTab('secret-vault')}
+            />
+
             <div className="arch-panel p-5 rounded-xl space-y-4">
               <div className="font-mono text-xs uppercase" style={{ color: 'var(--ink-muted)' }}>
                 LOCAL STORAGE VAULT
@@ -7065,6 +7082,181 @@ const NexoraContext = createContext(null);
                 >
                   <Icon name="trash" size={14} />
                   <span>Wipe All Local Data</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      // Startup Password / PIN Security & Classified Vault Shortcut Manager inside System Core
+      const StartupPasswordManager = ({ operatorName, onNotify, onOpenVault }) => {
+        const [authRecord, setAuthRecord] = useState(() => getAuth());
+        const [newPin, setNewPin] = useState('');
+        const [confirmPin, setConfirmPin] = useState('');
+        const [showSecret, setShowSecret] = useState(false);
+        const [errorMsg, setErrorMsg] = useState('');
+
+        const isPasswordEnabled = Boolean(authRecord && !authRecord.disabled && authRecord.hash);
+
+        const handleSavePassword = async (e) => {
+          e.preventDefault();
+          setErrorMsg('');
+          if (newPin.trim().length < 4) {
+            setErrorMsg('Password / PIN must be at least 4 characters or digits.');
+            return;
+          }
+          if (newPin !== confirmPin) {
+            setErrorMsg('Passwords / PINs do not match.');
+            return;
+          }
+          const hash = await sha256hex(newPin);
+          const nextAuth = {
+            username: operatorName || authRecord?.username || 'Shrishaila M',
+            hash,
+            disabled: false
+          };
+          saveAuth(nextAuth);
+          setAuthRecord(nextAuth);
+          setNewPin('');
+          setConfirmPin('');
+          onNotify(isPasswordEnabled ? 'Updated startup password / PIN' : 'Enabled startup password / PIN');
+        };
+
+        const handleRemovePassword = () => {
+          const nextAuth = {
+            username: operatorName || authRecord?.username || 'Shrishaila M',
+            hash: '',
+            disabled: true
+          };
+          saveAuth(nextAuth);
+          setAuthRecord(nextAuth);
+          setNewPin('');
+          setConfirmPin('');
+          setErrorMsg('');
+          onNotify('Startup password removed — FLUX will open directly without asking for a PIN');
+        };
+
+        const handleLockNow = () => {
+          if (!isPasswordEnabled) {
+            onNotify('Set a password below before locking the app', 'err');
+            return;
+          }
+          window.dispatchEvent(new Event('flux-lock-now'));
+        };
+
+        return (
+          <div className="arch-panel p-5 rounded-xl space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="font-mono text-xs uppercase" style={{ color: 'var(--ink-muted)' }}>
+                  ACCESS SECURITY // STARTUP PASSWORD &amp; CLASSIFIED VAULT SHORTCUT
+                </div>
+                <p className="text-[11px] mt-1" style={{ color: 'var(--ink-secondary)' }}>
+                  Keep, change, or remove the password/PIN required when opening FLUX.
+                </p>
+              </div>
+              <span
+                className="px-2.5 py-1 rounded-md font-mono text-[10px] font-semibold uppercase border"
+                style={{
+                  color: isPasswordEnabled ? 'var(--status-ok)' : 'var(--ink-secondary)',
+                  borderColor: isPasswordEnabled ? 'var(--status-ok)' : 'var(--border-hairline)',
+                  backgroundColor: 'var(--bg-canvas)'
+                }}
+              >
+                {isPasswordEnabled ? 'PASSWORD ACTIVE ON STARTUP' : 'NO PASSWORD (OPENS DIRECTLY)'}
+              </span>
+            </div>
+
+            <form onSubmit={handleSavePassword} className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+              <div className="sm:col-span-4">
+                <label className="text-[10px] font-mono uppercase block mb-1" style={{ color: 'var(--ink-muted)' }}>
+                  {isPasswordEnabled ? 'New Password / PIN' : 'Set Password / PIN'}
+                </label>
+                <input
+                  type={showSecret ? 'text' : 'password'}
+                  value={newPin}
+                  onChange={(e) => {
+                    setNewPin(e.target.value);
+                    setErrorMsg('');
+                  }}
+                  placeholder="Min 4 chars / digits"
+                  className="w-full arch-input rounded-md px-3 py-2 text-xs font-mono"
+                />
+              </div>
+              <div className="sm:col-span-4">
+                <label className="text-[10px] font-mono uppercase block mb-1" style={{ color: 'var(--ink-muted)' }}>
+                  Confirm Password / PIN
+                </label>
+                <input
+                  type={showSecret ? 'text' : 'password'}
+                  value={confirmPin}
+                  onChange={(e) => {
+                    setConfirmPin(e.target.value);
+                    setErrorMsg('');
+                  }}
+                  placeholder="Repeat password / PIN"
+                  className="w-full arch-input rounded-md px-3 py-2 text-xs font-mono"
+                />
+              </div>
+              <div className="sm:col-span-4 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSecret((s) => !s)}
+                  className="arch-btn-ghost px-2.5 py-2 rounded-md text-[10px] font-mono"
+                >
+                  {showSecret ? 'HIDE' : 'SHOW'}
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 arch-btn-primary py-2 px-3 rounded-md text-xs font-mono font-semibold"
+                >
+                  {isPasswordEnabled ? 'Update Password' : 'Enable Password'}
+                </button>
+              </div>
+            </form>
+
+            {errorMsg && (
+              <div className="text-xs font-mono" style={{ color: 'var(--status-err)' }}>
+                {errorMsg}
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t" style={{ borderColor: 'var(--border-hairline)' }}>
+              <div className="flex flex-wrap items-center gap-2">
+                {isPasswordEnabled && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleLockNow}
+                      className="arch-btn-ghost px-3 py-1.5 rounded-md text-xs font-mono inline-flex items-center gap-1.5"
+                    >
+                      <Icon name="lock" size={13} />
+                      <span>Keep &amp; Lock App Now</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRemovePassword}
+                      className="arch-btn-ghost px-3 py-1.5 rounded-md text-xs font-mono inline-flex items-center gap-1.5"
+                      style={{ color: 'var(--status-err)' }}
+                    >
+                      <Icon name="unlock" size={13} />
+                      <span>Remove Password (Turn Off Lock)</span>
+                    </button>
+                  </>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 font-mono text-[11px]" style={{ color: 'var(--ink-secondary)' }}>
+                <span>
+                  Classified Vault Shortcut: press <kbd className="px-1.5 py-0.5 border rounded">H</kbd> then <kbd className="px-1.5 py-0.5 border rounded">O</kbd> (or <kbd className="px-1.5 py-0.5 border rounded">Alt+V</kbd>)
+                </span>
+                <button
+                  type="button"
+                  onClick={onOpenVault}
+                  className="arch-btn-ghost px-2.5 py-1 rounded text-[10px] font-mono"
+                >
+                  Open Vault &rarr;
                 </button>
               </div>
             </div>
@@ -10074,7 +10266,16 @@ const NexoraContext = createContext(null);
 
     const NexoraApp = () => {
       const [data, setData] = useState(loadPersistedState);
-      const [activeTab, setActiveTab] = useState('dashboard');
+      const [activeTab, setActiveTab] = useState(() => {
+        try {
+          const p = (window.location.pathname || '').toLowerCase();
+          const h = (window.location.hash || '').toLowerCase();
+          if (p.endsWith('/schedule') || p.endsWith('/dayflow') || h === '#schedule' || h === '#dayflow') {
+            return 'dayflow';
+          }
+        } catch (e) {}
+        return 'dashboard';
+      });
       const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
       const [cmdOpen, setCmdOpen] = useState(false);
       const [searchQuery, setSearchQuery] = useState('');
@@ -10396,23 +10597,24 @@ const NexoraContext = createContext(null);
         return () => clearTimeout(timerId);
       }, [timerRunning, secondsLeft, focusMinutes, focusLabel, data.profile.soundEnabled, awardXP]);
 
-      // Navigation definitions with streamlined Sidebar (Simulation Deck placed above System Core)
+      // Navigation definitions with Dayflow integrated and Learning Engine / Simulation Deck / Unified Calendar removed
       const navItems = useMemo(() => [
         { id: 'dashboard', label: 'Today', icon: 'dashboard', keyHint: '1' },
-        { id: 'academy', label: 'Academy', icon: 'academy', badge: data.subjects.length, keyHint: '2' },
-        { id: 'bank', label: 'Wallet', icon: 'bank', badge: data.transactions.length, keyHint: '3' },
-        { id: 'innovation', label: 'Innovation Canvas', icon: 'innovation', badge: (data.ideas || []).length, keyHint: '4' },
-        { id: 'habits', label: 'Habit Matrix', icon: 'habits', badge: data.habits.length, keyHint: '5' },
-        { id: 'focus-discipline', label: 'Focus Discipline', icon: 'clock', badge: (data.distractionLog || []).length, keyHint: '6' },
-        { id: 'learning-engine', label: 'Learning Engine', icon: 'memory', badge: (data.feynmanNotes || []).length + (data.recallQs || []).length, keyHint: '7' },
+        { id: 'dayflow', label: 'Dayflow', icon: 'calendar', keyHint: '2' },
+        { id: 'academy', label: 'Academy', icon: 'academy', badge: data.subjects.length, keyHint: '3' },
+        { id: 'bank', label: 'Wallet', icon: 'bank', badge: data.transactions.length, keyHint: '4' },
+        { id: 'innovation', label: 'Innovation Canvas', icon: 'innovation', badge: (data.ideas || []).length, keyHint: '5' },
+        { id: 'habits', label: 'Habit Matrix', icon: 'habits', badge: data.habits.length, keyHint: '6' },
+        { id: 'focus-discipline', label: 'Focus Discipline', icon: 'clock', badge: (data.distractionLog || []).length, keyHint: '7' },
         { id: 'habit-design', label: 'Habit Design', icon: 'habits', badge: (data.habitDesigns || []).length, keyHint: '8' },
         { id: 'study-vault', label: 'Study Vault', icon: 'memory', badge: (data.revisionTopics || []).length, keyHint: '9' },
         { id: 'bio-state', label: 'Bio-State Lab', icon: 'clock' },
         { id: 'executive', label: 'Executive Lab', icon: 'shield', badge: (data.decisions || []).filter((d) => !d.resolved).length },
         { id: 'trajectory', label: 'Trajectory', icon: 'skills', badge: (data.roadmaps || []).length },
-        { id: 'arcade', label: 'Simulation Deck', icon: 'arcade' },
         { id: 'settings', label: 'System Core', icon: 'settings' }
       ], [data]);
+
+      const vaultKeySeqRef = useRef({ key: '', time: 0 });
 
       useEffect(() => {
         const handleKeyDown = (e) => {
@@ -10426,18 +10628,41 @@ const NexoraContext = createContext(null);
             setProfileModal(false);
             setConfirmResetModal(false);
             if (activeTab === 'secret-vault') {
-              setActiveTab('arcade');
+              setActiveTab('dashboard');
               notify('Vault locked');
             }
             return;
           }
-          if (e.altKey && e.code === 'KeyG') {
+          // Global Classified Vault Shortcut: Alt+V or Ctrl+Shift+V
+          if ((e.altKey && e.code === 'KeyV') || ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'KeyV')) {
             e.preventDefault();
-            setActiveTab('arcade');
+            playTactileClick(data.profile.soundEnabled, 1080, 20);
+            if (activeTab === 'secret-vault') {
+              setActiveTab('dashboard');
+              notify('Vault locked');
+            } else {
+              setActiveTab('secret-vault');
+              notify('Classified Vault Trapdoor Unlocked');
+            }
             return;
           }
           const tag = (e.target?.tagName || '').toLowerCase();
           if (tag === 'input' || tag === 'textarea' || tag === 'select' || cmdOpen) return;
+
+          const lowerKey = e.key.toLowerCase();
+          const now = Date.now();
+          if (lowerKey === 'h') {
+            vaultKeySeqRef.current = { key: 'h', time: now };
+          } else if (lowerKey === 'o' && vaultKeySeqRef.current.key === 'h' && now - vaultKeySeqRef.current.time < 1500) {
+            e.preventDefault();
+            vaultKeySeqRef.current = { key: '', time: 0 };
+            playTactileClick(data.profile.soundEnabled, 1080, 20);
+            setActiveTab('secret-vault');
+            notify('Classified Vault Trapdoor Unlocked (H → O)');
+            return;
+          } else {
+            vaultKeySeqRef.current = { key: '', time: 0 };
+          }
 
           if (e.key === '/') {
             e.preventDefault();
@@ -10525,14 +10750,20 @@ const NexoraContext = createContext(null);
             res.push({ title: idCard.title, module: 'Innovation Canvas', tab: 'innovation' });
           }
         });
-        (data.feynmanNotes || []).forEach((fn) => {
-          if ((fn.topic || '').toLowerCase().includes(q) || (fn.eli12 || '').toLowerCase().includes(q)) {
-            res.push({ title: `Feynman: ${fn.topic}`, module: 'Learning Engine', tab: 'learning-engine' });
+        const df = loadDayflowState();
+        (df.recurringClasses || []).forEach((cls) => {
+          if ((cls.title || '').toLowerCase().includes(q)) {
+            res.push({ title: `Class: ${cls.title}`, module: 'Dayflow', tab: 'dayflow' });
           }
         });
-        (data.recallQs || []).forEach((rq) => {
-          if ((rq.question || '').toLowerCase().includes(q) || (rq.answer || '').toLowerCase().includes(q)) {
-            res.push({ title: `Recall Q: ${rq.question}`, module: 'Learning Engine', tab: 'learning-engine' });
+        (df.tasks || []).forEach((tsk) => {
+          if ((tsk.title || '').toLowerCase().includes(q)) {
+            res.push({ title: `Schedule: ${tsk.title}`, module: 'Dayflow', tab: 'dayflow' });
+          }
+        });
+        (df.inbox || []).forEach((inb) => {
+          if ((inb.title || '').toLowerCase().includes(q)) {
+            res.push({ title: `Inbox: ${inb.title}`, module: 'Dayflow', tab: 'dayflow' });
           }
         });
         return res.slice(0, 12);
@@ -10579,17 +10810,23 @@ const NexoraContext = createContext(null);
       const renderActiveView = () => {
         switch (activeTab) {
           case 'dashboard': return <DashboardView />;
+          case 'dayflow':
+            return (
+              <DayflowView
+                soundEnabled={data.profile.soundEnabled}
+                onAwardXP={awardXP}
+                onNotify={notify}
+                onPlayClick={playTactileClick}
+              />
+            );
           case 'academy': return <AcademyView />;
           case 'bank': return <BankView />;
           case 'money-allocator': return <MoneyAllocatorView />;
           case 'missions': return <MissionsView />;
           case 'projects': return <ProjectsView />;
           case 'innovation': return <InnovationCanvasView />;
-          case 'calendar': return <CalendarView />;
           case 'habits': return <HabitsView />;
           case 'focus-discipline': return <FocusDisciplineView />;
-          case 'learning-engine': return <LearningEngineView />;
-          case 'arcade': return <ArcadeView />;
           case 'habit-design': return <HabitDesignView />;
           case 'study-vault': return <StudyVaultView />;
           case 'bio-state': return <BioStateView />;
@@ -10926,6 +11163,7 @@ const NexoraContext = createContext(null);
                       type="button"
                       onClick={async () => {
                         localStorage.removeItem(STORAGE_KEY);
+                        localStorage.removeItem(DAYFLOW_STORAGE_KEY);
                         await clearMediaIDB();
                         setData(EMPTY_STATE);
                         setMediaMap({});
@@ -10945,8 +11183,10 @@ const NexoraContext = createContext(null);
             {/* Toast Notification */}
             {toast && (
               <div
-                className="fixed bottom-5 right-5 z-50 arch-panel px-4 py-2.5 rounded-lg text-xs font-mono shadow-lg border"
+                className="fixed bottom-5 right-5 z-50 px-4 py-2.5 rounded-lg text-xs font-mono shadow-lg border"
                 style={{
+                  position: 'fixed',
+                  backgroundColor: 'var(--bg-surface)',
                   borderColor: toast.status === 'err' ? 'var(--status-err)' : 'var(--status-ok)',
                   color: toast.status === 'err' ? 'var(--status-err)' : 'var(--ink-primary)'
                 }}
@@ -11133,6 +11373,19 @@ export const SignInScreen = ({ onAuth }) => {
             >
               {busy ? "VERIFYING..." : isSetup ? "INITIALISE SYSTEM →" : "UNLOCK →"}
             </button>
+            {isSetup && (
+              <button
+                type="button"
+                onClick={() => {
+                  const operator = name.trim() || "Shrishaila M";
+                  saveAuth({ username: operator, hash: "", disabled: true });
+                  onAuth(operator);
+                }}
+                className="w-full arch-btn-ghost rounded-lg py-2 text-xs font-mono"
+              >
+                Skip / Open Without Password
+              </button>
+            )}
           </form>
 
           {!isSetup && !confirmReset && (
@@ -11142,14 +11395,26 @@ export const SignInScreen = ({ onAuth }) => {
               className="w-full text-center font-mono text-[10px] uppercase tracking-widest mt-1"
               style={{ color: "var(--ink-muted)" }}
             >
-              Forgot PIN / Reset Access
+              Forgot PIN / Reset or Remove Password
             </button>
           )}
 
           {!isSetup && confirmReset && (
-            <div className="flex items-center justify-between gap-2 pt-2 border-t" style={{ borderColor: "var(--border-hairline)" }}>
-              <span className="font-mono text-[10px]" style={{ color: "var(--ink-secondary)" }}>Reset PIN? App data is kept.</span>
+            <div className="flex flex-col gap-2 pt-2 border-t" style={{ borderColor: "var(--border-hairline)" }}>
+              <span className="font-mono text-[10px]" style={{ color: "var(--ink-secondary)" }}>
+                Remove or reset PIN? Your app data is kept safe.
+              </span>
               <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    saveAuth({ username: auth?.username || "Shrishaila M", hash: "", disabled: true });
+                    onAuth(auth?.username || "Shrishaila M");
+                  }}
+                  className="px-2.5 py-1 rounded text-[10px] font-mono font-semibold arch-btn-primary"
+                >
+                  Turn Off Password &amp; Open
+                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -11162,7 +11427,7 @@ export const SignInScreen = ({ onAuth }) => {
                   className="px-2.5 py-1 rounded text-[10px] font-mono font-semibold"
                   style={{ backgroundColor: "var(--status-err)", color: "#fff" }}
                 >
-                  Confirm Reset
+                  Set New PIN
                 </button>
                 <button
                   type="button"
@@ -11177,7 +11442,7 @@ export const SignInScreen = ({ onAuth }) => {
         </div>
 
         <div className="text-center font-mono text-[10px]" style={{ color: "var(--ink-muted)" }}>
-          PIN stored locally · no data leaves your device
+          PIN stored locally · manage anytime in System Core
         </div>
       </div>
     </div>
@@ -11188,11 +11453,20 @@ export const AppWithAuth = () => {
   const [authed, setAuthed] = React.useState(() => {
     try {
       const params = new URLSearchParams(window.location.search);
-      return params.get("autostart") === "1";
+      if (params.get("autostart") === "1") return true;
+      const stored = getAuth();
+      if (stored && stored.disabled === true) return true;
+      return false;
     } catch {
       return false;
     }
   });
+
+  React.useEffect(() => {
+    const onLockNow = () => setAuthed(false);
+    window.addEventListener("flux-lock-now", onLockNow);
+    return () => window.removeEventListener("flux-lock-now", onLockNow);
+  }, []);
 
   React.useEffect(() => {
     try {
