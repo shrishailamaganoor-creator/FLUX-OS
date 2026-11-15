@@ -9808,16 +9808,11 @@ const NexoraContext = createContext(null);
               <div className="p-3.5 space-y-3.5">
                 <div className="flex items-center justify-between gap-2 px-1">
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <div
-                      className="w-7 h-7 rounded-lg flex items-center justify-center font-mono text-xs font-bold shrink-0"
-                      style={{
-                        backgroundColor: 'var(--accent)',
-                        color: 'var(--accent-fg)',
-                        border: '1px solid var(--border-elevated)'
-                      }}
-                    >
-                      XB
-                    </div>
+                    <img
+                      src="./icon-192.png?v=2.2.0"
+                      alt="XOR Bit"
+                      className="w-7 h-7 rounded-lg object-cover shrink-0 shadow-sm"
+                    />
                     {!sidebarCollapsed && (
                       <div className="truncate">
                         <div className="font-sans text-xs font-semibold tracking-tight" style={{ color: 'var(--ink-primary)' }}>
@@ -10219,12 +10214,11 @@ export const SignInScreen = ({ onAuth }) => {
       />
       <div className="relative z-10 w-full max-w-sm space-y-8">
         <div className="text-center space-y-3">
-          <div
-            className="w-14 h-14 rounded-2xl flex items-center justify-center font-mono text-2xl font-bold mx-auto"
-            style={{ backgroundColor: "var(--accent)", color: "var(--accent-fg)", boxShadow: "0 0 40px rgba(228,228,231,0.12)" }}
-          >
-            ⚡
-          </div>
+          <img
+            src="./icon-512.png?v=2.2.0"
+            alt="XOR Bit"
+            className="w-16 h-16 rounded-2xl object-cover mx-auto shadow-2xl"
+          />
           <div>
             <div className="font-mono text-sm font-bold tracking-widest uppercase" style={{ color: "var(--ink-primary)" }}>
               XOR Bit

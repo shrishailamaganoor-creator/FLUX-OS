@@ -23565,14 +23565,10 @@ var NexoraApp = () => {
 								className: "flex items-center justify-between gap-2 px-1",
 								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 									className: "flex items-center gap-2.5 min-w-0",
-									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-										className: "w-7 h-7 rounded-lg flex items-center justify-center font-mono text-xs font-bold shrink-0",
-										style: {
-											backgroundColor: "var(--accent)",
-											color: "var(--accent-fg)",
-											border: "1px solid var(--border-elevated)"
-										},
-										children: "XB"
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
+										src: "./icon-192.png?v=2.2.0",
+										alt: "XOR Bit",
+										className: "w-7 h-7 rounded-lg object-cover shrink-0 shadow-sm"
 									}), !sidebarCollapsed && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 										className: "truncate",
 										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
@@ -24016,14 +24012,10 @@ var SignInScreen = ({ onAuth }) => {
 			children: [
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 					className: "text-center space-y-3",
-					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-						className: "w-14 h-14 rounded-2xl flex items-center justify-center font-mono text-2xl font-bold mx-auto",
-						style: {
-							backgroundColor: "var(--accent)",
-							color: "var(--accent-fg)",
-							boxShadow: "0 0 40px rgba(228,228,231,0.12)"
-						},
-						children: "⚡"
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
+						src: "./icon-512.png?v=2.2.0",
+						alt: "XOR Bit",
+						className: "w-16 h-16 rounded-2xl object-cover mx-auto shadow-2xl"
 					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 						className: "font-mono text-sm font-bold tracking-widest uppercase",
 						style: { color: "var(--ink-primary)" },
