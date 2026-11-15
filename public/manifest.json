@@ -1,6 +1,6 @@
 {
   "id": "./",
-  "name": "FLUX — Personal Life & Engineering OS",
+  "name": "FLUX",
   "short_name": "FLUX",
   "description": "A single-file, offline-first dashboard that runs your studies, habits, money, focus and projects.",
   "start_url": "./index.html",

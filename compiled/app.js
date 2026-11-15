@@ -15598,12 +15598,171 @@ var ProjectsView = () => {
 		]
 	});
 };
+var classifyAttachmentFile = (fileName = "", mimeType = "") => {
+	const ext = (fileName.split(".").pop() || "").toLowerCase();
+	const mime = (mimeType || "").toLowerCase();
+	if (ext === "pdf" || mime === "application/pdf") return {
+		category: "PDF",
+		ext: ext || "pdf",
+		color: "#F43F5E",
+		canPreview: true
+	};
+	if ([
+		"xls",
+		"xlsx",
+		"csv",
+		"tsv",
+		"ods"
+	].includes(ext) || mime.includes("spreadsheet") || mime.includes("excel") || mime === "text/csv") return {
+		category: "SHEET",
+		ext: ext || "xlsx",
+		color: "#10B981",
+		canPreview: ext === "csv" || ext === "tsv" || mime === "text/csv"
+	};
+	if ([
+		"doc",
+		"docx",
+		"odt",
+		"rtf"
+	].includes(ext) || mime.includes("wordprocessingml") || mime.includes("msword")) return {
+		category: "DOC",
+		ext: ext || "docx",
+		color: "#3B82F6",
+		canPreview: false
+	};
+	if ([
+		"ppt",
+		"pptx",
+		"odp"
+	].includes(ext) || mime.includes("presentation")) return {
+		category: "SLIDE",
+		ext: ext || "pptx",
+		color: "#F59E0B",
+		canPreview: false
+	};
+	if (mime.startsWith("image/") || [
+		"png",
+		"jpg",
+		"jpeg",
+		"gif",
+		"webp",
+		"svg",
+		"bmp"
+	].includes(ext)) return {
+		category: "IMG",
+		ext: ext || "png",
+		color: "#A855F7",
+		canPreview: true
+	};
+	if (mime.startsWith("text/") || [
+		"txt",
+		"md",
+		"json",
+		"js",
+		"jsx",
+		"ts",
+		"tsx",
+		"py",
+		"c",
+		"cpp",
+		"h",
+		"java",
+		"html",
+		"css",
+		"sql",
+		"yaml",
+		"yml",
+		"xml",
+		"sh",
+		"log"
+	].includes(ext)) return {
+		category: "TXT/CODE",
+		ext: ext || "txt",
+		color: "#06B6D4",
+		canPreview: true
+	};
+	if ([
+		"zip",
+		"rar",
+		"7z",
+		"tar",
+		"gz"
+	].includes(ext) || mime.includes("zip") || mime.includes("compressed")) return {
+		category: "ARCHIVE",
+		ext: ext || "zip",
+		color: "#EAB308",
+		canPreview: false
+	};
+	return {
+		category: "FILE",
+		ext: ext || "bin",
+		color: "#A1A1AA",
+		canPreview: false
+	};
+};
+var formatAttachmentBytes = (bytes) => {
+	const n = Number(bytes) || 0;
+	if (n < 1024) return `${n} B`;
+	if (n < 1048576) return `${(n / 1024).toFixed(1)} KB`;
+	return `${(n / 1048576).toFixed(2)} MB`;
+};
+var decodeDataUrlToText = (dataUrl) => {
+	if (!dataUrl || typeof dataUrl !== "string") return "";
+	try {
+		const commaIdx = dataUrl.indexOf(",");
+		if (commaIdx === -1) return "";
+		const meta = dataUrl.slice(0, commaIdx);
+		const payload = dataUrl.slice(commaIdx + 1);
+		if (meta.includes(";base64")) {
+			const binary = atob(payload);
+			const bytes = new Uint8Array(binary.length);
+			for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+			return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+		}
+		return decodeURIComponent(payload);
+	} catch {
+		return "";
+	}
+};
+var dataUrlToBlob = (dataUrl) => {
+	const commaIdx = dataUrl.indexOf(",");
+	const meta = dataUrl.slice(0, commaIdx);
+	const payload = dataUrl.slice(commaIdx + 1);
+	const mimeMatch = meta.match(/^data:([^;,]+)/i);
+	const mime = mimeMatch ? mimeMatch[1] : "application/octet-stream";
+	if (meta.includes(";base64")) {
+		const binary = atob(payload);
+		const bytes = new Uint8Array(binary.length);
+		for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+		return new Blob([bytes], { type: mime });
+	}
+	return new Blob([decodeURIComponent(payload)], { type: mime });
+};
+var parseDelimitedTable = (rawText, delimiter = ",") => {
+	return rawText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 40).map((line) => {
+		const cells = [];
+		let cur = "";
+		let inQuotes = false;
+		for (let i = 0; i < line.length; i++) {
+			const ch = line[i];
+			if (ch === "\"") inQuotes = !inQuotes;
+			else if (ch === delimiter && !inQuotes) {
+				cells.push(cur.trim());
+				cur = "";
+			} else cur += ch;
+		}
+		cells.push(cur.trim());
+		return cells;
+	});
+};
 var InnovationCanvasView = () => {
 	const { awardXP, data, mediaMap, notify, setData, setMediaMap } = (0, import_react.useContext)(NexoraContext);
 	const [ideaTitle, setIdeaTitle] = (0, import_react.useState)("");
 	const [ideaTag, setIdeaTag] = (0, import_react.useState)("Architecture");
 	const [ideaNotes, setIdeaNotes] = (0, import_react.useState)("");
-	const [uploadedImg, setUploadedImg] = (0, import_react.useState)(null);
+	const [pendingFiles, setPendingFiles] = (0, import_react.useState)([]);
+	const [isDraggingOver, setIsDraggingOver] = (0, import_react.useState)(false);
+	const [openPreviews, setOpenPreviews] = (0, import_react.useState)({});
 	const sketchRef = (0, import_react.useRef)(null);
 	const isDrawingRef = (0, import_react.useRef)(false);
 	const [penColor, setPenColor] = (0, import_react.useState)("#FAFAFA");
@@ -15670,50 +15829,198 @@ var InnovationCanvasView = () => {
 	const endDraw = () => {
 		isDrawingRef.current = false;
 	};
-	const handleImageUpload = (e) => {
-		const file = e.target.files?.[0];
-		if (!file) return;
-		const reader = new FileReader();
-		reader.onload = () => setUploadedImg(reader.result);
-		reader.readAsDataURL(file);
-	};
-	const handlePaste = (e) => {
-		const items = e.clipboardData?.items || [];
-		for (let i = 0; i < items.length; i++) if (items[i].type.indexOf("image") !== -1) {
-			const blob = items[i].getAsFile();
+	const ingestFilesList = (fileList) => {
+		const files = Array.from(fileList || []);
+		if (files.length === 0) return;
+		files.forEach((file, idx) => {
 			const reader = new FileReader();
 			reader.onload = () => {
-				setUploadedImg(reader.result);
-				notify("Image pasted from clipboard");
+				let dataUrl = typeof reader.result === "string" ? reader.result : "";
+				if (dataUrl.startsWith("data:;base64,")) dataUrl = "data:application/octet-stream;base64," + dataUrl.slice(13);
+				const info = classifyAttachmentFile(file.name, file.type);
+				const attItem = {
+					id: `${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
+					name: file.name || `Attachment-${idx + 1}.${info.ext}`,
+					size: file.size || 0,
+					type: file.type || "application/octet-stream",
+					category: info.category,
+					ext: info.ext,
+					dataUrl
+				};
+				setPendingFiles((prev) => [...prev, attItem]);
 			};
-			reader.readAsDataURL(blob);
+			reader.readAsDataURL(file);
+		});
+		notify(files.length === 1 ? `Attached ${files[0].name}` : `Attached ${files.length} files to specification`);
+	};
+	const handleFileUpload = (e) => {
+		if (e.target.files && e.target.files.length > 0) {
+			ingestFilesList(e.target.files);
+			e.target.value = "";
+		}
+	};
+	const handleDropFiles = (e) => {
+		e.preventDefault();
+		e.stopPropagation();
+		setIsDraggingOver(false);
+		if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) ingestFilesList(e.dataTransfer.files);
+	};
+	const handlePaste = (e) => {
+		const clipboardFiles = e.clipboardData?.files;
+		if (clipboardFiles && clipboardFiles.length > 0) {
+			ingestFilesList(clipboardFiles);
+			return;
+		}
+		const items = e.clipboardData?.items || [];
+		for (let i = 0; i < items.length; i++) if (items[i].kind === "file") {
+			const blob = items[i].getAsFile();
+			if (blob) ingestFilesList([blob]);
+		}
+	};
+	const attachFilesToExistingCard = (cardId, fileList) => {
+		const files = Array.from(fileList || []);
+		if (files.length === 0) return;
+		files.forEach((file, idx) => {
+			const reader = new FileReader();
+			reader.onload = async () => {
+				let dataUrl = typeof reader.result === "string" ? reader.result : "";
+				if (dataUrl.startsWith("data:;base64,")) dataUrl = "data:application/octet-stream;base64," + dataUrl.slice(13);
+				const info = classifyAttachmentFile(file.name, file.type);
+				const attId = `${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 7)}`;
+				const mediaKey = `idea-att-${attId}`;
+				if (!await saveMediaToIDB(mediaKey, dataUrl)) {
+					notify(`Could not store ${file.name}`, "err");
+					return;
+				}
+				setMediaMap((prev) => ({
+					...prev,
+					[mediaKey]: dataUrl
+				}));
+				const attMeta = {
+					id: attId,
+					name: file.name || `Attachment.${info.ext}`,
+					size: file.size || 0,
+					type: file.type || "application/octet-stream",
+					category: info.category,
+					ext: info.ext
+				};
+				setData((prev) => ({
+					...prev,
+					ideas: (prev.ideas || []).map((c) => c.id === cardId ? {
+						...c,
+						attachments: [...c.attachments || [], attMeta]
+					} : c)
+				}));
+				notify(`Attached ${attMeta.name}`);
+			};
+			reader.readAsDataURL(file);
+		});
+	};
+	const removeAttachmentFromCard = async (cardId, attId) => {
+		await deleteMediaFromIDB(`idea-att-${attId}`);
+		setMediaMap((prev) => {
+			const next = { ...prev };
+			delete next[`idea-att-${attId}`];
+			return next;
+		});
+		setData((prev) => ({
+			...prev,
+			ideas: (prev.ideas || []).map((c) => c.id === cardId ? {
+				...c,
+				attachments: (c.attachments || []).filter((a) => a.id !== attId)
+			} : c)
+		}));
+	};
+	const triggerDownloadAttachment = (att, dataUrl) => {
+		if (!dataUrl) {
+			notify("Attachment data not found in local vault", "err");
+			return;
+		}
+		try {
+			const blob = dataUrlToBlob(dataUrl);
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.href = url;
+			a.download = att.name || `flux-attachment.${att.ext || "bin"}`;
+			document.body.appendChild(a);
+			a.click();
+			document.body.removeChild(a);
+			setTimeout(() => URL.revokeObjectURL(url), 1e4);
+		} catch {
+			const a = document.createElement("a");
+			a.href = dataUrl;
+			a.download = att.name || "attachment";
+			a.click();
+		}
+	};
+	const triggerOpenAttachmentInTab = (att, dataUrl) => {
+		if (!dataUrl) {
+			notify("Attachment data not found in local vault", "err");
+			return;
+		}
+		try {
+			const blob = dataUrlToBlob(dataUrl);
+			const url = URL.createObjectURL(blob);
+			const link = document.createElement("a");
+			link.href = url;
+			link.target = "_blank";
+			link.rel = "noopener noreferrer";
+			document.body.appendChild(link);
+			link.click();
+			document.body.removeChild(link);
+			setTimeout(() => URL.revokeObjectURL(url), 6e4);
+		} catch {
+			notify("Use Download to open this file on your device", "err");
 		}
 	};
 	const commitIdeaCard = async (includeSketch = false) => {
-		if (!ideaTitle.trim() && !ideaNotes.trim()) {
-			notify("Enter an idea title or specification notes first", "err");
+		if (!ideaTitle.trim() && !ideaNotes.trim() && pendingFiles.length === 0 && !includeSketch) {
+			notify("Enter an idea title, notes, or attach a file first", "err");
 			return;
 		}
 		const id = "idea-" + Date.now();
-		let finalMediaUrl = uploadedImg;
-		if (includeSketch && sketchRef.current) finalMediaUrl = sketchRef.current.toDataURL("image/png");
-		if (finalMediaUrl) {
-			if (!await saveMediaToIDB(`idea-${id}`, finalMediaUrl)) {
-				notify("Could not save the image. The concept was not added.", "err");
+		let sketchMediaUrl = null;
+		if (includeSketch && sketchRef.current) {
+			sketchMediaUrl = sketchRef.current.toDataURL("image/png");
+			if (!await saveMediaToIDB(`idea-${id}`, sketchMediaUrl)) {
+				notify("Could not save the wireframe sketch.", "err");
 				return;
 			}
 			setMediaMap((prev) => ({
 				...prev,
-				[`idea-${id}`]: finalMediaUrl
+				[`idea-${id}`]: sketchMediaUrl
 			}));
 		}
+		const savedAttachments = [];
+		const newMediaEntries = {};
+		for (const item of pendingFiles) {
+			const mediaKey = `idea-att-${item.id}`;
+			if (!await saveMediaToIDB(mediaKey, item.dataUrl)) {
+				notify(`Could not save attachment: ${item.name}`, "err");
+				return;
+			}
+			newMediaEntries[mediaKey] = item.dataUrl;
+			savedAttachments.push({
+				id: item.id,
+				name: item.name,
+				size: item.size,
+				type: item.type,
+				category: item.category,
+				ext: item.ext
+			});
+		}
+		if (Object.keys(newMediaEntries).length > 0) setMediaMap((prev) => ({
+			...prev,
+			...newMediaEntries
+		}));
 		const newCard = {
 			id,
-			title: ideaTitle.trim() || "Untitled System Concept",
+			title: ideaTitle.trim() || (savedAttachments.length > 0 ? savedAttachments[0].name : "Untitled System Concept"),
 			tag: ideaTag,
 			notes: ideaNotes.trim(),
 			date: (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
-			hasMedia: !!finalMediaUrl
+			hasMedia: !!sketchMediaUrl,
+			attachments: savedAttachments
 		};
 		setData((prev) => ({
 			...prev,
@@ -15721,7 +16028,7 @@ var InnovationCanvasView = () => {
 		}));
 		setIdeaTitle("");
 		setIdeaNotes("");
-		setUploadedImg(null);
+		setPendingFiles([]);
 		if (includeSketch) clearSketchPad();
 		awardXP(35, "Logged Concept in Innovation Canvas");
 	};
@@ -15732,7 +16039,7 @@ var InnovationCanvasView = () => {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 				className: "font-mono text-[11px] uppercase tracking-widest",
 				style: { color: "var(--ink-muted)" },
-				children: "06B // ONENOTE-STYLE ARCHITECTURE & WIREFRAME STUDIO"
+				children: "06B // UNIVERSAL DOCUMENT, SPREADSHEET, PDF & WIREFRAME STUDIO"
 			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", {
 				className: "text-2xl font-semibold heading-tight mt-1",
 				children: "Innovation Canvas"
@@ -15740,22 +16047,32 @@ var InnovationCanvasView = () => {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 				className: "grid grid-cols-1 lg:grid-cols-12 gap-5",
 				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-					className: "lg:col-span-6 arch-panel rounded-xl p-5 space-y-4",
+					onDragOver: (e) => {
+						e.preventDefault();
+						setIsDraggingOver(true);
+					},
+					onDragLeave: () => setIsDraggingOver(false),
+					onDrop: handleDropFiles,
+					className: `lg:col-span-6 arch-panel rounded-xl p-5 space-y-4 transition-colors ${isDraggingOver ? "ring-2 ring-emerald-500/60" : ""}`,
 					children: [
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-							className: "flex items-center justify-between",
-							children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "flex flex-wrap items-center justify-between gap-2",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 								className: "font-mono text-[11px] uppercase tracking-wider",
 								style: { color: "var(--ink-muted)" },
-								children: "01 // IDEA SPECIFICATION SHEET (PASTE IMAGE SUPPORTED)"
-							})
+								children: "01 // IDEA SPECIFICATION & UNIVERSAL FILE VAULT"
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								className: "font-mono text-[10px]",
+								style: { color: "var(--ink-muted)" },
+								children: "PDF • DOC/DOCX • XLS/CSV • PPT • CODE • IMG • ZIP"
+							})]
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 							className: "grid grid-cols-1 sm:grid-cols-12 gap-2.5",
 							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
 								value: ideaTitle,
 								onChange: (e) => setIdeaTitle(e.target.value),
-								placeholder: "Concept / System Title...",
+								placeholder: "Concept / Document / System Title...",
 								className: "sm:col-span-8 arch-input rounded-md px-3 py-2 text-xs"
 							}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", {
 								value: ideaTag,
@@ -15766,47 +16083,133 @@ var InnovationCanvasView = () => {
 									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Startup / Product" }),
 									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Hardware / IoT" }),
 									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Algorithm" }),
-									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "UI / Wireframe" })
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "UI / Wireframe" }),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Research / PDF" }),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Spreadsheet / Model" }),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Specification Doc" })
 								]
 							})]
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("textarea", {
-							rows: 6,
+							rows: 5,
 							value: ideaNotes,
 							onChange: (e) => setIdeaNotes(e.target.value),
-							placeholder: "Write structured engineering notes, system requirements, or paste an image (Ctrl+V) anywhere...",
+							placeholder: "Write structured engineering notes, or drag & drop / attach any file (PDFs, Word docs, Excel/CSV spreadsheets, presentations, code, archives, or images)...",
 							className: "w-full arch-input rounded-md p-3 text-xs leading-relaxed"
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-							className: "flex flex-wrap items-center justify-between gap-2 pt-1",
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
-								className: "arch-btn-ghost px-3 py-1.5 rounded-md text-xs font-mono cursor-pointer inline-flex items-center gap-1.5",
-								children: [
-									/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
-										name: "upload",
-										size: 13
-									}),
-									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: uploadedImg ? "Image Attached ✓" : "Attach Photo" }),
-									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-										type: "file",
-										accept: "image/*",
-										onChange: handleImageUpload,
-										className: "hidden"
-									})
-								]
-							}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-								className: "flex gap-2",
-								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-									type: "button",
-									onClick: () => commitIdeaCard(false),
-									className: "arch-btn-ghost px-3.5 py-1.5 rounded-md text-xs font-mono",
-									children: "Save Note Card"
-								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-									type: "button",
-									onClick: () => commitIdeaCard(true),
-									className: "arch-btn-primary px-3.5 py-1.5 rounded-md text-xs font-mono",
-									children: "Save with Sketch →"
+							className: "rounded-lg border border-dashed p-3 transition-colors",
+							style: {
+								borderColor: isDraggingOver ? "#10B981" : "var(--border-strong)",
+								backgroundColor: "var(--bg-elevated)"
+							},
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "flex flex-wrap items-center justify-between gap-2",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "space-y-0.5",
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+										className: "text-xs font-medium",
+										style: { color: "var(--ink-primary)" },
+										children: "Attach Anything — PDF, Word Doc, Spreadsheet, Slide Deck, Code, ZIP, or Image"
+									}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+										className: "font-mono text-[10px]",
+										style: { color: "var(--ink-muted)" },
+										children: "Drag & drop files here, paste with Ctrl+V, or browse your device (stored 100% locally in IndexedDB)"
+									})]
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
+									className: "arch-btn-ghost px-3 py-1.5 rounded-md text-xs font-mono cursor-pointer inline-flex items-center gap-1.5 shrink-0",
+									children: [
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
+											name: "upload",
+											size: 13
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "+ Attach Files" }),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+											type: "file",
+											multiple: true,
+											onChange: handleFileUpload,
+											className: "hidden"
+										})
+									]
 								})]
+							}), pendingFiles.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "mt-3 pt-2.5 border-t space-y-1.5",
+								style: { borderColor: "var(--border-hairline)" },
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "flex items-center justify-between",
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+										className: "font-mono text-[10px] uppercase tracking-wider",
+										style: { color: "var(--ink-muted)" },
+										children: [
+											"READY TO SAVE (",
+											pendingFiles.length,
+											" ",
+											pendingFiles.length === 1 ? "FILE" : "FILES",
+											")"
+										]
+									}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+										type: "button",
+										onClick: () => setPendingFiles([]),
+										className: "font-mono text-[10px] hover:underline",
+										style: { color: "var(--ink-muted)" },
+										children: "Clear all"
+									})]
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+									className: "grid grid-cols-1 sm:grid-cols-2 gap-1.5",
+									children: pendingFiles.map((att) => {
+										const info = classifyAttachmentFile(att.name, att.type);
+										return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+											className: "flex items-center justify-between gap-2 px-2.5 py-1.5 rounded border text-xs",
+											style: {
+												borderColor: "var(--border-hairline)",
+												backgroundColor: "var(--bg-surface)"
+											},
+											children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+												className: "flex items-center gap-2 min-w-0",
+												children: [
+													/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+														className: "font-mono text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0",
+														style: {
+															backgroundColor: `${info.color}20`,
+															color: info.color
+														},
+														children: info.category
+													}),
+													/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+														className: "truncate font-medium",
+														title: att.name,
+														children: att.name
+													}),
+													/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+														className: "font-mono text-[10px] shrink-0",
+														style: { color: "var(--ink-muted)" },
+														children: formatAttachmentBytes(att.size)
+													})
+												]
+											}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+												type: "button",
+												onClick: () => setPendingFiles((prev) => prev.filter((x) => x.id !== att.id)),
+												className: "arch-btn-ghost px-1.5 py-0.5 rounded text-[10px] font-mono shrink-0",
+												title: "Remove file",
+												children: "×"
+											})]
+										}, att.id);
+									})
+								})]
+							})]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "flex flex-wrap items-center justify-end gap-2 pt-1",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+								type: "button",
+								onClick: () => commitIdeaCard(false),
+								className: "arch-btn-ghost px-3.5 py-1.5 rounded-md text-xs font-mono",
+								children: ["Save Card ", pendingFiles.length > 0 ? `(${pendingFiles.length} File${pendingFiles.length > 1 ? "s" : ""})` : ""]
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+								type: "button",
+								onClick: () => commitIdeaCard(true),
+								className: "arch-btn-primary px-3.5 py-1.5 rounded-md text-xs font-mono",
+								children: "Save with Sketch →"
 							})]
 						})
 					]
@@ -15877,57 +16280,253 @@ var InnovationCanvasView = () => {
 			}),
 			(data.ideas || []).length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyState, {
 				code: "INNOVATION.CANVAS // 0_CARDS",
-				title: "No concept cards or wireframes saved",
-				subtitle: "Write system notes on the left, sketch diagrams on the right (or paste screenshots with Ctrl+V), and click 'Save with Sketch'."
+				title: "No concept cards, documents, or wireframes saved",
+				subtitle: "Attach PDFs, Word docs, spreadsheets, code files, or images on the left, sketch diagrams on the right, and save to your local vault."
 			}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 				className: "space-y-4",
 				children: (data.ideas || []).map((card) => {
 					const mediaSrc = mediaMap[`idea-${card.id}`];
+					const cardAttachments = Array.isArray(card.attachments) ? card.attachments : [];
 					return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: "arch-panel rounded-xl p-5 grid grid-cols-1 md:grid-cols-12 gap-5 items-start",
+						className: "arch-panel rounded-xl p-5 space-y-4",
 						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-							className: mediaSrc ? "md:col-span-7 space-y-2" : "md:col-span-12 space-y-2",
-							children: [
-								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-									className: "flex items-center justify-between",
-									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-										className: "font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border",
-										style: { color: "var(--ink-muted)" },
-										children: [
-											card.tag,
-											" • ",
-											card.date
-										]
-									}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-										type: "button",
-										onClick: () => setData((prev) => ({
-											...prev,
-											ideas: (prev.ideas || []).filter((x) => x.id !== card.id)
-										})),
-										className: "arch-btn-ghost p-1 rounded",
-										children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
-											name: "trash",
-											size: 13
-										})
-									})]
-								}),
-								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
-									className: "text-base font-semibold heading-tight",
-									children: card.title
-								}),
-								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-									className: "text-xs leading-relaxed whitespace-pre-wrap",
-									style: { color: "var(--ink-secondary)" },
-									children: card.notes
+							className: "grid grid-cols-1 md:grid-cols-12 gap-5 items-start",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: mediaSrc ? "md:col-span-7 space-y-2" : "md:col-span-12 space-y-2",
+								children: [
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "flex flex-wrap items-center justify-between gap-2",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+											className: "flex items-center gap-2",
+											children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+												className: "font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border",
+												style: { color: "var(--ink-muted)" },
+												children: [
+													card.tag,
+													" • ",
+													card.date
+												]
+											}), cardAttachments.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+												className: "font-mono text-[10px] px-2 py-0.5 rounded border",
+												style: {
+													color: "var(--ink-secondary)",
+													borderColor: "var(--border-hairline)"
+												},
+												children: [
+													cardAttachments.length,
+													" ",
+													cardAttachments.length === 1 ? "ATTACHMENT" : "ATTACHMENTS"
+												]
+											})]
+										}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+											className: "flex items-center gap-1.5",
+											children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
+												className: "arch-btn-ghost px-2.5 py-1 rounded text-[11px] font-mono cursor-pointer inline-flex items-center gap-1",
+												children: [
+													/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
+														name: "upload",
+														size: 12
+													}),
+													/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "+ Attach File" }),
+													/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+														type: "file",
+														multiple: true,
+														onChange: (e) => {
+															if (e.target.files && e.target.files.length > 0) {
+																attachFilesToExistingCard(card.id, e.target.files);
+																e.target.value = "";
+															}
+														},
+														className: "hidden"
+													})
+												]
+											}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+												type: "button",
+												onClick: async () => {
+													if (card.hasMedia) await deleteMediaFromIDB(`idea-${card.id}`);
+													for (const a of cardAttachments) await deleteMediaFromIDB(`idea-att-${a.id}`);
+													setData((prev) => ({
+														...prev,
+														ideas: (prev.ideas || []).filter((x) => x.id !== card.id)
+													}));
+												},
+												className: "arch-btn-ghost p-1 rounded",
+												title: "Delete Idea Card",
+												children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
+													name: "trash",
+													size: 13
+												})
+											})]
+										})]
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
+										className: "text-base font-semibold heading-tight",
+										children: card.title
+									}),
+									card.notes && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+										className: "text-xs leading-relaxed whitespace-pre-wrap",
+										style: { color: "var(--ink-secondary)" },
+										children: card.notes
+									})
+								]
+							}), mediaSrc && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+								className: "md:col-span-5 rounded-lg overflow-hidden border bg-[#09090B]",
+								children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
+									src: mediaSrc,
+									alt: card.title,
+									className: "w-full max-h-56 object-contain block"
 								})
-							]
-						}), mediaSrc && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-							className: "md:col-span-5 rounded-lg overflow-hidden border bg-[#09090B]",
-							children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
-								src: mediaSrc,
-								alt: card.title,
-								className: "w-full max-h-56 object-contain block"
-							})
+							})]
+						}), cardAttachments.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "pt-3 border-t space-y-2.5",
+							style: { borderColor: "var(--border-hairline)" },
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "font-mono text-[10px] uppercase tracking-wider",
+								style: { color: "var(--ink-muted)" },
+								children: [
+									"ATTACHED DOCUMENTS, SPREADSHEETS & FILES (",
+									cardAttachments.length,
+									")"
+								]
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+								className: "space-y-2",
+								children: cardAttachments.map((att) => {
+									const attDataUrl = mediaMap[`idea-att-${att.id}`];
+									const info = classifyAttachmentFile(att.name, att.type);
+									const isPreviewOpen = !!openPreviews[att.id];
+									const isImage = info.category === "IMG";
+									const isPdf = info.category === "PDF";
+									const isCsvOrTsv = info.category === "SHEET" && (att.ext === "csv" || att.ext === "tsv" || (att.type || "").includes("csv"));
+									const isTextOrCode = info.category === "TXT/CODE";
+									const canInlinePreview = isImage || isPdf || isCsvOrTsv || isTextOrCode;
+									return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "rounded-lg border p-3 space-y-2.5",
+										style: {
+											borderColor: "var(--border-hairline)",
+											backgroundColor: "var(--bg-elevated)"
+										},
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+											className: "flex flex-wrap items-center justify-between gap-2",
+											children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+												className: "flex items-center gap-2.5 min-w-0",
+												children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+													className: "font-mono text-[10px] font-bold px-2 py-0.5 rounded shrink-0",
+													style: {
+														backgroundColor: `${info.color}20`,
+														color: info.color
+													},
+													children: info.category
+												}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+													className: "min-w-0",
+													children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+														className: "text-xs font-medium truncate",
+														title: att.name,
+														children: att.name
+													}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+														className: "font-mono text-[10px]",
+														style: { color: "var(--ink-muted)" },
+														children: [
+															(att.ext || "file").toUpperCase(),
+															" • ",
+															formatAttachmentBytes(att.size)
+														]
+													})]
+												})]
+											}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+												className: "flex flex-wrap items-center gap-1.5",
+												children: [
+													canInlinePreview && attDataUrl && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+														type: "button",
+														onClick: () => setOpenPreviews((prev) => ({
+															...prev,
+															[att.id]: !prev[att.id]
+														})),
+														className: "arch-btn-ghost px-2.5 py-1 rounded text-[11px] font-mono",
+														children: isPreviewOpen ? "Hide Preview" : "Preview"
+													}),
+													/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+														type: "button",
+														onClick: () => triggerOpenAttachmentInTab(att, attDataUrl),
+														className: "arch-btn-ghost px-2.5 py-1 rounded text-[11px] font-mono",
+														children: "Open"
+													}),
+													/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+														type: "button",
+														onClick: () => triggerDownloadAttachment(att, attDataUrl),
+														className: "arch-btn-primary px-2.5 py-1 rounded text-[11px] font-mono inline-flex items-center gap-1",
+														children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
+															name: "download",
+															size: 12
+														}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Download" })]
+													}),
+													/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+														type: "button",
+														onClick: () => removeAttachmentFromCard(card.id, att.id),
+														className: "arch-btn-ghost p-1 rounded",
+														title: "Remove attachment",
+														children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
+															name: "trash",
+															size: 12
+														})
+													})
+												]
+											})]
+										}), (isImage || isPreviewOpen) && attDataUrl && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+											className: "rounded-md overflow-hidden border p-2",
+											style: {
+												borderColor: "var(--border-hairline)",
+												backgroundColor: "var(--bg-canvas)"
+											},
+											children: [
+												isImage && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
+													src: attDataUrl,
+													alt: att.name,
+													className: "max-h-64 w-full object-contain rounded block"
+												}),
+												isPdf && isPreviewOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("iframe", {
+													src: attDataUrl,
+													title: att.name,
+													className: "w-full h-80 rounded border-0 bg-white"
+												}),
+												isCsvOrTsv && isPreviewOpen && (() => {
+													const rows = parseDelimitedTable(decodeDataUrlToText(attDataUrl), att.ext === "tsv" ? "	" : ",");
+													if (rows.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+														className: "text-xs font-mono p-2",
+														style: { color: "var(--ink-muted)" },
+														children: "Empty spreadsheet."
+													});
+													return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+														className: "overflow-x-auto max-h-64",
+														children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", {
+															className: "w-full text-left border-collapse font-mono text-[11px]",
+															children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tr", {
+																style: { backgroundColor: "var(--bg-elevated)" },
+																children: rows[0].map((cell, cIdx) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+																	className: "border px-2 py-1 font-semibold",
+																	style: { borderColor: "var(--border-hairline)" },
+																	children: cell || `Col ${cIdx + 1}`
+																}, cIdx))
+															}) }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: rows.slice(1).map((r, rIdx) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tr", { children: r.map((cell, cIdx) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+																className: "border px-2 py-1",
+																style: {
+																	borderColor: "var(--border-hairline)",
+																	color: "var(--ink-secondary)"
+																},
+																children: cell
+															}, cIdx)) }, rIdx)) })]
+														})
+													});
+												})(),
+												isTextOrCode && isPreviewOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", {
+													className: "text-[11px] font-mono leading-relaxed overflow-x-auto max-h-64 p-2 whitespace-pre-wrap",
+													style: { color: "var(--ink-secondary)" },
+													children: decodeDataUrlToText(attDataUrl).slice(0, 12e3)
+												})
+											]
+										})]
+									}, att.id);
+								})
+							})]
 						})]
 					}, card.id);
 				})
@@ -24159,15 +24758,11 @@ var SignInScreen = ({ onAuth }) => {
 						src: "./icon-512.png?v=2.4.0",
 						alt: "FLUX",
 						className: "w-16 h-16 rounded-2xl object-cover mx-auto shadow-2xl"
-					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 						className: "font-mono text-sm font-bold tracking-widest uppercase",
 						style: { color: "var(--ink-primary)" },
 						children: "FLUX"
-					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-						className: "font-mono text-[11px] mt-0.5",
-						style: { color: "var(--ink-muted)" },
-						children: "PERSONAL LIFE & ENGINEERING OS"
-					})] })]
+					}) })]
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 					className: "rounded-2xl border p-6 shadow-2xl space-y-5",

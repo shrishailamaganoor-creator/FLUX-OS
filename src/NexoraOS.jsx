@@ -3004,13 +3004,112 @@ const NexoraContext = createContext(null);
         );
       };
 
-      // VIEW 6B: INNOVATION CANVAS (OneNote-Style Idea Cards + HTML5 Sketch & Draw Pad)
+      // VIEW 6B: INNOVATION CANVAS (OneNote-Style Idea Cards + Universal File Vault + HTML5 Sketch & Draw Pad)
+      const classifyAttachmentFile = (fileName = '', mimeType = '') => {
+        const ext = (fileName.split('.').pop() || '').toLowerCase();
+        const mime = (mimeType || '').toLowerCase();
+        if (ext === 'pdf' || mime === 'application/pdf') {
+          return { category: 'PDF', ext: ext || 'pdf', color: '#F43F5E', canPreview: true };
+        }
+        if (['xls', 'xlsx', 'csv', 'tsv', 'ods'].includes(ext) || mime.includes('spreadsheet') || mime.includes('excel') || mime === 'text/csv') {
+          return { category: 'SHEET', ext: ext || 'xlsx', color: '#10B981', canPreview: ext === 'csv' || ext === 'tsv' || mime === 'text/csv' };
+        }
+        if (['doc', 'docx', 'odt', 'rtf'].includes(ext) || mime.includes('wordprocessingml') || mime.includes('msword')) {
+          return { category: 'DOC', ext: ext || 'docx', color: '#3B82F6', canPreview: false };
+        }
+        if (['ppt', 'pptx', 'odp'].includes(ext) || mime.includes('presentation')) {
+          return { category: 'SLIDE', ext: ext || 'pptx', color: '#F59E0B', canPreview: false };
+        }
+        if (mime.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) {
+          return { category: 'IMG', ext: ext || 'png', color: '#A855F7', canPreview: true };
+        }
+        if (
+          mime.startsWith('text/') ||
+          ['txt', 'md', 'json', 'js', 'jsx', 'ts', 'tsx', 'py', 'c', 'cpp', 'h', 'java', 'html', 'css', 'sql', 'yaml', 'yml', 'xml', 'sh', 'log'].includes(ext)
+        ) {
+          return { category: 'TXT/CODE', ext: ext || 'txt', color: '#06B6D4', canPreview: true };
+        }
+        if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext) || mime.includes('zip') || mime.includes('compressed')) {
+          return { category: 'ARCHIVE', ext: ext || 'zip', color: '#EAB308', canPreview: false };
+        }
+        return { category: 'FILE', ext: ext || 'bin', color: '#A1A1AA', canPreview: false };
+      };
+
+      const formatAttachmentBytes = (bytes) => {
+        const n = Number(bytes) || 0;
+        if (n < 1024) return `${n} B`;
+        if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+        return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+      };
+
+      const decodeDataUrlToText = (dataUrl) => {
+        if (!dataUrl || typeof dataUrl !== 'string') return '';
+        try {
+          const commaIdx = dataUrl.indexOf(',');
+          if (commaIdx === -1) return '';
+          const meta = dataUrl.slice(0, commaIdx);
+          const payload = dataUrl.slice(commaIdx + 1);
+          if (meta.includes(';base64')) {
+            const binary = atob(payload);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+          }
+          return decodeURIComponent(payload);
+        } catch {
+          return '';
+        }
+      };
+
+      const dataUrlToBlob = (dataUrl) => {
+        const commaIdx = dataUrl.indexOf(',');
+        const meta = dataUrl.slice(0, commaIdx);
+        const payload = dataUrl.slice(commaIdx + 1);
+        const mimeMatch = meta.match(/^data:([^;,]+)/i);
+        const mime = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
+        if (meta.includes(';base64')) {
+          const binary = atob(payload);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          return new Blob([bytes], { type: mime });
+        }
+        return new Blob([decodeURIComponent(payload)], { type: mime });
+      };
+
+      const parseDelimitedTable = (rawText, delimiter = ',') => {
+        const lines = rawText
+          .split(/\r?\n/)
+          .map((l) => l.trim())
+          .filter(Boolean)
+          .slice(0, 40);
+        return lines.map((line) => {
+          const cells = [];
+          let cur = '';
+          let inQuotes = false;
+          for (let i = 0; i < line.length; i++) {
+            const ch = line[i];
+            if (ch === '"') {
+              inQuotes = !inQuotes;
+            } else if (ch === delimiter && !inQuotes) {
+              cells.push(cur.trim());
+              cur = '';
+            } else {
+              cur += ch;
+            }
+          }
+          cells.push(cur.trim());
+          return cells;
+        });
+      };
+
       const InnovationCanvasView = () => {
         const { awardXP, data, mediaMap, notify, setData, setMediaMap } = useContext(NexoraContext);
         const [ideaTitle, setIdeaTitle] = useState('');
         const [ideaTag, setIdeaTag] = useState('Architecture');
         const [ideaNotes, setIdeaNotes] = useState('');
-        const [uploadedImg, setUploadedImg] = useState(null);
+        const [pendingFiles, setPendingFiles] = useState([]);
+        const [isDraggingOver, setIsDraggingOver] = useState(false);
+        const [openPreviews, setOpenPreviews] = useState({});
 
         const sketchRef = useRef(null);
         const isDrawingRef = useRef(false);
@@ -3079,63 +3178,230 @@ const NexoraContext = createContext(null);
           isDrawingRef.current = false;
         };
 
-        const handleImageUpload = (e) => {
-          const file = e.target.files?.[0];
-          if (!file) return;
-          const reader = new FileReader();
-          reader.onload = () => setUploadedImg(reader.result);
-          reader.readAsDataURL(file);
+        const ingestFilesList = (fileList) => {
+          const files = Array.from(fileList || []);
+          if (files.length === 0) return;
+          files.forEach((file, idx) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              let dataUrl = typeof reader.result === 'string' ? reader.result : '';
+              if (dataUrl.startsWith('data:;base64,')) {
+                dataUrl = 'data:application/octet-stream;base64,' + dataUrl.slice('data:;base64,'.length);
+              }
+              const info = classifyAttachmentFile(file.name, file.type);
+              const attItem = {
+                id: `${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
+                name: file.name || `Attachment-${idx + 1}.${info.ext}`,
+                size: file.size || 0,
+                type: file.type || 'application/octet-stream',
+                category: info.category,
+                ext: info.ext,
+                dataUrl
+              };
+              setPendingFiles((prev) => [...prev, attItem]);
+            };
+            reader.readAsDataURL(file);
+          });
+          notify(
+            files.length === 1
+              ? `Attached ${files[0].name}`
+              : `Attached ${files.length} files to specification`
+          );
+        };
+
+        const handleFileUpload = (e) => {
+          if (e.target.files && e.target.files.length > 0) {
+            ingestFilesList(e.target.files);
+            e.target.value = '';
+          }
+        };
+
+        const handleDropFiles = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsDraggingOver(false);
+          if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+            ingestFilesList(e.dataTransfer.files);
+          }
         };
 
         const handlePaste = (e) => {
+          const clipboardFiles = e.clipboardData?.files;
+          if (clipboardFiles && clipboardFiles.length > 0) {
+            ingestFilesList(clipboardFiles);
+            return;
+          }
           const items = e.clipboardData?.items || [];
           for (let i = 0; i < items.length; i++) {
-            if (items[i].type.indexOf('image') !== -1) {
+            if (items[i].kind === 'file') {
               const blob = items[i].getAsFile();
-              const reader = new FileReader();
-              reader.onload = () => {
-                setUploadedImg(reader.result);
-                notify('Image pasted from clipboard');
-              };
-              reader.readAsDataURL(blob);
+              if (blob) ingestFilesList([blob]);
             }
+          }
+        };
+
+        const attachFilesToExistingCard = (cardId, fileList) => {
+          const files = Array.from(fileList || []);
+          if (files.length === 0) return;
+          files.forEach((file, idx) => {
+            const reader = new FileReader();
+            reader.onload = async () => {
+              let dataUrl = typeof reader.result === 'string' ? reader.result : '';
+              if (dataUrl.startsWith('data:;base64,')) {
+                dataUrl = 'data:application/octet-stream;base64,' + dataUrl.slice('data:;base64,'.length);
+              }
+              const info = classifyAttachmentFile(file.name, file.type);
+              const attId = `${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 7)}`;
+              const mediaKey = `idea-att-${attId}`;
+              const saved = await saveMediaToIDB(mediaKey, dataUrl);
+              if (!saved) {
+                notify(`Could not store ${file.name}`, 'err');
+                return;
+              }
+              setMediaMap((prev) => ({ ...prev, [mediaKey]: dataUrl }));
+              const attMeta = {
+                id: attId,
+                name: file.name || `Attachment.${info.ext}`,
+                size: file.size || 0,
+                type: file.type || 'application/octet-stream',
+                category: info.category,
+                ext: info.ext
+              };
+              setData((prev) => ({
+                ...prev,
+                ideas: (prev.ideas || []).map((c) =>
+                  c.id === cardId
+                    ? { ...c, attachments: [...(c.attachments || []), attMeta] }
+                    : c
+                )
+              }));
+              notify(`Attached ${attMeta.name}`);
+            };
+            reader.readAsDataURL(file);
+          });
+        };
+
+        const removeAttachmentFromCard = async (cardId, attId) => {
+          await deleteMediaFromIDB(`idea-att-${attId}`);
+          setMediaMap((prev) => {
+            const next = { ...prev };
+            delete next[`idea-att-${attId}`];
+            return next;
+          });
+          setData((prev) => ({
+            ...prev,
+            ideas: (prev.ideas || []).map((c) =>
+              c.id === cardId
+                ? { ...c, attachments: (c.attachments || []).filter((a) => a.id !== attId) }
+                : c
+            )
+          }));
+        };
+
+        const triggerDownloadAttachment = (att, dataUrl) => {
+          if (!dataUrl) {
+            notify('Attachment data not found in local vault', 'err');
+            return;
+          }
+          try {
+            const blob = dataUrlToBlob(dataUrl);
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = att.name || `flux-attachment.${att.ext || 'bin'}`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 10000);
+          } catch {
+            const a = document.createElement('a');
+            a.href = dataUrl;
+            a.download = att.name || 'attachment';
+            a.click();
+          }
+        };
+
+        const triggerOpenAttachmentInTab = (att, dataUrl) => {
+          if (!dataUrl) {
+            notify('Attachment data not found in local vault', 'err');
+            return;
+          }
+          try {
+            const blob = dataUrlToBlob(dataUrl);
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(url), 60000);
+          } catch {
+            notify('Use Download to open this file on your device', 'err');
           }
         };
 
         const commitIdeaCard = async (includeSketch = false) => {
-          if (!ideaTitle.trim() && !ideaNotes.trim()) {
-            notify('Enter an idea title or specification notes first', 'err');
+          if (!ideaTitle.trim() && !ideaNotes.trim() && pendingFiles.length === 0 && !includeSketch) {
+            notify('Enter an idea title, notes, or attach a file first', 'err');
             return;
           }
           const id = 'idea-' + Date.now();
-          let finalMediaUrl = uploadedImg;
+          let sketchMediaUrl = null;
 
           if (includeSketch && sketchRef.current) {
-            finalMediaUrl = sketchRef.current.toDataURL('image/png');
-          }
-
-          if (finalMediaUrl) {
-            const mediaSaved = await saveMediaToIDB(`idea-${id}`, finalMediaUrl);
+            sketchMediaUrl = sketchRef.current.toDataURL('image/png');
+            const mediaSaved = await saveMediaToIDB(`idea-${id}`, sketchMediaUrl);
             if (!mediaSaved) {
-              notify('Could not save the image. The concept was not added.', 'err');
+              notify('Could not save the wireframe sketch.', 'err');
               return;
             }
-            setMediaMap((prev) => ({ ...prev, [`idea-${id}`]: finalMediaUrl }));
+            setMediaMap((prev) => ({ ...prev, [`idea-${id}`]: sketchMediaUrl }));
           }
+
+          const savedAttachments = [];
+          const newMediaEntries = {};
+          for (const item of pendingFiles) {
+            const mediaKey = `idea-att-${item.id}`;
+            const ok = await saveMediaToIDB(mediaKey, item.dataUrl);
+            if (!ok) {
+              notify(`Could not save attachment: ${item.name}`, 'err');
+              return;
+            }
+            newMediaEntries[mediaKey] = item.dataUrl;
+            savedAttachments.push({
+              id: item.id,
+              name: item.name,
+              size: item.size,
+              type: item.type,
+              category: item.category,
+              ext: item.ext
+            });
+          }
+
+          if (Object.keys(newMediaEntries).length > 0) {
+            setMediaMap((prev) => ({ ...prev, ...newMediaEntries }));
+          }
+
+          const defaultTitle =
+            ideaTitle.trim() ||
+            (savedAttachments.length > 0 ? savedAttachments[0].name : 'Untitled System Concept');
 
           const newCard = {
             id,
-            title: ideaTitle.trim() || 'Untitled System Concept',
+            title: defaultTitle,
             tag: ideaTag,
             notes: ideaNotes.trim(),
             date: new Date().toISOString().split('T')[0],
-            hasMedia: !!finalMediaUrl
+            hasMedia: !!sketchMediaUrl,
+            attachments: savedAttachments
           };
 
           setData((prev) => ({ ...prev, ideas: [newCard, ...(prev.ideas || [])] }));
           setIdeaTitle('');
           setIdeaNotes('');
-          setUploadedImg(null);
+          setPendingFiles([]);
           if (includeSketch) clearSketchPad();
           awardXP(35, 'Logged Concept in Innovation Canvas');
         };
@@ -3144,16 +3410,29 @@ const NexoraContext = createContext(null);
           <div className="space-y-6" onPaste={handlePaste}>
             <div>
               <div className="font-mono text-[11px] uppercase tracking-widest" style={{ color: 'var(--ink-muted)' }}>
-                06B // ONENOTE-STYLE ARCHITECTURE &amp; WIREFRAME STUDIO
+                06B // UNIVERSAL DOCUMENT, SPREADSHEET, PDF &amp; WIREFRAME STUDIO
               </div>
               <h1 className="text-2xl font-semibold heading-tight mt-1">Innovation Canvas</h1>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-              <div className="lg:col-span-6 arch-panel rounded-xl p-5 space-y-4">
-                <div className="flex items-center justify-between">
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsDraggingOver(true);
+                }}
+                onDragLeave={() => setIsDraggingOver(false)}
+                onDrop={handleDropFiles}
+                className={`lg:col-span-6 arch-panel rounded-xl p-5 space-y-4 transition-colors ${
+                  isDraggingOver ? 'ring-2 ring-emerald-500/60' : ''
+                }`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-mono text-[11px] uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
-                    01 // IDEA SPECIFICATION SHEET (PASTE IMAGE SUPPORTED)
+                    01 // IDEA SPECIFICATION &amp; UNIVERSAL FILE VAULT
+                  </span>
+                  <span className="font-mono text-[10px]" style={{ color: 'var(--ink-muted)' }}>
+                    PDF &bull; DOC/DOCX &bull; XLS/CSV &bull; PPT &bull; CODE &bull; IMG &bull; ZIP
                   </span>
                 </div>
 
@@ -3161,7 +3440,7 @@ const NexoraContext = createContext(null);
                   <input
                     value={ideaTitle}
                     onChange={(e) => setIdeaTitle(e.target.value)}
-                    placeholder="Concept / System Title..."
+                    placeholder="Concept / Document / System Title..."
                     className="sm:col-span-8 arch-input rounded-md px-3 py-2 text-xs"
                   />
                   <select
@@ -3174,40 +3453,113 @@ const NexoraContext = createContext(null);
                     <option>Hardware / IoT</option>
                     <option>Algorithm</option>
                     <option>UI / Wireframe</option>
+                    <option>Research / PDF</option>
+                    <option>Spreadsheet / Model</option>
+                    <option>Specification Doc</option>
                   </select>
                 </div>
 
                 <textarea
-                  rows={6}
+                  rows={5}
                   value={ideaNotes}
                   onChange={(e) => setIdeaNotes(e.target.value)}
-                  placeholder="Write structured engineering notes, system requirements, or paste an image (Ctrl+V) anywhere..."
+                  placeholder="Write structured engineering notes, or drag & drop / attach any file (PDFs, Word docs, Excel/CSV spreadsheets, presentations, code, archives, or images)..."
                   className="w-full arch-input rounded-md p-3 text-xs leading-relaxed"
                 />
 
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                  <label className="arch-btn-ghost px-3 py-1.5 rounded-md text-xs font-mono cursor-pointer inline-flex items-center gap-1.5">
-                    <Icon name="upload" size={13} />
-                    <span>{uploadedImg ? 'Image Attached ✓' : 'Attach Photo'}</span>
-                    <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-                  </label>
-
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => commitIdeaCard(false)}
-                      className="arch-btn-ghost px-3.5 py-1.5 rounded-md text-xs font-mono"
-                    >
-                      Save Note Card
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => commitIdeaCard(true)}
-                      className="arch-btn-primary px-3.5 py-1.5 rounded-md text-xs font-mono"
-                    >
-                      Save with Sketch &rarr;
-                    </button>
+                {/* Universal File Drop & Picker Zone */}
+                <div
+                  className="rounded-lg border border-dashed p-3 transition-colors"
+                  style={{
+                    borderColor: isDraggingOver ? '#10B981' : 'var(--border-strong)',
+                    backgroundColor: 'var(--bg-elevated)'
+                  }}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="space-y-0.5">
+                      <div className="text-xs font-medium" style={{ color: 'var(--ink-primary)' }}>
+                        Attach Anything — PDF, Word Doc, Spreadsheet, Slide Deck, Code, ZIP, or Image
+                      </div>
+                      <div className="font-mono text-[10px]" style={{ color: 'var(--ink-muted)' }}>
+                        Drag &amp; drop files here, paste with Ctrl+V, or browse your device (stored 100% locally in IndexedDB)
+                      </div>
+                    </div>
+                    <label className="arch-btn-ghost px-3 py-1.5 rounded-md text-xs font-mono cursor-pointer inline-flex items-center gap-1.5 shrink-0">
+                      <Icon name="upload" size={13} />
+                      <span>+ Attach Files</span>
+                      <input type="file" multiple onChange={handleFileUpload} className="hidden" />
+                    </label>
                   </div>
+
+                  {pendingFiles.length > 0 && (
+                    <div className="mt-3 pt-2.5 border-t space-y-1.5" style={{ borderColor: 'var(--border-hairline)' }}>
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-[10px] uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
+                          READY TO SAVE ({pendingFiles.length} {pendingFiles.length === 1 ? 'FILE' : 'FILES'})
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setPendingFiles([])}
+                          className="font-mono text-[10px] hover:underline"
+                          style={{ color: 'var(--ink-muted)' }}
+                        >
+                          Clear all
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                        {pendingFiles.map((att) => {
+                          const info = classifyAttachmentFile(att.name, att.type);
+                          return (
+                            <div
+                              key={att.id}
+                              className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded border text-xs"
+                              style={{ borderColor: 'var(--border-hairline)', backgroundColor: 'var(--bg-surface)' }}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span
+                                  className="font-mono text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0"
+                                  style={{ backgroundColor: `${info.color}20`, color: info.color }}
+                                >
+                                  {info.category}
+                                </span>
+                                <span className="truncate font-medium" title={att.name}>
+                                  {att.name}
+                                </span>
+                                <span className="font-mono text-[10px] shrink-0" style={{ color: 'var(--ink-muted)' }}>
+                                  {formatAttachmentBytes(att.size)}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setPendingFiles((prev) => prev.filter((x) => x.id !== att.id))}
+                                className="arch-btn-ghost px-1.5 py-0.5 rounded text-[10px] font-mono shrink-0"
+                                title="Remove file"
+                              >
+                                &times;
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => commitIdeaCard(false)}
+                    className="arch-btn-ghost px-3.5 py-1.5 rounded-md text-xs font-mono"
+                  >
+                    Save Card {pendingFiles.length > 0 ? `(${pendingFiles.length} File${pendingFiles.length > 1 ? 's' : ''})` : ''}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => commitIdeaCard(true)}
+                    className="arch-btn-primary px-3.5 py-1.5 rounded-md text-xs font-mono"
+                  >
+                    Save with Sketch &rarr;
+                  </button>
                 </div>
               </div>
 
@@ -3269,42 +3621,238 @@ const NexoraContext = createContext(null);
             {(data.ideas || []).length === 0 ? (
               <EmptyState
                 code="INNOVATION.CANVAS // 0_CARDS"
-                title="No concept cards or wireframes saved"
-                subtitle="Write system notes on the left, sketch diagrams on the right (or paste screenshots with Ctrl+V), and click 'Save with Sketch'."
+                title="No concept cards, documents, or wireframes saved"
+                subtitle="Attach PDFs, Word docs, spreadsheets, code files, or images on the left, sketch diagrams on the right, and save to your local vault."
               />
             ) : (
               <div className="space-y-4">
                 {(data.ideas || []).map((card) => {
                   const mediaSrc = mediaMap[`idea-${card.id}`];
+                  const cardAttachments = Array.isArray(card.attachments) ? card.attachments : [];
                   return (
-                    <div key={card.id} className="arch-panel rounded-xl p-5 grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
-                      <div className={mediaSrc ? 'md:col-span-7 space-y-2' : 'md:col-span-12 space-y-2'}>
-                        <div className="flex items-center justify-between">
-                          <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border" style={{ color: 'var(--ink-muted)' }}>
-                            {card.tag} &bull; {card.date}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setData((prev) => ({
-                                ...prev,
-                                ideas: (prev.ideas || []).filter((x) => x.id !== card.id)
-                              }))
-                            }
-                            className="arch-btn-ghost p-1 rounded"
-                          >
-                            <Icon name="trash" size={13} />
-                          </button>
+                    <div key={card.id} className="arch-panel rounded-xl p-5 space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
+                        <div className={mediaSrc ? 'md:col-span-7 space-y-2' : 'md:col-span-12 space-y-2'}>
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border" style={{ color: 'var(--ink-muted)' }}>
+                                {card.tag} &bull; {card.date}
+                              </span>
+                              {cardAttachments.length > 0 && (
+                                <span className="font-mono text-[10px] px-2 py-0.5 rounded border" style={{ color: 'var(--ink-secondary)', borderColor: 'var(--border-hairline)' }}>
+                                  {cardAttachments.length} {cardAttachments.length === 1 ? 'ATTACHMENT' : 'ATTACHMENTS'}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <label className="arch-btn-ghost px-2.5 py-1 rounded text-[11px] font-mono cursor-pointer inline-flex items-center gap-1">
+                                <Icon name="upload" size={12} />
+                                <span>+ Attach File</span>
+                                <input
+                                  type="file"
+                                  multiple
+                                  onChange={(e) => {
+                                    if (e.target.files && e.target.files.length > 0) {
+                                      attachFilesToExistingCard(card.id, e.target.files);
+                                      e.target.value = '';
+                                    }
+                                  }}
+                                  className="hidden"
+                                />
+                              </label>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  if (card.hasMedia) await deleteMediaFromIDB(`idea-${card.id}`);
+                                  for (const a of cardAttachments) {
+                                    await deleteMediaFromIDB(`idea-att-${a.id}`);
+                                  }
+                                  setData((prev) => ({
+                                    ...prev,
+                                    ideas: (prev.ideas || []).filter((x) => x.id !== card.id)
+                                  }));
+                                }}
+                                className="arch-btn-ghost p-1 rounded"
+                                title="Delete Idea Card"
+                              >
+                                <Icon name="trash" size={13} />
+                              </button>
+                            </div>
+                          </div>
+                          <h3 className="text-base font-semibold heading-tight">{card.title}</h3>
+                          {card.notes && (
+                            <p className="text-xs leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--ink-secondary)' }}>
+                              {card.notes}
+                            </p>
+                          )}
                         </div>
-                        <h3 className="text-base font-semibold heading-tight">{card.title}</h3>
-                        <p className="text-xs leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--ink-secondary)' }}>
-                          {card.notes}
-                        </p>
+
+                        {mediaSrc && (
+                          <div className="md:col-span-5 rounded-lg overflow-hidden border bg-[#09090B]">
+                            <img src={mediaSrc} alt={card.title} className="w-full max-h-56 object-contain block" />
+                          </div>
+                        )}
                       </div>
 
-                      {mediaSrc && (
-                        <div className="md:col-span-5 rounded-lg overflow-hidden border bg-[#09090B]">
-                          <img src={mediaSrc} alt={card.title} className="w-full max-h-56 object-contain block" />
+                      {cardAttachments.length > 0 && (
+                        <div className="pt-3 border-t space-y-2.5" style={{ borderColor: 'var(--border-hairline)' }}>
+                          <div className="font-mono text-[10px] uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
+                            ATTACHED DOCUMENTS, SPREADSHEETS &amp; FILES ({cardAttachments.length})
+                          </div>
+                          <div className="space-y-2">
+                            {cardAttachments.map((att) => {
+                              const attDataUrl = mediaMap[`idea-att-${att.id}`];
+                              const info = classifyAttachmentFile(att.name, att.type);
+                              const isPreviewOpen = !!openPreviews[att.id];
+                              const isImage = info.category === 'IMG';
+                              const isPdf = info.category === 'PDF';
+                              const isCsvOrTsv =
+                                info.category === 'SHEET' &&
+                                (att.ext === 'csv' || att.ext === 'tsv' || (att.type || '').includes('csv'));
+                              const isTextOrCode = info.category === 'TXT/CODE';
+                              const canInlinePreview = isImage || isPdf || isCsvOrTsv || isTextOrCode;
+
+                              return (
+                                <div
+                                  key={att.id}
+                                  className="rounded-lg border p-3 space-y-2.5"
+                                  style={{ borderColor: 'var(--border-hairline)', backgroundColor: 'var(--bg-elevated)' }}
+                                >
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                      <span
+                                        className="font-mono text-[10px] font-bold px-2 py-0.5 rounded shrink-0"
+                                        style={{ backgroundColor: `${info.color}20`, color: info.color }}
+                                      >
+                                        {info.category}
+                                      </span>
+                                      <div className="min-w-0">
+                                        <div className="text-xs font-medium truncate" title={att.name}>
+                                          {att.name}
+                                        </div>
+                                        <div className="font-mono text-[10px]" style={{ color: 'var(--ink-muted)' }}>
+                                          {(att.ext || 'file').toUpperCase()} &bull; {formatAttachmentBytes(att.size)}
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                      {canInlinePreview && attDataUrl && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setOpenPreviews((prev) => ({ ...prev, [att.id]: !prev[att.id] }))
+                                          }
+                                          className="arch-btn-ghost px-2.5 py-1 rounded text-[11px] font-mono"
+                                        >
+                                          {isPreviewOpen ? 'Hide Preview' : 'Preview'}
+                                        </button>
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={() => triggerOpenAttachmentInTab(att, attDataUrl)}
+                                        className="arch-btn-ghost px-2.5 py-1 rounded text-[11px] font-mono"
+                                      >
+                                        Open
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => triggerDownloadAttachment(att, attDataUrl)}
+                                        className="arch-btn-primary px-2.5 py-1 rounded text-[11px] font-mono inline-flex items-center gap-1"
+                                      >
+                                        <Icon name="download" size={12} />
+                                        <span>Download</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => removeAttachmentFromCard(card.id, att.id)}
+                                        className="arch-btn-ghost p-1 rounded"
+                                        title="Remove attachment"
+                                      >
+                                        <Icon name="trash" size={12} />
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {(isImage || isPreviewOpen) && attDataUrl && (
+                                    <div
+                                      className="rounded-md overflow-hidden border p-2"
+                                      style={{ borderColor: 'var(--border-hairline)', backgroundColor: 'var(--bg-canvas)' }}
+                                    >
+                                      {isImage && (
+                                        <img
+                                          src={attDataUrl}
+                                          alt={att.name}
+                                          className="max-h-64 w-full object-contain rounded block"
+                                        />
+                                      )}
+                                      {isPdf && isPreviewOpen && (
+                                        <iframe
+                                          src={attDataUrl}
+                                          title={att.name}
+                                          className="w-full h-80 rounded border-0 bg-white"
+                                        />
+                                      )}
+                                      {isCsvOrTsv && isPreviewOpen && (() => {
+                                        const raw = decodeDataUrlToText(attDataUrl);
+                                        const delim = att.ext === 'tsv' ? '\t' : ',';
+                                        const rows = parseDelimitedTable(raw, delim);
+                                        if (rows.length === 0) {
+                                          return (
+                                            <div className="text-xs font-mono p-2" style={{ color: 'var(--ink-muted)' }}>
+                                              Empty spreadsheet.
+                                            </div>
+                                          );
+                                        }
+                                        return (
+                                          <div className="overflow-x-auto max-h-64">
+                                            <table className="w-full text-left border-collapse font-mono text-[11px]">
+                                              <thead>
+                                                <tr style={{ backgroundColor: 'var(--bg-elevated)' }}>
+                                                  {rows[0].map((cell, cIdx) => (
+                                                    <th
+                                                      key={cIdx}
+                                                      className="border px-2 py-1 font-semibold"
+                                                      style={{ borderColor: 'var(--border-hairline)' }}
+                                                    >
+                                                      {cell || `Col ${cIdx + 1}`}
+                                                    </th>
+                                                  ))}
+                                                </tr>
+                                              </thead>
+                                              <tbody>
+                                                {rows.slice(1).map((r, rIdx) => (
+                                                  <tr key={rIdx}>
+                                                    {r.map((cell, cIdx) => (
+                                                      <td
+                                                        key={cIdx}
+                                                        className="border px-2 py-1"
+                                                        style={{ borderColor: 'var(--border-hairline)', color: 'var(--ink-secondary)' }}
+                                                      >
+                                                        {cell}
+                                                      </td>
+                                                    ))}
+                                                  </tr>
+                                                ))}
+                                              </tbody>
+                                            </table>
+                                          </div>
+                                        );
+                                      })()}
+                                      {isTextOrCode && isPreviewOpen && (
+                                        <pre
+                                          className="text-[11px] font-mono leading-relaxed overflow-x-auto max-h-64 p-2 whitespace-pre-wrap"
+                                          style={{ color: 'var(--ink-secondary)' }}
+                                        >
+                                          {decodeDataUrlToText(attDataUrl).slice(0, 12000)}
+                                        </pre>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -10386,9 +10934,6 @@ export const SignInScreen = ({ onAuth }) => {
           <div>
             <div className="font-mono text-sm font-bold tracking-widest uppercase" style={{ color: "var(--ink-primary)" }}>
               FLUX
-            </div>
-            <div className="font-mono text-[11px] mt-0.5" style={{ color: "var(--ink-muted)" }}>
-              PERSONAL LIFE & ENGINEERING OS
             </div>
           </div>
         </div>

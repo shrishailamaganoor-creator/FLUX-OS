@@ -4,7 +4,7 @@
 
 - **Architecture:** React 19 + TypeScript + Vite + Tailwind CSS v4 (plus precompiled static bundle in `./compiled/`)
 - **Persistence:** 100% Local-First (`localStorage` + `IndexedDB`) · Zero Backend · Zero Cloud Database · `$0` Operating Cost
-- **Offline & Installable:** Progressive Web App (`manifest.webmanifest` + Network-First Service Worker `sw.js` `flux-v2.3.0`)
+- **Offline & Installable:** Progressive Web App (`manifest.webmanifest` + Network-First Service Worker `sw.js` `flux-v2.9.0`)
 - **Design System:** 2 Calibrated Engineering Themes (`Direction A: Obsidian Precision`, `Direction B: Editorial Paper`)
 
 ---
@@ -65,8 +65,8 @@ All modules are accessible from the fixed `240px` collapsible left sidebar, the 
    - Tracks `LVL 1` to `LVL 5`, mastery progress (`0–100%`), and custom sub-milestones (+50 XP per completed milestone).
 6. **Project Lab (`06 // Build Pipeline` — `ProjectsView`)**
    - Engineering build portfolio with comma-separated stack tags, deadline tracking, `0–100%` completion slider, and a `MARK SHIPPED (100%)` trigger (+100 XP).
-7. **Innovation Canvas (`06B // OneNote-Style Architecture & Wireframe Studio` — `InnovationCanvasView`)**
-   - **01 // Idea Specification Sheet:** Structured concept cards tagged by `Architecture`, `Startup / Product`, `Hardware / IoT`, `Algorithm`, or `UI / Wireframe`, with global **`Ctrl+V` clipboard image paste** and file upload.
+7. **Innovation Canvas (`06B // Universal Document, Spreadsheet, PDF & Wireframe Studio` — `InnovationCanvasView`)**
+   - **01 // Idea Specification & Universal File Vault:** Attach any file format—**PDFs (`.pdf`), Word Docs (`.doc`/`.docx`), Spreadsheets (`.xlsx`/`.xls`/`.csv`/`.tsv`), Slide Decks (`.pptx`), Text/Markdown/Code files, ZIP Archives, or Images**—via multi-file picker, drag-and-drop, or `Ctrl+V` clipboard paste. Includes inline PDF viewer, CSV/TSV table preview, code/text viewer, one-click original-filename download, and ability to attach additional files to existing cards.
    - **02 // Interactive Wireframe Sketch Pad:** Built-in `540×250` HTML5 `<canvas>` with gridlines, multi-color pens (`White`, `Neon`, `Orange`, `Red`), `Eraser`, and one-click `Save with Sketch →` persistence into `IndexedDB` (+35 XP).
 
 ### II. Habits, Focus & Behavioral Engineering
