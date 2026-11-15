@@ -12274,520 +12274,6 @@ var EmptyState = ({ code, title, subtitle, actionLabel, onAction }) => /* @__PUR
 		})
 	]
 });
-var RoverSimulationCanvas = ({ bestNodes, soundEnabled, onUpdateNodes, onJumpModule }) => {
-	const canvasRef = (0, import_react.useRef)(null);
-	const keysRef = (0, import_react.useRef)({});
-	const [collectedCount, setCollectedCount] = (0, import_react.useState)(0);
-	const collectedCountRef = (0, import_react.useRef)(0);
-	const [parkedPortal, setParkedPortal] = (0, import_react.useState)(null);
-	const [gear, setGear] = (0, import_react.useState)(2);
-	const [speedReadout, setSpeedReadout] = (0, import_react.useState)("0.0");
-	const parkedPortalRef = (0, import_react.useRef)(null);
-	const onJumpModuleRef = (0, import_react.useRef)(onJumpModule);
-	const onUpdateNodesRef = (0, import_react.useRef)(onUpdateNodes);
-	const soundRef = (0, import_react.useRef)(soundEnabled);
-	const gearRef = (0, import_react.useRef)(gear);
-	const nodeRespawnTimersRef = (0, import_react.useRef)(/* @__PURE__ */ new Set());
-	(0, import_react.useEffect)(() => () => {
-		nodeRespawnTimersRef.current.forEach((timerId) => clearTimeout(timerId));
-		nodeRespawnTimersRef.current.clear();
-	}, []);
-	(0, import_react.useEffect)(() => {
-		onJumpModuleRef.current = onJumpModule;
-	}, [onJumpModule]);
-	(0, import_react.useEffect)(() => {
-		onUpdateNodesRef.current = onUpdateNodes;
-	}, [onUpdateNodes]);
-	(0, import_react.useEffect)(() => {
-		soundRef.current = soundEnabled;
-	}, [soundEnabled]);
-	(0, import_react.useEffect)(() => {
-		gearRef.current = gear;
-	}, [gear]);
-	const stateRef = (0, import_react.useRef)({
-		x: 340,
-		y: 235,
-		vx: 0,
-		vy: 0,
-		angle: -Math.PI / 2,
-		nodes: [
-			{
-				x: 130,
-				y: 175,
-				active: true
-			},
-			{
-				x: 340,
-				y: 165,
-				active: true
-			},
-			{
-				x: 550,
-				y: 175,
-				active: true
-			},
-			{
-				x: 220,
-				y: 265,
-				active: true
-			},
-			{
-				x: 460,
-				y: 265,
-				active: true
-			}
-		],
-		portals: [
-			{
-				id: "academy",
-				code: "P1",
-				label: "ACADEMY",
-				x: 75,
-				y: 54,
-				w: 92,
-				h: 54
-			},
-			{
-				id: "bank",
-				code: "P2",
-				label: "WALLET",
-				x: 181,
-				y: 54,
-				w: 92,
-				h: 54
-			},
-			{
-				id: "missions",
-				code: "P3",
-				label: "MISSIONS",
-				x: 287,
-				y: 54,
-				w: 92,
-				h: 54
-			},
-			{
-				id: "skills",
-				code: "P4",
-				label: "SKILLS",
-				x: 393,
-				y: 54,
-				w: 92,
-				h: 54
-			},
-			{
-				id: "projects",
-				code: "P5",
-				label: "PROJECTS",
-				x: 499,
-				y: 54,
-				w: 92,
-				h: 54
-			},
-			{
-				id: "habits",
-				code: "P6",
-				label: "HABITS",
-				x: 605,
-				y: 54,
-				w: 92,
-				h: 54
-			}
-		]
-	});
-	(0, import_react.useEffect)(() => {
-		const down = (e) => {
-			const tag = (e.target?.tagName || "").toLowerCase();
-			if (tag === "input" || tag === "textarea" || tag === "select") return;
-			const key = e.key.toLowerCase();
-			if ([
-				"arrowup",
-				"arrowdown",
-				"arrowleft",
-				"arrowright",
-				" "
-			].includes(key)) e.preventDefault();
-			keysRef.current[key] = true;
-			if ((e.key === "Enter" || key === "e") && parkedPortalRef.current) {
-				e.preventDefault();
-				playTactileClick(soundRef.current, 1120, 25);
-				if (onJumpModuleRef.current) onJumpModuleRef.current(parkedPortalRef.current.id);
-			}
-		};
-		const up = (e) => {
-			keysRef.current[e.key.toLowerCase()] = false;
-		};
-		window.addEventListener("keydown", down, { passive: false });
-		window.addEventListener("keyup", up);
-		return () => {
-			window.removeEventListener("keydown", down);
-			window.removeEventListener("keyup", up);
-		};
-	}, []);
-	(0, import_react.useEffect)(() => {
-		const canvas = canvasRef.current;
-		if (!canvas) return;
-		const ctx = canvas.getContext("2d");
-		let animId;
-		let frameCounter = 0;
-		const GEAR_CONFIG = {
-			1: {
-				accel: .065,
-				maxSpeed: 1.35,
-				turnSpeed: .032,
-				drag: .86
-			},
-			2: {
-				accel: .11,
-				maxSpeed: 2.35,
-				turnSpeed: .04,
-				drag: .89
-			},
-			3: {
-				accel: .16,
-				maxSpeed: 3.4,
-				turnSpeed: .046,
-				drag: .91
-			}
-		};
-		const loop = () => {
-			frameCounter++;
-			const st = stateRef.current;
-			const k = keysRef.current;
-			const cfg = GEAR_CONFIG[gearRef.current] || GEAR_CONFIG[2];
-			if (k["a"] || k["arrowleft"]) st.angle -= cfg.turnSpeed;
-			if (k["d"] || k["arrowright"]) st.angle += cfg.turnSpeed;
-			if (k["w"] || k["arrowup"]) {
-				st.vx += Math.cos(st.angle) * cfg.accel;
-				st.vy += Math.sin(st.angle) * cfg.accel;
-			}
-			if (k["s"] || k["arrowdown"]) {
-				st.vx -= Math.cos(st.angle) * (cfg.accel * .75);
-				st.vy -= Math.sin(st.angle) * (cfg.accel * .75);
-			}
-			if (k[" "]) {
-				st.vx *= .65;
-				st.vy *= .65;
-			} else {
-				st.vx *= cfg.drag;
-				st.vy *= cfg.drag;
-			}
-			const currentSpeed = Math.hypot(st.vx, st.vy);
-			if (currentSpeed > cfg.maxSpeed) {
-				st.vx = st.vx / currentSpeed * cfg.maxSpeed;
-				st.vy = st.vy / currentSpeed * cfg.maxSpeed;
-			}
-			if (currentSpeed < .015) {
-				st.vx = 0;
-				st.vy = 0;
-			}
-			st.x = Math.max(24, Math.min(canvas.width - 24, st.x + st.vx));
-			st.y = Math.max(24, Math.min(canvas.height - 24, st.y + st.vy));
-			const finalSpeed = Math.hypot(st.vx, st.vy);
-			if (frameCounter % 6 === 0) setSpeedReadout((finalSpeed * 10).toFixed(1));
-			st.nodes.forEach((n) => {
-				if (n.active && Math.hypot(st.x - n.x, st.y - n.y) < 20) {
-					n.active = false;
-					playTactileClick(soundRef.current, 980, 18);
-					const next = collectedCountRef.current + 1;
-					collectedCountRef.current = next;
-					setCollectedCount(next);
-					if (onUpdateNodesRef.current) onUpdateNodesRef.current(next);
-					const respawnTimer = setTimeout(() => {
-						nodeRespawnTimersRef.current.delete(respawnTimer);
-						n.x = 70 + Math.random() * (canvas.width - 140);
-						n.y = 140 + Math.random() * (canvas.height - 175);
-						n.active = true;
-					}, 1100);
-					nodeRespawnTimersRef.current.add(respawnTimer);
-				}
-			});
-			let activeBay = null;
-			st.portals.forEach((p) => {
-				const insideX = Math.abs(st.x - p.x) <= p.w / 2 - 4;
-				const insideY = Math.abs(st.y - p.y) <= p.h / 2 - 2;
-				if (insideX && insideY) activeBay = {
-					...p,
-					isStopped: finalSpeed < .45
-				};
-			});
-			const prevBayId = parkedPortalRef.current?.id;
-			const prevStopped = parkedPortalRef.current?.isStopped;
-			if (activeBay?.id !== prevBayId || activeBay?.isStopped !== prevStopped) {
-				if (activeBay && activeBay.id !== prevBayId) playTactileClick(soundRef.current, 720, 10);
-				parkedPortalRef.current = activeBay;
-				setParkedPortal(activeBay);
-			}
-			ctx.fillStyle = "#09090B";
-			ctx.fillRect(0, 0, canvas.width, canvas.height);
-			ctx.strokeStyle = "rgba(255,255,255,0.045)";
-			ctx.lineWidth = 1;
-			for (let gx = 0; gx < canvas.width; gx += 34) {
-				ctx.beginPath();
-				ctx.moveTo(gx, 0);
-				ctx.lineTo(gx, canvas.height);
-				ctx.stroke();
-			}
-			for (let gy = 0; gy < canvas.height; gy += 34) {
-				ctx.beginPath();
-				ctx.moveTo(0, gy);
-				ctx.lineTo(canvas.width, gy);
-				ctx.stroke();
-			}
-			ctx.strokeStyle = "rgba(255,255,255,0.14)";
-			ctx.setLineDash([6, 6]);
-			ctx.beginPath();
-			ctx.moveTo(16, 102);
-			ctx.lineTo(canvas.width - 16, 102);
-			ctx.stroke();
-			ctx.setLineDash([]);
-			ctx.fillStyle = "rgba(255,255,255,0.28)";
-			ctx.font = "500 9px \"JetBrains Mono\", monospace";
-			ctx.textAlign = "left";
-			ctx.fillText("LINEAR PARKING LINE // PARK ROVER IN ANY BAY & PRESS [ENTER] TO OPEN MODULE", 22, 18);
-			st.portals.forEach((p) => {
-				const isOccupied = activeBay && activeBay.id === p.id;
-				const isLocked = isOccupied && activeBay.isStopped;
-				const left = p.x - p.w / 2;
-				const top = p.y - p.h / 2;
-				ctx.fillStyle = isLocked ? "rgba(16, 185, 129, 0.18)" : isOccupied ? "rgba(245, 158, 11, 0.15)" : "rgba(255, 255, 255, 0.025)";
-				ctx.fillRect(left, top, p.w, p.h);
-				ctx.fillStyle = isLocked ? "#10B981" : isOccupied ? "#F59E0B" : "rgba(255,255,255,0.28)";
-				ctx.fillRect(left + 8, top + 4, p.w - 16, 3);
-				ctx.strokeStyle = isLocked ? "#10B981" : isOccupied ? "#F59E0B" : "rgba(255,255,255,0.28)";
-				ctx.lineWidth = isOccupied ? 2 : 1.25;
-				ctx.beginPath();
-				ctx.moveTo(left, top + p.h);
-				ctx.lineTo(left, top);
-				ctx.lineTo(left + p.w, top);
-				ctx.lineTo(left + p.w, top + p.h);
-				ctx.stroke();
-				ctx.fillStyle = isLocked ? "#10B981" : isOccupied ? "#F59E0B" : "#FAFAFA";
-				ctx.font = "600 10px \"JetBrains Mono\", monospace";
-				ctx.textAlign = "center";
-				ctx.fillText(`${p.code} // ${p.label}`, p.x, top + 24);
-				ctx.fillStyle = isLocked ? "#10B981" : "rgba(255,255,255,0.42)";
-				ctx.font = "500 8px \"JetBrains Mono\", monospace";
-				ctx.fillText(isLocked ? "LOCKED [PRESS ENTER]" : isOccupied ? "SLOW DOWN TO LOCK" : "PARKING BAY", p.x, top + 40);
-			});
-			st.nodes.forEach((n) => {
-				if (!n.active) return;
-				ctx.beginPath();
-				ctx.arc(n.x, n.y, 6, 0, Math.PI * 2);
-				ctx.fillStyle = "#F59E0B";
-				ctx.fill();
-				ctx.strokeStyle = "rgba(245, 158, 11, 0.32)";
-				ctx.lineWidth = 4;
-				ctx.stroke();
-			});
-			if (st.y < 145) {
-				ctx.strokeStyle = "rgba(16, 185, 129, 0.25)";
-				ctx.setLineDash([3, 3]);
-				ctx.beginPath();
-				ctx.moveTo(st.x, st.y);
-				ctx.lineTo(st.x, 27);
-				ctx.stroke();
-				ctx.setLineDash([]);
-			}
-			ctx.save();
-			ctx.translate(st.x, st.y);
-			ctx.rotate(st.angle);
-			ctx.fillStyle = "#52525B";
-			ctx.fillRect(-12, -11, 7, 3);
-			ctx.fillRect(5, -11, 7, 3);
-			ctx.fillRect(-12, 8, 7, 3);
-			ctx.fillRect(5, 8, 7, 3);
-			ctx.fillStyle = "#FAFAFA";
-			ctx.fillRect(-14, -8, 28, 16);
-			ctx.strokeStyle = "#09090B";
-			ctx.lineWidth = 1.5;
-			ctx.strokeRect(-14, -8, 28, 16);
-			ctx.fillStyle = activeBay ? "#10B981" : "#3B82F6";
-			ctx.fillRect(4, -5, 6, 10);
-			if (k[" "] || activeBay && activeBay.isStopped) {
-				ctx.fillStyle = "#F43F5E";
-				ctx.fillRect(-14, -6, 2, 4);
-				ctx.fillRect(-14, 2, 2, 4);
-			}
-			ctx.restore();
-			if (activeBay) {
-				ctx.fillStyle = "rgba(9, 9, 11, 0.92)";
-				ctx.fillRect(170, 276, 340, 32);
-				ctx.strokeStyle = "#10B981";
-				ctx.lineWidth = 1.5;
-				ctx.strokeRect(170, 276, 340, 32);
-				ctx.fillStyle = "#10B981";
-				ctx.font = "600 11px \"JetBrains Mono\", monospace";
-				ctx.textAlign = "center";
-				ctx.fillText(`PARKED IN [${activeBay.code}: ${activeBay.label}] — PRESS ENTER TO OPEN`, 340, 296);
-			}
-			animId = requestAnimationFrame(loop);
-		};
-		animId = requestAnimationFrame(loop);
-		return () => cancelAnimationFrame(animId);
-	}, []);
-	const handleCanvasClick = (e) => {
-		const canvas = canvasRef.current;
-		if (!canvas) return;
-		const rect = canvas.getBoundingClientRect();
-		const scaleX = canvas.width / rect.width;
-		const scaleY = canvas.height / rect.height;
-		const cx = (e.clientX - rect.left) * scaleX;
-		const cy = (e.clientY - rect.top) * scaleY;
-		const clickedBay = stateRef.current.portals.find((p) => Math.abs(cx - p.x) <= p.w / 2 && Math.abs(cy - p.y) <= p.h / 2);
-		if (clickedBay) {
-			playTactileClick(soundRef.current, 1080, 20);
-			if (onJumpModuleRef.current) onJumpModuleRef.current(clickedBay.id);
-		}
-	};
-	const stepMove = (dir) => {
-		const st = stateRef.current;
-		if (dir === "up") {
-			st.vx += Math.cos(st.angle) * .9;
-			st.vy += Math.sin(st.angle) * .9;
-		} else if (dir === "down") {
-			st.vx -= Math.cos(st.angle) * .7;
-			st.vy -= Math.sin(st.angle) * .7;
-		} else if (dir === "left") st.angle -= .25;
-		else if (dir === "right") st.angle += .25;
-		else if (dir === "stop") {
-			st.vx = 0;
-			st.vy = 0;
-		}
-	};
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-		className: "arch-panel rounded-xl p-4 space-y-3",
-		children: [
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-				className: "flex flex-wrap items-center justify-between gap-2",
-				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-					className: "flex flex-wrap items-center gap-2.5",
-					children: [
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-							className: "font-mono text-[11px] uppercase tracking-wider",
-							style: { color: "var(--ink-muted)" },
-							children: "SIM.01 // PRECISION LINE-PARKING ROVER"
-						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-							className: "font-mono text-xs tabular-nums px-2 py-0.5 rounded border",
-							style: { color: "var(--ink-primary)" },
-							children: [
-								"NODES: ",
-								collectedCount,
-								" | RECORD: ",
-								bestNodes
-							]
-						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-							className: "font-mono text-xs tabular-nums px-2 py-0.5 rounded border",
-							style: { color: "var(--ink-secondary)" },
-							children: [
-								"VEL: ",
-								speedReadout,
-								" u/s"
-							]
-						})
-					]
-				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-					className: "flex items-center gap-1.5",
-					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-						className: "font-mono text-[10px] uppercase mr-1",
-						style: { color: "var(--ink-muted)" },
-						children: "SPEED LIMITER:"
-					}), [
-						{
-							g: 1,
-							label: "G1: CRAWL"
-						},
-						{
-							g: 2,
-							label: "G2: CRUISE"
-						},
-						{
-							g: 3,
-							label: "G3: SPORT"
-						}
-					].map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-						type: "button",
-						onClick: () => {
-							playTactileClick(soundEnabled, 700 + item.g * 100, 12);
-							setGear(item.g);
-						},
-						className: `px-2 py-1 rounded text-[10px] font-mono transition ${gear === item.g ? "arch-btn-primary" : "arch-btn-ghost"}`,
-						children: item.label
-					}, item.g))]
-				})]
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-				className: "relative rounded-lg overflow-hidden border",
-				style: { borderColor: "var(--border-hairline)" },
-				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("canvas", {
-					ref: canvasRef,
-					width: 680,
-					height: 320,
-					onClick: handleCanvasClick,
-					className: "w-full h-60 sm:h-72 block bg-[#09090B] cursor-pointer"
-				})
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-				className: "flex flex-wrap items-center justify-between gap-2 pt-1",
-				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-					className: "flex flex-wrap gap-1.5",
-					children: [
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-							type: "button",
-							onClick: () => stepMove("left"),
-							className: "arch-btn-ghost px-2.5 py-1 rounded text-xs font-mono",
-							children: "STEER L [A]"
-						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-							type: "button",
-							onClick: () => stepMove("up"),
-							className: "arch-btn-ghost px-2.5 py-1 rounded text-xs font-mono",
-							children: "DRIVE [W]"
-						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-							type: "button",
-							onClick: () => stepMove("down"),
-							className: "arch-btn-ghost px-2.5 py-1 rounded text-xs font-mono",
-							children: "REVERSE [S]"
-						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-							type: "button",
-							onClick: () => stepMove("right"),
-							className: "arch-btn-ghost px-2.5 py-1 rounded text-xs font-mono",
-							children: "STEER R [D]"
-						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-							type: "button",
-							onClick: () => stepMove("stop"),
-							className: "arch-btn-ghost px-2.5 py-1 rounded text-xs font-mono",
-							children: "BRAKE [SPACE]"
-						})
-					]
-				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-					className: "flex items-center gap-2",
-					children: parkedPortal ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
-						type: "button",
-						onClick: () => onJumpModule(parkedPortal.id),
-						className: "arch-btn-primary px-3 py-1 rounded text-xs font-mono animate-pulse",
-						children: [
-							"OPEN ",
-							parkedPortal.label,
-							" [PRESS ENTER] →"
-						]
-					}) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-						className: "font-mono text-[11px]",
-						style: { color: "var(--ink-muted)" },
-						children: ["Park in any top bay (P1–P6) & press ", /* @__PURE__ */ (0, import_jsx_runtime.jsx)("kbd", {
-							className: "px-1 py-0.5 border rounded",
-							children: "Enter"
-						})]
-					})
-				})]
-			})
-		]
-	});
-};
 var VectorSnakeGame = ({ bestScore, onNewBest, soundEnabled, onUnlockVault }) => {
 	const [running, setRunning] = (0, import_react.useState)(false);
 	const [gameOver, setGameOver] = (0, import_react.useState)(false);
@@ -16535,300 +16021,6 @@ var InnovationCanvasView = () => {
 		]
 	});
 };
-var StyleLabView = () => {
-	const { awardXP, data, focusLabel, focusMinutes, mediaMap, notify, secondsLeft, setActiveTab, setConfirmResetModal, setData, setFocusLabel, setFocusMinutes, setMediaMap, setProfileModal, setSecondsLeft, setTimerRunning, telemetry, timerRunning } = (0, import_react.useContext)(NexoraContext);
-	const [wName, setWName] = (0, import_react.useState)("");
-	const [wCat, setWCat] = (0, import_react.useState)("Tops / Shirts");
-	const [wOccasion, setWOccasion] = (0, import_react.useState)("Campus");
-	const [wPrice, setWPrice] = (0, import_react.useState)("");
-	const [reqLevel, setReqLevel] = (0, import_react.useState)("");
-	const [reqBalance, setReqBalance] = (0, import_react.useState)("");
-	const [selectedForOutfit, setSelectedForOutfit] = (0, import_react.useState)([]);
-	const [outfitName, setOutfitName] = (0, import_react.useState)("");
-	const handleAddItem = async (e) => {
-		e.preventDefault();
-		if (!wName.trim()) return;
-		const fileInput = e.target.elements.clothImg;
-		const file = fileInput?.files?.[0];
-		const id = "w-" + Date.now();
-		let hasImage = false;
-		if (file) {
-			let imageData;
-			try {
-				imageData = await new Promise((resolve, reject) => {
-					const reader = new FileReader();
-					reader.onload = () => resolve(reader.result);
-					reader.onerror = () => reject(/* @__PURE__ */ new Error("Image file could not be read"));
-					reader.readAsDataURL(file);
-				});
-			} catch (error) {
-				notify("Could not read the garment image. Item was not added.", "err");
-				return;
-			}
-			if (!await saveMediaToIDB(`wardrobe-${id}`, imageData)) {
-				notify("Could not save the garment image. Item was not added.", "err");
-				return;
-			}
-			setMediaMap((prev) => ({
-				...prev,
-				[`wardrobe-${id}`]: imageData
-			}));
-			hasImage = true;
-		}
-		const nw = {
-			id,
-			name: wName.trim(),
-			category: wCat,
-			occasion: wOccasion,
-			price: Number(wPrice) || 0,
-			reqLevel: Math.max(1, Number(reqLevel) || 1),
-			reqBalance: Math.max(0, Number(reqBalance) || 0),
-			hasImage
-		};
-		setData((prev) => ({
-			...prev,
-			wardrobe: [nw, ...prev.wardrobe]
-		}));
-		setWName("");
-		setWPrice("");
-		setReqLevel("");
-		setReqBalance("");
-		if (fileInput) fileInput.value = "";
-		notify("Garment cataloged in Style Lab");
-	};
-	const saveOutfit = () => {
-		if (!outfitName.trim() || selectedForOutfit.length === 0) return;
-		const no = {
-			id: "out-" + Date.now(),
-			name: outfitName.trim(),
-			itemIds: selectedForOutfit
-		};
-		setData((prev) => ({
-			...prev,
-			outfits: [no, ...prev.outfits]
-		}));
-		setOutfitName("");
-		setSelectedForOutfit([]);
-		notify("Outfit saved to Lookbook");
-	};
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-		className: "space-y-6",
-		children: [
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-				className: "font-mono text-[11px] uppercase tracking-widest",
-				style: { color: "var(--ink-muted)" },
-				children: "07 // APPAREL ARCHIVE, MILESTONE LOCKS & LOOKBOOK"
-			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", {
-				className: "text-2xl font-semibold heading-tight mt-1",
-				children: "Style Lab Wardrobe"
-			})] }),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
-				onSubmit: handleAddItem,
-				className: "arch-panel p-4 rounded-xl grid grid-cols-1 md:grid-cols-12 gap-2.5 items-center",
-				children: [
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-						value: wName,
-						onChange: (e) => setWName(e.target.value),
-						placeholder: "Garment Name (e.g. Heavyweight Overshirt)",
-						className: "md:col-span-3 arch-input rounded-md px-3 py-2 text-xs"
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", {
-						value: wCat,
-						onChange: (e) => setWCat(e.target.value),
-						className: "md:col-span-2 arch-input rounded-md px-2.5 py-2 text-xs",
-						children: [
-							"Tops / Shirts",
-							"T-Shirts",
-							"Trousers / Denim",
-							"Outerwear",
-							"Footwear",
-							"Watches & Carry"
-						].map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: c }, c))
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", {
-						value: wOccasion,
-						onChange: (e) => setWOccasion(e.target.value),
-						className: "md:col-span-1 arch-input rounded-md px-2 py-2 text-xs",
-						children: [
-							"Campus",
-							"Formal / Pitch",
-							"Travel",
-							"Athletic"
-						].map((o) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: o }, o))
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-						type: "number",
-						value: wPrice,
-						onChange: (e) => setWPrice(e.target.value),
-						placeholder: "Cost ₹",
-						className: "md:col-span-1 arch-input rounded-md px-2.5 py-2 text-xs font-mono tabular-nums"
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-						type: "number",
-						value: reqLevel,
-						onChange: (e) => setReqLevel(e.target.value),
-						placeholder: "Req LVL",
-						className: "md:col-span-1 arch-input rounded-md px-2 py-2 text-xs font-mono tabular-nums",
-						title: "Minimum Operator Level to unlock"
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-						type: "number",
-						value: reqBalance,
-						onChange: (e) => setReqBalance(e.target.value),
-						placeholder: "Req Wallet ₹",
-						className: "md:col-span-2 arch-input rounded-md px-2.5 py-2 text-xs font-mono tabular-nums",
-						title: "Minimum Wallet Balance required to unlock"
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-						type: "file",
-						name: "clothImg",
-						accept: "image/*",
-						className: "md:col-span-1 text-[10px] font-mono"
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-						type: "submit",
-						className: "md:col-span-1 arch-btn-primary rounded-md py-2 text-xs font-medium",
-						children: "Add"
-					})
-				]
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-				className: "arch-panel p-4 rounded-xl flex flex-wrap items-center justify-between gap-3",
-				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-					className: "text-xs font-mono",
-					style: { color: "var(--ink-secondary)" },
-					children: [
-						"LOOKBOOK BUILDER: Select unlocked garments below (",
-						selectedForOutfit.length,
-						" selected)"
-					]
-				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-					className: "flex gap-2",
-					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-						value: outfitName,
-						onChange: (e) => setOutfitName(e.target.value),
-						placeholder: "Combination Title...",
-						className: "arch-input rounded-md px-3 py-1.5 text-xs"
-					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-						type: "button",
-						onClick: saveOutfit,
-						className: "arch-btn-primary px-3.5 py-1.5 rounded-md text-xs font-medium",
-						children: "Save Look"
-					})]
-				})]
-			}),
-			data.wardrobe.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyState, {
-				code: "STYLE.WARDROBE // 0_GARMENTS",
-				title: "Your digital closet is empty",
-				subtitle: "Catalog garments above (with optional Req. Level / Wallet ₹ milestone locks and local photo upload) and click items to assemble outfit combinations."
-			}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-				className: "grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4",
-				children: data.wardrobe.map((item) => {
-					const isSel = selectedForOutfit.includes(item.id);
-					const imgSrc = mediaMap[`wardrobe-${item.id}`];
-					const minLvl = Number(item.reqLevel) || 1;
-					const minBal = Number(item.reqBalance) || 0;
-					const isLocked = telemetry.level < minLvl || telemetry.netBalance < minBal;
-					return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						onClick: () => {
-							if (isLocked) {
-								notify(`Locked! Requires LVL ${minLvl} & ₹${minBal.toLocaleString("en-IN")} Wallet balance`, "err");
-								return;
-							}
-							setSelectedForOutfit((prev) => prev.includes(item.id) ? prev.filter((x) => x !== item.id) : [...prev, item.id]);
-						},
-						className: `arch-panel p-3.5 rounded-xl cursor-pointer transition ${isLocked ? "opacity-65" : ""}`,
-						style: { borderColor: isSel ? "var(--accent)" : "var(--border-hairline)" },
-						children: [
-							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-								className: "h-28 rounded-lg border flex items-center justify-center overflow-hidden mb-2.5 relative",
-								style: { backgroundColor: "var(--bg-canvas)" },
-								children: [imgSrc ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
-									src: imgSrc,
-									alt: item.name,
-									className: "w-full h-full object-cover"
-								}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
-									name: "style",
-									size: 24,
-									className: "opacity-30"
-								}), (minLvl > 1 || minBal > 0) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-									className: "absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded text-[9px] font-mono inline-flex items-center gap-1 border",
-									style: {
-										backgroundColor: "rgba(9,9,11,0.88)",
-										color: isLocked ? "var(--status-warn)" : "var(--status-ok)",
-										borderColor: isLocked ? "var(--status-warn)" : "var(--status-ok)"
-									},
-									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
-										name: isLocked ? "lock" : "unlock",
-										size: 10
-									}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: isLocked ? `LVL ${minLvl}` : "UNLOCKED" })]
-								})]
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-								className: "text-[10px] font-mono uppercase",
-								style: { color: "var(--ink-muted)" },
-								children: [
-									item.category,
-									" • ",
-									item.occasion
-								]
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-								className: "text-xs font-semibold mt-0.5",
-								children: item.name
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-								className: "flex items-center justify-between mt-1",
-								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-									className: "text-xs font-mono tabular-nums",
-									style: { color: "var(--ink-secondary)" },
-									children: ["₹", item.price.toLocaleString("en-IN")]
-								}), minBal > 0 && isLocked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-									className: "text-[9px] font-mono",
-									style: { color: "var(--status-warn)" },
-									children: ["Req ₹", minBal.toLocaleString("en-IN")]
-								})]
-							})
-						]
-					}, item.id);
-				})
-			}),
-			data.outfits.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-				className: "space-y-3",
-				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
-					className: "text-sm font-mono uppercase tracking-wider",
-					style: { color: "var(--ink-muted)" },
-					children: "SAVED LOOKBOOK COMBINATIONS"
-				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-					className: "grid grid-cols-1 md:grid-cols-3 gap-4",
-					children: data.outfits.map((o) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: "arch-panel p-4 rounded-xl",
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-							className: "text-xs font-semibold",
-							children: o.name
-						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-							className: "text-xs mt-2 space-y-1",
-							style: { color: "var(--ink-secondary)" },
-							children: o.itemIds.map((id) => {
-								const found = data.wardrobe.find((w) => w.id === id);
-								return found ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-									className: "font-mono text-[11px]",
-									children: [
-										"• ",
-										found.name,
-										" (",
-										found.category,
-										")"
-									]
-								}, id) : null;
-							})
-						})]
-					}, o.id))
-				})]
-			})
-		]
-	});
-};
 var ExperiencesView = () => {
 	const { awardXP, data, focusLabel, focusMinutes, mediaMap, notify, secondsLeft, setActiveTab, setConfirmResetModal, setData, setFocusLabel, setFocusMinutes, setMediaMap, setProfileModal, setSecondsLeft, setTimerRunning, telemetry, timerRunning } = (0, import_react.useContext)(NexoraContext);
 	const [budgetFilter, setBudgetFilter] = (0, import_react.useState)("ALL");
@@ -18333,107 +17525,6 @@ var HabitsView = () => {
 		})]
 	});
 };
-var ExtracurricularView = () => {
-	const { awardXP, data, focusLabel, focusMinutes, mediaMap, notify, secondsLeft, setActiveTab, setConfirmResetModal, setData, setFocusLabel, setFocusMinutes, setMediaMap, setProfileModal, setSecondsLeft, setTimerRunning, telemetry, timerRunning } = (0, import_react.useContext)(NexoraContext);
-	const [eName, setEName] = (0, import_react.useState)("");
-	const [eCat, setECat] = (0, import_react.useState)("Hackathons");
-	const [eAch, setEAch] = (0, import_react.useState)("");
-	const addExtra = (e) => {
-		e.preventDefault();
-		if (!eName.trim()) return;
-		setData((prev) => ({
-			...prev,
-			extracurriculars: [{
-				id: "ex-" + Date.now(),
-				name: eName.trim(),
-				category: eCat,
-				date: (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
-				achievement: eAch.trim() || "Participant"
-			}, ...prev.extracurriculars]
-		}));
-		setEName("");
-		setEAch("");
-		notify("Logged extracurricular record");
-	};
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-		className: "space-y-6",
-		children: [
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-				className: "font-mono text-[11px] uppercase tracking-widest",
-				style: { color: "var(--ink-muted)" },
-				children: "12 // COMPETITIONS, HACKATHONS & LEADERSHIP"
-			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", {
-				className: "text-2xl font-semibold heading-tight mt-1",
-				children: "Extracurricular Log"
-			})] }),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
-				onSubmit: addExtra,
-				className: "arch-panel p-4 rounded-xl grid grid-cols-1 md:grid-cols-12 gap-2.5",
-				children: [
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-						value: eName,
-						onChange: (e) => setEName(e.target.value),
-						placeholder: "Hackathon / Society / Competition",
-						className: "md:col-span-4 arch-input rounded-md px-3 py-2 text-xs"
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", {
-						value: eCat,
-						onChange: (e) => setECat(e.target.value),
-						className: "md:col-span-3 arch-input rounded-md px-2.5 py-2 text-xs",
-						children: [
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Hackathons" }),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Technical Societies" }),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Open Source" }),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Sports & Athletics" }),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Volunteering" })
-						]
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-						value: eAch,
-						onChange: (e) => setEAch(e.target.value),
-						placeholder: "Role / Placement / Outcome",
-						className: "md:col-span-3 arch-input rounded-md px-3 py-2 text-xs"
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-						type: "submit",
-						className: "md:col-span-2 arch-btn-primary rounded-md py-2 text-xs font-medium",
-						children: "+ Log Record"
-					})
-				]
-			}),
-			data.extracurriculars.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyState, {
-				code: "EXTRACURRICULAR.LOG // 0_RECORDS",
-				title: "No hackathons or clubs recorded",
-				subtitle: "Document hackathons, societies, leadership roles, and competition outcomes above."
-			}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-				className: "grid grid-cols-1 md:grid-cols-2 gap-4",
-				children: data.extracurriculars.map((ex) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-					className: "arch-panel p-4 rounded-xl",
-					children: [
-						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-							className: "text-[10px] font-mono uppercase tabular-nums",
-							style: { color: "var(--ink-muted)" },
-							children: [
-								ex.category,
-								" • ",
-								ex.date
-							]
-						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
-							className: "text-sm font-semibold mt-1",
-							children: ex.name
-						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-							className: "text-xs font-mono mt-1",
-							style: { color: "var(--ink-secondary)" },
-							children: ["OUTCOME: ", ex.achievement]
-						})
-					]
-				}, ex.id))
-			})
-		]
-	});
-};
 var ArcadeView = () => {
 	const { awardXP, data, focusLabel, focusMinutes, mediaMap, notify, secondsLeft, setActiveTab, setConfirmResetModal, setData, setFocusLabel, setFocusMinutes, setMediaMap, setProfileModal, setSecondsLeft, setTimerRunning, telemetry, timerRunning } = (0, import_react.useContext)(NexoraContext);
 	const PUZZLES = (0, import_react.useMemo)(() => [
@@ -18487,157 +17578,126 @@ var ArcadeView = () => {
 	};
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "space-y-6",
-		children: [
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-				className: "flex flex-wrap items-end justify-between gap-4",
-				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-					className: "font-mono text-[11px] uppercase tracking-widest",
-					style: { color: "var(--ink-muted)" },
-					children: "13 // COGNITIVE & TELEMETRY SANDBOX"
-				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", {
-					className: "text-2xl font-semibold heading-tight mt-1",
-					children: "Simulation Deck"
-				})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-					className: "font-mono text-xs",
-					style: { color: "var(--ink-secondary)" },
-					children: [
-						"Park Rover in any top linear bay (P1–P6) & press ",
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("kbd", {
-							className: "px-1.5 py-0.5 border rounded",
-							children: "Enter"
-						}),
-						" to launch module"
-					]
-				})]
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(RoverSimulationCanvas, {
-				bestNodes: data.arcadeScores.roverNodes,
-				soundEnabled: data.profile.soundEnabled,
-				onUpdateNodes: (c) => {
-					if (c > data.arcadeScores.roverNodes) setData((prev) => ({
-						...prev,
-						arcadeScores: {
-							...prev.arcadeScores,
-							roverNodes: c
-						}
-					}));
-				},
-				onJumpModule: (id) => {
-					notify(`Launching ${id.toUpperCase()} module...`);
-					setActiveTab(id);
-				}
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-				className: "grid grid-cols-1 md:grid-cols-3 gap-4",
-				children: [
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: "arch-panel p-4 rounded-xl",
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-							className: "font-mono text-xs uppercase mb-2",
-							style: { color: "var(--ink-muted)" },
-							children: "SIM.02 // VECTOR SNAKE"
-						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(VectorSnakeGame, {
-							bestScore: data.arcadeScores.snakeHigh,
-							soundEnabled: data.profile.soundEnabled,
-							onNewBest: (sc) => setData((prev) => ({
-								...prev,
-								arcadeScores: {
-									...prev.arcadeScores,
-									snakeHigh: sc
-								}
-							})),
-							onUnlockVault: () => {
-								notify("Classified Vault Trapdoor Unlocked");
-								setActiveTab("secret-vault");
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+			className: "flex flex-wrap items-end justify-between gap-4",
+			children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+				className: "font-mono text-[11px] uppercase tracking-widest",
+				style: { color: "var(--ink-muted)" },
+				children: "13 // COGNITIVE & TELEMETRY SANDBOX"
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", {
+				className: "text-2xl font-semibold heading-tight mt-1",
+				children: "Simulation Deck"
+			})] })
+		}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+			className: "grid grid-cols-1 md:grid-cols-3 gap-4",
+			children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "arch-panel p-4 rounded-xl",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+						className: "font-mono text-xs uppercase mb-2",
+						style: { color: "var(--ink-muted)" },
+						children: "SIM.01 // VECTOR SNAKE"
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(VectorSnakeGame, {
+						bestScore: data.arcadeScores.snakeHigh,
+						soundEnabled: data.profile.soundEnabled,
+						onNewBest: (sc) => setData((prev) => ({
+							...prev,
+							arcadeScores: {
+								...prev.arcadeScores,
+								snakeHigh: sc
 							}
-						})]
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: "arch-panel p-4 rounded-xl",
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-							className: "font-mono text-xs uppercase mb-2",
-							style: { color: "var(--ink-muted)" },
-							children: "SIM.03 // REFLEX & 3x3 MATRIX"
-						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReactionLatencyTest, {
-							bestMs: data.arcadeScores.reactionBestMs,
-							soundEnabled: data.profile.soundEnabled,
-							onAwardXP: awardXP,
-							onNewBest: (ms) => setData((prev) => ({
-								...prev,
-								arcadeScores: {
-									...prev.arcadeScores,
-									reactionBestMs: ms
-								}
-							}))
-						})]
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: "arch-panel p-4 rounded-xl flex flex-col justify-between space-y-3",
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-								className: "flex items-center justify-between mb-2",
-								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-									className: "font-mono text-xs uppercase",
-									style: { color: "var(--ink-muted)" },
-									children: "SIM.04 // ALGORITHMIC SYNTH"
-								}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-									className: "font-mono text-[10px] px-1.5 py-0.5 rounded border",
-									children: [
-										"#",
-										puzzleIdx + 1,
-										" / ",
-										PUZZLES.length
-									]
-								})]
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-								className: "p-3 rounded-md border font-mono text-xs leading-relaxed",
-								style: { backgroundColor: "var(--bg-canvas)" },
-								children: currentPuzzle.q
-							}),
-							showHint && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-								className: "mt-2 font-mono text-[11px]",
-								style: { color: "var(--status-warn)" },
-								children: ["HINT: ", currentPuzzle.hint]
-							})
-						] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
-							onSubmit: verifyPuzzle,
-							className: "space-y-2",
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-								className: "flex gap-2",
-								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-									value: logicAns,
-									onChange: (e) => setLogicAns(e.target.value),
-									placeholder: "Enter result...",
-									className: "flex-1 arch-input rounded-md px-3 py-1.5 text-xs font-mono tabular-nums"
-								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-									type: "submit",
-									className: "arch-btn-primary px-3 py-1.5 rounded-md text-xs font-mono",
-									children: "VERIFY"
-								})]
-							}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-								className: "flex justify-between",
-								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-									type: "button",
-									onClick: () => setShowHint((h) => !h),
-									className: "arch-btn-ghost px-2 py-1 rounded text-[10px] font-mono",
-									children: showHint ? "HIDE HINT" : "SHOW HINT"
-								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-									type: "button",
-									onClick: () => {
-										setShowHint(false);
-										setLogicAns("");
-										setPuzzleIdx((i) => i + 1);
-									},
-									className: "arch-btn-ghost px-2 py-1 rounded text-[10px] font-mono",
-									children: "SKIP →"
-								})]
+						})),
+						onUnlockVault: () => {
+							notify("Classified Vault Trapdoor Unlocked");
+							setActiveTab("secret-vault");
+						}
+					})]
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "arch-panel p-4 rounded-xl",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+						className: "font-mono text-xs uppercase mb-2",
+						style: { color: "var(--ink-muted)" },
+						children: "SIM.02 // REFLEX & 3x3 MATRIX"
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReactionLatencyTest, {
+						bestMs: data.arcadeScores.reactionBestMs,
+						soundEnabled: data.profile.soundEnabled,
+						onAwardXP: awardXP,
+						onNewBest: (ms) => setData((prev) => ({
+							...prev,
+							arcadeScores: {
+								...prev.arcadeScores,
+								reactionBestMs: ms
+							}
+						}))
+					})]
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "arch-panel p-4 rounded-xl flex flex-col justify-between space-y-3",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "flex items-center justify-between mb-2",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								className: "font-mono text-xs uppercase",
+								style: { color: "var(--ink-muted)" },
+								children: "SIM.03 // ALGORITHMIC SYNTH"
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+								className: "font-mono text-[10px] px-1.5 py-0.5 rounded border",
+								children: [
+									"#",
+									puzzleIdx + 1,
+									" / ",
+									PUZZLES.length
+								]
+							})]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+							className: "p-3 rounded-md border font-mono text-xs leading-relaxed",
+							style: { backgroundColor: "var(--bg-canvas)" },
+							children: currentPuzzle.q
+						}),
+						showHint && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "mt-2 font-mono text-[11px]",
+							style: { color: "var(--status-warn)" },
+							children: ["HINT: ", currentPuzzle.hint]
+						})
+					] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
+						onSubmit: verifyPuzzle,
+						className: "space-y-2",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "flex gap-2",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+								value: logicAns,
+								onChange: (e) => setLogicAns(e.target.value),
+								placeholder: "Enter result...",
+								className: "flex-1 arch-input rounded-md px-3 py-1.5 text-xs font-mono tabular-nums"
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+								type: "submit",
+								className: "arch-btn-primary px-3 py-1.5 rounded-md text-xs font-mono",
+								children: "VERIFY"
+							})]
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "flex justify-between",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+								type: "button",
+								onClick: () => setShowHint((h) => !h),
+								className: "arch-btn-ghost px-2 py-1 rounded text-[10px] font-mono",
+								children: showHint ? "HIDE HINT" : "SHOW HINT"
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+								type: "button",
+								onClick: () => {
+									setShowHint(false);
+									setLogicAns("");
+									setPuzzleIdx((i) => i + 1);
+								},
+								className: "arch-btn-ghost px-2 py-1 rounded text-[10px] font-mono",
+								children: "SKIP →"
 							})]
 						})]
-					})
-				]
-			})
-		]
+					})]
+				})
+			]
+		})]
 	});
 };
 var HabitDesignView = () => {
@@ -23986,75 +23046,51 @@ var NexoraApp = () => {
 			keyHint: "3"
 		},
 		{
-			id: "missions",
-			label: "Mission Control",
-			icon: "missions",
-			badge: data.tasks.filter((t) => !t.completed).length,
-			keyHint: "4"
-		},
-		{
 			id: "skills",
 			label: "Skill Matrix",
 			icon: "skills",
 			badge: data.skills.length,
-			keyHint: "5"
-		},
-		{
-			id: "projects",
-			label: "Project Lab",
-			icon: "projects",
-			badge: data.projects.length,
-			keyHint: "6"
+			keyHint: "4"
 		},
 		{
 			id: "innovation",
 			label: "Innovation Canvas",
 			icon: "innovation",
 			badge: (data.ideas || []).length,
-			keyHint: "7"
-		},
-		{
-			id: "style",
-			label: "Style Lab",
-			icon: "style",
-			badge: data.wardrobe.length,
-			keyHint: "8"
+			keyHint: "5"
 		},
 		{
 			id: "calendar",
 			label: "Unified Calendar",
 			icon: "calendar",
-			keyHint: "9"
+			keyHint: "6"
 		},
 		{
 			id: "habits",
 			label: "Habit Matrix",
 			icon: "habits",
-			badge: data.habits.length
+			badge: data.habits.length,
+			keyHint: "7"
 		},
 		{
 			id: "focus-discipline",
 			label: "Focus Discipline",
 			icon: "clock",
-			badge: (data.distractionLog || []).length
+			badge: (data.distractionLog || []).length,
+			keyHint: "8"
 		},
 		{
 			id: "learning-engine",
 			label: "Learning Engine",
 			icon: "memory",
-			badge: (data.feynmanNotes || []).length + (data.recallQs || []).length
+			badge: (data.feynmanNotes || []).length + (data.recallQs || []).length,
+			keyHint: "9"
 		},
 		{
 			id: "life-money",
 			label: "Life & Money",
 			icon: "bank",
 			badge: (data.lifeWheel || []).length
-		},
-		{
-			id: "extracurricular",
-			label: "Extracurriculars",
-			icon: "extracurricular",
-			badge: data.extracurriculars.length
 		},
 		{
 			id: "arcade",
@@ -24113,9 +23149,9 @@ var NexoraApp = () => {
 				}
 				return;
 			}
-			if (e.altKey && (e.code === "KeyS" || e.code === "KeyG")) {
+			if (e.altKey && e.code === "KeyG") {
 				e.preventDefault();
-				setActiveTab(e.code === "KeyS" ? "style" : "arcade");
+				setActiveTab("arcade");
 				return;
 			}
 			const tag = (e.target?.tagName || "").toLowerCase();
@@ -24270,13 +23306,11 @@ var NexoraApp = () => {
 			case "skills": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SkillsView, {});
 			case "projects": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProjectsView, {});
 			case "innovation": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(InnovationCanvasView, {});
-			case "style": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(StyleLabView, {});
 			case "calendar": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CalendarView, {});
 			case "habits": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HabitsView, {});
 			case "focus-discipline": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FocusDisciplineView, {});
 			case "learning-engine": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LearningEngineView, {});
 			case "life-money": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LifeMoneyView, {});
-			case "extracurricular": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ExtracurricularView, {});
 			case "arcade": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ArcadeView, {});
 			case "habit-design": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HabitDesignView, {});
 			case "study-vault": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(StudyVaultView, {});

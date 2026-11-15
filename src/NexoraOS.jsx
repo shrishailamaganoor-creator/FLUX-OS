@@ -5430,32 +5430,12 @@ const NexoraContext = createContext(null);
                 </div>
                 <h1 className="text-2xl font-semibold heading-tight mt-1">Simulation Deck</h1>
               </div>
-              <div className="font-mono text-xs" style={{ color: 'var(--ink-secondary)' }}>
-                Park Rover in any top linear bay (P1–P6) &amp; press <kbd className="px-1.5 py-0.5 border rounded">Enter</kbd> to launch module
-              </div>
             </div>
-
-            <RoverSimulationCanvas
-              bestNodes={data.arcadeScores.roverNodes}
-              soundEnabled={data.profile.soundEnabled}
-              onUpdateNodes={(c) => {
-                if (c > data.arcadeScores.roverNodes) {
-                  setData((prev) => ({
-                    ...prev,
-                    arcadeScores: { ...prev.arcadeScores, roverNodes: c }
-                  }));
-                }
-              }}
-              onJumpModule={(id) => {
-                notify(`Launching ${id.toUpperCase()} module...`);
-                setActiveTab(id);
-              }}
-            />
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="arch-panel p-4 rounded-xl">
                 <div className="font-mono text-xs uppercase mb-2" style={{ color: 'var(--ink-muted)' }}>
-                  SIM.02 // VECTOR SNAKE
+                  SIM.01 // VECTOR SNAKE
                 </div>
                 <VectorSnakeGame
                   bestScore={data.arcadeScores.snakeHigh}
@@ -5472,7 +5452,7 @@ const NexoraContext = createContext(null);
 
               <div className="arch-panel p-4 rounded-xl">
                 <div className="font-mono text-xs uppercase mb-2" style={{ color: 'var(--ink-muted)' }}>
-                  SIM.03 // REFLEX &amp; 3x3 MATRIX
+                  SIM.02 // REFLEX &amp; 3x3 MATRIX
                 </div>
                 <ReactionLatencyTest
                   bestMs={data.arcadeScores.reactionBestMs}
@@ -5488,7 +5468,7 @@ const NexoraContext = createContext(null);
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-mono text-xs uppercase" style={{ color: 'var(--ink-muted)' }}>
-                      SIM.04 // ALGORITHMIC SYNTH
+                      SIM.03 // ALGORITHMIC SYNTH
                     </span>
                     <span className="font-mono text-[10px] px-1.5 py-0.5 rounded border">
                       #{puzzleIdx + 1} / {PUZZLES.length}
@@ -10297,17 +10277,13 @@ const NexoraContext = createContext(null);
         { id: 'dashboard', label: 'Today', icon: 'dashboard', keyHint: '1' },
         { id: 'academy', label: 'Academy', icon: 'academy', badge: data.subjects.length, keyHint: '2' },
         { id: 'bank', label: 'Wallet', icon: 'bank', badge: data.transactions.length, keyHint: '3' },
-        { id: 'missions', label: 'Mission Control', icon: 'missions', badge: data.tasks.filter((t) => !t.completed).length, keyHint: '4' },
-        { id: 'skills', label: 'Skill Matrix', icon: 'skills', badge: data.skills.length, keyHint: '5' },
-        { id: 'projects', label: 'Project Lab', icon: 'projects', badge: data.projects.length, keyHint: '6' },
-        { id: 'innovation', label: 'Innovation Canvas', icon: 'innovation', badge: (data.ideas || []).length, keyHint: '7' },
-        { id: 'style', label: 'Style Lab', icon: 'style', badge: data.wardrobe.length, keyHint: '8' },
-        { id: 'calendar', label: 'Unified Calendar', icon: 'calendar', keyHint: '9' },
-        { id: 'habits', label: 'Habit Matrix', icon: 'habits', badge: data.habits.length },
-        { id: 'focus-discipline', label: 'Focus Discipline', icon: 'clock', badge: (data.distractionLog || []).length },
-        { id: 'learning-engine', label: 'Learning Engine', icon: 'memory', badge: (data.feynmanNotes || []).length + (data.recallQs || []).length },
+        { id: 'skills', label: 'Skill Matrix', icon: 'skills', badge: data.skills.length, keyHint: '4' },
+        { id: 'innovation', label: 'Innovation Canvas', icon: 'innovation', badge: (data.ideas || []).length, keyHint: '5' },
+        { id: 'calendar', label: 'Unified Calendar', icon: 'calendar', keyHint: '6' },
+        { id: 'habits', label: 'Habit Matrix', icon: 'habits', badge: data.habits.length, keyHint: '7' },
+        { id: 'focus-discipline', label: 'Focus Discipline', icon: 'clock', badge: (data.distractionLog || []).length, keyHint: '8' },
+        { id: 'learning-engine', label: 'Learning Engine', icon: 'memory', badge: (data.feynmanNotes || []).length + (data.recallQs || []).length, keyHint: '9' },
         { id: 'life-money', label: 'Life & Money', icon: 'bank', badge: (data.lifeWheel || []).length },
-        { id: 'extracurricular', label: 'Extracurriculars', icon: 'extracurricular', badge: data.extracurriculars.length },
         { id: 'arcade', label: 'Simulation Deck', icon: 'arcade' },
         { id: 'habit-design', label: 'Habit Design', icon: 'habits', badge: (data.habitDesigns || []).length },
         { id: 'study-vault', label: 'Study Vault', icon: 'memory', badge: (data.revisionTopics || []).length },
@@ -10334,9 +10310,9 @@ const NexoraContext = createContext(null);
             }
             return;
           }
-          if (e.altKey && (e.code === 'KeyS' || e.code === 'KeyG')) {
+          if (e.altKey && e.code === 'KeyG') {
             e.preventDefault();
-            setActiveTab(e.code === 'KeyS' ? 'style' : 'arcade');
+            setActiveTab('arcade');
             return;
           }
           const tag = (e.target?.tagName || '').toLowerCase();
@@ -10488,13 +10464,11 @@ const NexoraContext = createContext(null);
           case 'skills': return <SkillsView />;
           case 'projects': return <ProjectsView />;
           case 'innovation': return <InnovationCanvasView />;
-          case 'style': return <StyleLabView />;
           case 'calendar': return <CalendarView />;
           case 'habits': return <HabitsView />;
           case 'focus-discipline': return <FocusDisciplineView />;
           case 'learning-engine': return <LearningEngineView />;
           case 'life-money': return <LifeMoneyView />;
-          case 'extracurricular': return <ExtracurricularView />;
           case 'arcade': return <ArcadeView />;
           case 'habit-design': return <HabitDesignView />;
           case 'study-vault': return <StudyVaultView />;
