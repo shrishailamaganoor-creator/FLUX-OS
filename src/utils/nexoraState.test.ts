@@ -21,10 +21,10 @@ test('isPlainObject identifies plain objects vs arrays and primitives', () => {
 test('mergeValidatedState merges partial candidate state onto EMPTY_STATE defaults', () => {
   const merged = mergeValidatedState(EMPTY_STATE, {
     focusGoalHrs: 8,
-    profile: { name: 'Shrishaila M', theme: 'industrial' },
+    profile: { name: 'Shrishaila M', theme: 'paper' },
   });
   assert.equal(merged.focusGoalHrs, 8);
-  assert.equal(merged.profile.theme, 'industrial');
+  assert.equal(merged.profile.theme, 'paper');
   assert.equal(merged.profile.soundEnabled, true);
   assert.deepEqual(merged.tasks, []);
 });

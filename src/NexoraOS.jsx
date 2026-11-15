@@ -6222,26 +6222,28 @@ const NexoraContext = createContext(null);
               <div className="font-mono text-xs uppercase" style={{ color: 'var(--ink-muted)' }}>
                 ARCHITECTURAL COLOR TOKENS
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {[
                   { id: 'obsidian', name: 'Direction A: Obsidian Precision', sub: 'Linear / Raycast Matte Carbon (#09090B)' },
-                  { id: 'paper', name: 'Direction B: Editorial Paper', sub: 'Stripe Press Warm Alabaster (#FAF8F5)' },
-                  { id: 'industrial', name: 'Direction C: Swiss Industrial', sub: 'Teenage Eng. Stone + Orange (#FF4F00)' }
-                ].map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() =>
-                      setData((prev) => ({ ...prev, profile: { ...prev.profile, theme: t.id } }))
-                    }
-                    className={`p-3.5 rounded-lg border text-left transition ${
-                      data.profile.theme === t.id ? 'arch-btn-primary' : 'arch-btn-ghost'
-                    }`}
-                  >
-                    <div className="text-xs font-semibold">{t.name}</div>
-                    <div className="text-[10px] font-mono mt-1 opacity-75">{t.sub}</div>
-                  </button>
-                ))}
+                  { id: 'paper', name: 'Direction B: Editorial Paper', sub: 'Stripe Press Warm Alabaster (#FAF8F5)' }
+                ].map((t) => {
+                  const activeTheme = data.profile.theme === 'paper' ? 'paper' : 'obsidian';
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() =>
+                        setData((prev) => ({ ...prev, profile: { ...prev.profile, theme: t.id } }))
+                      }
+                      className={`p-3.5 rounded-lg border text-left transition ${
+                        activeTheme === t.id ? 'arch-btn-primary' : 'arch-btn-ghost'
+                      }`}
+                    >
+                      <div className="text-xs font-semibold">{t.name}</div>
+                      <div className="text-[10px] font-mono mt-1 opacity-75">{t.sub}</div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -9298,7 +9300,7 @@ const NexoraContext = createContext(null);
       }, []);
 
       useEffect(() => {
-        document.documentElement.setAttribute('data-theme', data.profile.theme || 'obsidian');
+        document.documentElement.setAttribute('data-theme', data.profile.theme === 'paper' ? 'paper' : 'obsidian');
         const saved = savePersistedState(data);
         if (saved) {
           stateStorageWarningRef.current = false;

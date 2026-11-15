@@ -2069,30 +2069,6 @@
   --status-err: #be123c;
 }
 
-[data-theme="industrial"] {
-  --bg-canvas: #eaeae6;
-  --bg-surface: #fff;
-  --bg-elevated: #f4f4f0;
-  --bg-active: #dcdcd4;
-  --border-hairline: #11111121;
-  --border-elevated: #1113;
-  --border-strong: #11111157;
-  --specular-top: #ffffffe6;
-  --ink-primary: #111;
-  --ink-secondary: #4a4a46;
-  --ink-muted: #787872;
-  --ink-dim: #9e9e96;
-  --accent: #ff4f00;
-  --accent-fg: #fff;
-  --accent-subtle: #ff4f001a;
-  --accent-border: #ff4f0059;
-  --spotlight: #ff4f000a;
-  --dot-matrix-color: #11111117;
-  --status-ok: #00a86b;
-  --status-warn: #ff8c00;
-  --status-err: #e60026;
-}
-
 * {
   box-sizing: border-box;
   border-color: var(--border-hairline);

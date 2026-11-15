@@ -72,38 +72,6 @@
   --status-err: #BE123C;
 }
 
-/* ============================================================================
-   DIRECTION C: SWISS INDUSTRIAL (Teenage Engineering / Nothing)
-   Machined Stone #EAEAE6, Crisp White Cards, Safety Orange #FF4F00 Accents
-   ============================================================================ */
-[data-theme="industrial"] {
-  --bg-canvas: #EAEAE6;
-  --bg-surface: #FFFFFF;
-  --bg-elevated: #F4F4F0;
-  --bg-active: #DCDCD4;
-
-  --border-hairline: rgba(17, 17, 17, 0.13);
-  --border-elevated: rgba(17, 17, 17, 0.20);
-  --border-strong: rgba(17, 17, 17, 0.34);
-  --specular-top: rgba(255, 255, 255, 0.90);
-
-  --ink-primary: #111111;
-  --ink-secondary: #4A4A46;
-  --ink-muted: #787872;
-  --ink-dim: #9E9E96;
-
-  --accent: #FF4F00;
-  --accent-fg: #FFFFFF;
-  --accent-subtle: rgba(255, 79, 0, 0.10);
-  --accent-border: rgba(255, 79, 0, 0.35);
-  --spotlight: rgba(255, 79, 0, 0.04);
-  --dot-matrix-color: rgba(17, 17, 17, 0.09);
-
-  --status-ok: #00A86B;
-  --status-warn: #FF8C00;
-  --status-err: #E60026;
-}
-
 * {
   box-sizing: border-box;
   border-color: var(--border-hairline);

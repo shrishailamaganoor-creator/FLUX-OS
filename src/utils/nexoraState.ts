@@ -32,7 +32,7 @@ export const EMPTY_STATE = {
     name: 'Shrishaila M',
     title: 'B.Tech Engineering',
     semester: 'Semester 1',
-    theme: 'obsidian', // 'obsidian' | 'paper' | 'industrial'
+    theme: 'obsidian', // 'obsidian' | 'paper'
     soundEnabled: true,
     gamificationEnabled: true,
     xp: 0

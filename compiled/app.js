@@ -19408,41 +19408,36 @@ var SettingsView = () => {
 					style: { color: "var(--ink-muted)" },
 					children: "ARCHITECTURAL COLOR TOKENS"
 				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-					className: "grid grid-cols-1 sm:grid-cols-3 gap-3",
-					children: [
-						{
-							id: "obsidian",
-							name: "Direction A: Obsidian Precision",
-							sub: "Linear / Raycast Matte Carbon (#09090B)"
-						},
-						{
-							id: "paper",
-							name: "Direction B: Editorial Paper",
-							sub: "Stripe Press Warm Alabaster (#FAF8F5)"
-						},
-						{
-							id: "industrial",
-							name: "Direction C: Swiss Industrial",
-							sub: "Teenage Eng. Stone + Orange (#FF4F00)"
-						}
-					].map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
-						type: "button",
-						onClick: () => setData((prev) => ({
-							...prev,
-							profile: {
-								...prev.profile,
-								theme: t.id
-							}
-						})),
-						className: `p-3.5 rounded-lg border text-left transition ${data.profile.theme === t.id ? "arch-btn-primary" : "arch-btn-ghost"}`,
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-							className: "text-xs font-semibold",
-							children: t.name
-						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-							className: "text-[10px] font-mono mt-1 opacity-75",
-							children: t.sub
-						})]
-					}, t.id))
+					className: "grid grid-cols-1 sm:grid-cols-2 gap-3",
+					children: [{
+						id: "obsidian",
+						name: "Direction A: Obsidian Precision",
+						sub: "Linear / Raycast Matte Carbon (#09090B)"
+					}, {
+						id: "paper",
+						name: "Direction B: Editorial Paper",
+						sub: "Stripe Press Warm Alabaster (#FAF8F5)"
+					}].map((t) => {
+						const activeTheme = data.profile.theme === "paper" ? "paper" : "obsidian";
+						return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+							type: "button",
+							onClick: () => setData((prev) => ({
+								...prev,
+								profile: {
+									...prev.profile,
+									theme: t.id
+								}
+							})),
+							className: `p-3.5 rounded-lg border text-left transition ${activeTheme === t.id ? "arch-btn-primary" : "arch-btn-ghost"}`,
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+								className: "text-xs font-semibold",
+								children: t.name
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+								className: "text-[10px] font-mono mt-1 opacity-75",
+								children: t.sub
+							})]
+						}, t.id);
+					})
 				})]
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -22913,7 +22908,7 @@ var NexoraApp = () => {
 		}, 2800);
 	}, []);
 	(0, import_react.useEffect)(() => {
-		document.documentElement.setAttribute("data-theme", data.profile.theme || "obsidian");
+		document.documentElement.setAttribute("data-theme", data.profile.theme === "paper" ? "paper" : "obsidian");
 		if (savePersistedState(data)) stateStorageWarningRef.current = false;
 		else if (!stateStorageWarningRef.current) {
 			stateStorageWarningRef.current = true;

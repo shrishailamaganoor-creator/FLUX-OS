@@ -5,7 +5,7 @@
 - **Architecture:** React 19 + TypeScript + Vite + Tailwind CSS v4 (plus precompiled static bundle in `./compiled/`)
 - **Persistence:** 100% Local-First (`localStorage` + `IndexedDB`) · Zero Backend · Zero Cloud Database · `$0` Operating Cost
 - **Offline & Installable:** Progressive Web App (`manifest.webmanifest` + Network-First Service Worker `sw.js` `flux-v2.3.0`)
-- **Design System:** 3 Calibrated Engineering Themes (`Direction A: Obsidian Precision`, `Direction B: Editorial Paper`, `Direction C: Swiss Industrial`)
+- **Design System:** 2 Calibrated Engineering Themes (`Direction A: Obsidian Precision`, `Direction B: Editorial Paper`)
 
 ---
 
@@ -127,9 +127,9 @@ All modules are accessible from the fixed `240px` collapsible left sidebar, the 
     - **SIM.04 // Algorithmic Synth:** Bitwise and mathematical sequence benchmarks (+50 XP per verified solution).
 21. **System Core (`14 // System Configuration & Storage` — `SettingsView`)**
     - **Sidebar Module Visibility Manager:** Hide or show any module in the sidebar without losing its underlying data (`TODAY` and `SYSTEM CORE` remain pinned).
-    - **3 Authentic Engineering Themes:** Switch instantaneously between `Direction A: Obsidian Precision`, `Direction B: Editorial Paper`, and `Direction C: Swiss Industrial`.
+    - **2 Authentic Engineering Themes:** Switch instantaneously between `Direction A: Obsidian Precision` and `Direction B: Editorial Paper`.
     - **Operator Identity & Tactile Audio Toggle:** Customize Operator Name, Program/Branch, Active Semester, and synthesized UI click feedback.
-    - **Local Storage Vault:** One-click **Export JSON Snapshot** (bundles both `localStorage` state and all `IndexedDB` base64 media into `xor-bit-backup-YYYY-MM-DD.json`), schema-validated **Import JSON Snapshot**, and **Wipe All Local Data**.
+    - **Local Storage Vault:** One-click **Export JSON Snapshot** (bundles both `localStorage` state and all `IndexedDB` base64 media into `flux-backup-YYYY-MM-DD.json`), schema-validated **Import JSON Snapshot**, and **Wipe All Local Data**.
 22. **Classified Vault Trapdoor (`08 & 09 // SecretVaultView` — Hidden Module)**
     - Zero sidebar footprint. Unlocked from **Simulation Deck → Vector Snake** by clicking the `[VAULT]` header button or pressing `Ctrl/Cmd + H` (or `H` while hovering/playing the snake canvas). Press `Esc` to lock immediately.
     - Houses two private subsystems:
@@ -153,11 +153,10 @@ All modules are accessible from the fixed `240px` collapsible left sidebar, the 
 | `IndexedDB` | `NexoraStyleVaultDB` | Store: `garmentMedia` | Stores high-resolution base64 data URLs for **Style Lab** garment photos (`wardrobe-<id>`) and **Innovation Canvas** wireframe sketches / pasted images (`idea-<id>`), bypassing the ~5 MB `localStorage` ceiling. |
 | **JSON Snapshot** | `flux-backup-YYYY-MM-DD.json` | `{ format: "FLUX_BACKUP_V1", exportedAt, data, media }` | Full-fidelity portable backup combining `localStorage` state + `IndexedDB` media, verified on import via `normalizeImportedState()` and `validateImportedMedia()`. |
 
-### 3-Direction Engineering Theme System (`src/index.css`)
-Scoped via `[data-theme="obsidian | paper | industrial"]` on `<html>`:
+### 2-Direction Engineering Theme System (`src/index.css`)
+Scoped via `[data-theme="obsidian | paper"]` on `<html>`:
 - **Direction A — Obsidian Precision (`obsidian`, Default):** Matte Carbon `#09090B` canvas, `#111113` elevated surface cards, `1px` structural hairlines, and pure monochrome `#FAFAFA` primary action buttons (`--accent: #FAFAFA`, `--accent-fg: #09090B`).
 - **Direction B — Editorial Paper (`paper`):** Stripe Press Warm Alabaster `#FAF8F5` canvas, crisp `#FFFFFF` surface panels, and deep warm ink `#1A1917` primary controls.
-- **Direction C — Swiss Industrial (`industrial`):** Teenage Engineering Machined Stone `#EAEAE6` canvas, crisp `#FFFFFF` surface cards, and Safety Orange `#FF4F00` primary buttons and active indicators.
 
 ### Procedural Web Audio Engine & PWA Offline Architecture
 - **Web Audio API Synthesizer:** Zero external MP3/WAV dependencies. Generates tactile UI micro-clicks (`playTactileClick(enabled, freq, durationMs)`), white/pink/brown filtered noise buffers, and stereo-panned `200 Hz` / `240 Hz` oscillators for `40 Hz` gamma binaural beats.
