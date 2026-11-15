@@ -1,11 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  DEFAULT_SHOWCASE_MISSIONS,
   EMPTY_STATE,
+  calculateAttendanceProjection,
   ensureWritableFetch,
+  filterCommandPaletteItems,
   isPlainObject,
   mergeValidatedState,
   normalizeImportedState,
+  stepShowcaseMissionXp,
+  toggleShowcaseMissionStatus,
   validateImportedMedia,
 } from './nexoraState';
 
@@ -72,4 +77,35 @@ test('ensureWritableFetch allows assigning to a previously getter-only fetch pro
   mockWin.fetch = replacementFetch;
   assert.equal(mockWin.fetch, replacementFetch);
 });
+
+test('toggleShowcaseMissionStatus and stepShowcaseMissionXp update mission records deterministically', () => {
+  const next = toggleShowcaseMissionStatus(DEFAULT_SHOWCASE_MISSIONS, 'm-raft');
+  assert.equal(next[0].status, 'done');
+  const next2 = toggleShowcaseMissionStatus(next, 'm-raft');
+  assert.equal(next2[0].status, 'queued');
+  const stepped = stepShowcaseMissionXp(DEFAULT_SHOWCASE_MISSIONS, 'm-raft', 30);
+  assert.equal(stepped[0].xp, 150);
+});
+
+test('calculateAttendanceProjection computes safe buffer and recovery sessions', () => {
+  const safe = calculateAttendanceProjection(34, 40, 75);
+  assert.equal(safe.currentPct, 85);
+  assert.equal(safe.status, 'SAFE');
+  assert.equal(safe.marginClasses, 5);
+
+  const critical = calculateAttendanceProjection(20, 30, 75);
+  assert.equal(critical.status, 'CRITICAL');
+  assert.equal(critical.marginClasses, -10);
+});
+
+test('filterCommandPaletteItems matches multi-token fuzzy queries', () => {
+  const items = [
+    { id: '1', label: 'Launch Mission Control', category: 'OS MODULE', shortcut: '4' },
+    { id: '2', label: 'Direction A: Obsidian Precision', category: 'THEME', shortcut: 'T' },
+  ];
+  assert.equal(filterCommandPaletteItems(items, 'mission 4').length, 1);
+  assert.equal(filterCommandPaletteItems(items, 'obsidian theme').length, 1);
+  assert.equal(filterCommandPaletteItems(items, 'nonexistent').length, 0);
+});
+
 

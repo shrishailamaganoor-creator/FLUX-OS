@@ -235,15 +235,40 @@ const NexoraContext = createContext(null);
       </svg>
     );
 
-    // Architectural Empty State Component
+    // Segmented Telemetry Progress Bar (12-segment hardware gauge)
+    const SegmentedTelemetryBar = ({ pct = 0, segments = 12 }) => {
+      const clamped = Math.max(0, Math.min(100, Number(pct) || 0));
+      const activeCount = Math.round((clamped / 100) * segments);
+      return (
+        <div className="grid gap-1 mt-3" style={{ gridTemplateColumns: `repeat(${segments}, minmax(0, 1fr))` }} aria-hidden="true">
+          {Array.from({ length: segments }).map((_, idx) => {
+            const lit = idx < activeCount;
+            return (
+              <span
+                key={idx}
+                className="h-1.5 rounded-[2px] transition-all duration-200"
+                style={{
+                  backgroundColor: lit ? 'var(--accent)' : 'var(--bg-elevated)'
+                }}
+              />
+            );
+          })}
+        </div>
+      );
+    };
+
+    // Architectural Empty State Component (Engineered Dot-Matrix + Calibration Track)
     const EmptyState = ({ code, title, subtitle, actionLabel, onAction }) => (
-      <div className="arch-panel rounded-xl p-8 text-center relative overflow-hidden">
+      <div className="arch-panel arch-dot-matrix rounded-xl p-8 text-center relative overflow-hidden">
         <Crosshair className="absolute top-2.5 left-2.5" />
         <Crosshair className="absolute top-2.5 right-2.5" />
         <Crosshair className="absolute bottom-2.5 left-2.5" />
         <Crosshair className="absolute bottom-2.5 right-2.5" />
-        <div className="font-mono text-[10px] uppercase tracking-widest mb-2" style={{ color: 'var(--ink-muted)' }}>
-          {code || 'SYS.EMPTY // ZERO_RECORDS'}
+        <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full border mb-3" style={{ backgroundColor: 'var(--bg-elevated)', borderColor: 'var(--border-elevated)' }}>
+          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: 'var(--accent)' }} />
+          <span className="font-mono text-[10px] uppercase tracking-[0.14em]" style={{ color: 'var(--ink-muted)' }}>
+            {code || 'SYS.EMPTY // ZERO_RECORDS'}
+          </span>
         </div>
         <h3 className="text-sm font-semibold heading-tight mb-1" style={{ color: 'var(--ink-primary)' }}>
           {title}
@@ -251,11 +276,14 @@ const NexoraContext = createContext(null);
         <p className="text-xs max-w-md mx-auto leading-relaxed" style={{ color: 'var(--ink-secondary)' }}>
           {subtitle}
         </p>
+        <div className="max-w-xs mx-auto">
+          <SegmentedTelemetryBar pct={0} segments={10} />
+        </div>
         {actionLabel && onAction && (
           <button
             type="button"
             onClick={onAction}
-            className="mt-4 arch-btn-primary px-3.5 py-1.5 rounded-md text-xs font-medium inline-flex items-center gap-1.5"
+            className="mt-4 arch-btn-primary px-4 py-2 rounded-md text-xs font-medium inline-flex items-center gap-1.5"
           >
             <Icon name="plus" size={14} />
             <span>{actionLabel}</span>
@@ -1251,122 +1279,203 @@ const NexoraContext = createContext(null);
           daysToGo = Math.round((target - start) / 86400000);
         }
 
+        const totalFocusMins = (data.focusSessions || []).reduce((a, b) => a + (b.minutes || 0), 0);
+        const totalMissionsCount = telemetry.pendingMissions + telemetry.completedMissions;
+        const missionCompletionPct = totalMissionsCount > 0 ? Math.round((telemetry.completedMissions / totalMissionsCount) * 100) : 0;
+        const capitalRatioPct = telemetry.netBalance > 0 ? Math.min(100, Math.max(15, Math.round((telemetry.totalSaved / Math.max(1, telemetry.netBalance + telemetry.totalSaved)) * 100))) : 0;
+        const totalFocusSec = Math.max(1, focusMinutes * 60);
+        const focusElapsedPct = Math.min(100, Math.max(0, Math.round(((totalFocusSec - secondsLeft) / totalFocusSec) * 100)));
+        const ringRadius = 54;
+        const ringCircumference = 2 * Math.PI * ringRadius;
+        const ringDashOffset = ringCircumference * (1 - (timerRunning || secondsLeft < totalFocusSec ? (totalFocusSec - secondsLeft) / totalFocusSec : 0));
+        const completedTop3Count = slots.filter((s) => s.done && s.text.trim()).length;
+
         return (
           <div className="space-y-6">
+            {/* Header Bar */}
             <div className="flex flex-wrap items-end justify-between gap-4 border-b pb-4">
               <div>
-                <div className="font-mono text-[11px] uppercase tracking-widest" style={{ color: 'var(--ink-muted)' }}>
-                  01 // TELEMETRY WORKBENCH &bull; {new Date().toISOString().split('T')[0]}
+                <div className="font-mono text-[11px] uppercase tracking-[0.14em] flex items-center gap-2" style={{ color: 'var(--ink-muted)' }}>
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: 'var(--accent)' }} />
+                  <span>01 // TELEMETRY WORKBENCH &bull; {new Date().toISOString().split('T')[0]}</span>
                 </div>
-                <h1 className="text-2xl sm:text-3xl font-semibold heading-tight mt-1">
-                  {greeting}, {firstName} &mdash; <span style={{ color: 'var(--ink-secondary)' }}>{data.profile.semester}</span>
+                <h1 className="text-2xl sm:text-3xl font-semibold heading-tight mt-1.5" style={{ color: 'var(--ink-primary)' }}>
+                  {greeting}, {firstName} &mdash; <span className="font-normal" style={{ color: 'var(--ink-secondary)' }}>{data.profile.semester}</span>
                 </h1>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setProfileModal(true)}
-                  className="arch-btn-ghost px-3 py-1.5 rounded-md text-xs font-mono inline-flex items-center gap-1.5"
+                  className="arch-btn-ghost px-3.5 py-2 rounded-lg text-xs font-medium inline-flex items-center gap-2"
                 >
                   <Icon name="user" size={14} />
-                  <span>CONFIGURE OPERATOR</span>
+                  <span>Configure Operator</span>
                 </button>
               </div>
             </div>
 
-            <div className="hairline-grid grid grid-cols-2 lg:grid-cols-4 rounded-xl overflow-hidden">
-              <div className="hairline-cell p-4 relative">
-                <Crosshair className="absolute top-2 right-2" />
-                <div className="font-mono text-[10px] uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
-                  ATTENDANCE AGGREGATE
+            {/* 4-Column Calibrated Telemetry KPI Matrix */}
+            <div className="hairline-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 rounded-xl overflow-hidden">
+              <div className="hairline-cell p-5 relative flex flex-col justify-between">
+                <Crosshair className="absolute top-2.5 right-2.5" />
+                <div>
+                  <div className="font-mono text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--ink-muted)' }}>
+                    ATTENDANCE AGGREGATE
+                  </div>
+                  <div className="text-2xl sm:text-3xl font-mono font-semibold tabular-nums mt-2" style={{ color: 'var(--ink-primary)' }}>
+                    {telemetry.totalClasses > 0 ? `${telemetry.avgAttendance}%` : '--%'}
+                  </div>
+                  <div className="font-mono text-[11px] mt-1 tabular-nums" style={{ color: 'var(--ink-secondary)' }}>
+                    {telemetry.totalAttended} / {telemetry.totalClasses} sessions logged
+                  </div>
                 </div>
-                <div className="text-2xl font-mono font-semibold tabular-nums mt-1.5">
-                  {telemetry.totalClasses > 0 ? `${telemetry.avgAttendance}%` : '--%'}
-                </div>
-                <div className="font-mono text-[11px] mt-1 tabular-nums" style={{ color: 'var(--ink-secondary)' }}>
-                  {telemetry.totalAttended} / {telemetry.totalClasses} sessions logged
-                </div>
+                <SegmentedTelemetryBar pct={telemetry.totalClasses > 0 ? telemetry.avgAttendance : 0} segments={12} />
               </div>
 
-              <div className="hairline-cell p-4 relative">
-                <Crosshair className="absolute top-2 right-2" />
-                <div className="font-mono text-[10px] uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
-                  NET LIQUID CAPITAL
+              <div className="hairline-cell p-5 relative flex flex-col justify-between">
+                <Crosshair className="absolute top-2.5 right-2.5" />
+                <div>
+                  <div className="font-mono text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--ink-muted)' }}>
+                    NET LIQUID CAPITAL
+                  </div>
+                  <div className="text-2xl sm:text-3xl font-mono font-semibold tabular-nums mt-2" style={{ color: 'var(--ink-primary)' }}>
+                    ₹{telemetry.netBalance.toLocaleString('en-IN')}
+                  </div>
+                  <div className="font-mono text-[11px] mt-1 tabular-nums" style={{ color: 'var(--ink-secondary)' }}>
+                    Saved in Pots: ₹{telemetry.totalSaved.toLocaleString('en-IN')}
+                  </div>
                 </div>
-                <div className="text-2xl font-mono font-semibold tabular-nums mt-1.5">
-                  ₹{telemetry.netBalance.toLocaleString('en-IN')}
-                </div>
-                <div className="font-mono text-[11px] mt-1 tabular-nums" style={{ color: 'var(--ink-secondary)' }}>
-                  Saved in Pots: ₹{telemetry.totalSaved.toLocaleString('en-IN')}
-                </div>
+                <SegmentedTelemetryBar pct={capitalRatioPct} segments={12} />
               </div>
 
-              <div className="hairline-cell p-4 relative">
-                <Crosshair className="absolute top-2 right-2" />
-                <div className="font-mono text-[10px] uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
-                  ACTIVE MISSIONS
+              <div className="hairline-cell p-5 relative flex flex-col justify-between">
+                <Crosshair className="absolute top-2.5 right-2.5" />
+                <div>
+                  <div className="font-mono text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--ink-muted)' }}>
+                    ACTIVE MISSIONS
+                  </div>
+                  <div className="text-2xl sm:text-3xl font-mono font-semibold tabular-nums mt-2" style={{ color: 'var(--ink-primary)' }}>
+                    {telemetry.pendingMissions}
+                  </div>
+                  <div className="font-mono text-[11px] mt-1 tabular-nums" style={{ color: 'var(--ink-secondary)' }}>
+                    {telemetry.completedMissions} completed total
+                  </div>
                 </div>
-                <div className="text-2xl font-mono font-semibold tabular-nums mt-1.5">
-                  {telemetry.pendingMissions}
-                </div>
-                <div className="font-mono text-[11px] mt-1 tabular-nums" style={{ color: 'var(--ink-secondary)' }}>
-                  {telemetry.completedMissions} completed total
-                </div>
+                <SegmentedTelemetryBar pct={missionCompletionPct} segments={12} />
               </div>
 
-              <div className="hairline-cell p-4 relative">
-                <Crosshair className="absolute top-2 right-2" />
-                <div className="font-mono text-[10px] uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
-                  DEEP WORK LOGGED
+              <div className="hairline-cell p-5 relative flex flex-col justify-between">
+                <Crosshair className="absolute top-2.5 right-2.5" />
+                <div>
+                  <div className="font-mono text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--ink-muted)' }}>
+                    DEEP WORK LOGGED
+                  </div>
+                  <div className="text-2xl sm:text-3xl font-mono font-semibold tabular-nums mt-2" style={{ color: 'var(--ink-primary)' }}>
+                    {totalFocusMins}m
+                  </div>
+                  <div className="font-mono text-[11px] mt-1 tabular-nums" style={{ color: 'var(--ink-secondary)' }}>
+                    LVL {telemetry.level} &bull; {data.profile.xp || 0} / {telemetry.nextThreshold} XP
+                  </div>
                 </div>
-                <div className="text-2xl font-mono font-semibold tabular-nums mt-1.5">
-                  {(data.focusSessions || []).reduce((a, b) => a + (b.minutes || 0), 0)}m
-                </div>
-                <div className="font-mono text-[11px] mt-1 tabular-nums" style={{ color: 'var(--ink-secondary)' }}>
-                  LVL {telemetry.level} &bull; {data.profile.xp || 0} / {telemetry.nextThreshold} XP
-                </div>
+                <SegmentedTelemetryBar pct={telemetry.xpProgress} segments={12} />
               </div>
             </div>
 
+            {/* Row 2: Top 3 Priorities + Habit Dot-Matrix Streak + Countdown Readout */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-              <div className="lg:col-span-5 arch-panel rounded-xl p-5 space-y-3">
-                <Crosshair className="absolute top-2 right-2" />
-                <span className="font-mono text-[11px] uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
-                  TODAY // TOP 3 PRIORITIES
-                </span>
-                {slots.map((s, i) => (
-                  <div key={i} className="flex items-center gap-2.5">
-                    <input type="checkbox" checked={s.done} onChange={() => updateTop3(i, { done: !s.done })} className="w-4 h-4 cursor-pointer" />
-                    <input
-                      value={s.text}
-                      onChange={(e) => updateTop3(i, { text: e.target.value })}
-                      placeholder={`Priority ${i + 1}`}
-                      className={`flex-1 arch-input rounded-md px-3 py-2 text-xs ${s.done ? 'line-through opacity-50' : ''}`}
-                    />
-                  </div>
-                ))}
+              <div className="lg:col-span-5 arch-panel rounded-xl p-5 space-y-3.5">
+                <Crosshair className="absolute top-2.5 right-2.5" />
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--ink-muted)' }}>
+                    TODAY // TOP 3 PRIORITIES
+                  </span>
+                  <span className="font-mono text-[11px] tabular-nums px-2 py-0.5 rounded border" style={{ backgroundColor: 'var(--bg-elevated)', borderColor: 'var(--border-elevated)', color: completedTop3Count > 0 ? 'var(--ink-primary)' : 'var(--ink-muted)' }}>
+                    {completedTop3Count} / 3 LOCKED
+                  </span>
+                </div>
+                <div className="space-y-2.5">
+                  {slots.map((s, i) => (
+                    <div key={i} className="flex items-center gap-2.5">
+                      <span className="font-mono text-[10px] tabular-nums w-5 shrink-0" style={{ color: s.done ? 'var(--ink-primary)' : 'var(--ink-dim)' }}>
+                        0{i + 1}
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={s.done}
+                        onChange={() => updateTop3(i, { done: !s.done })}
+                        aria-label={`Mark Priority ${i + 1} complete`}
+                        className="w-4 h-4 rounded cursor-pointer shrink-0"
+                      />
+                      <input
+                        value={s.text}
+                        onChange={(e) => updateTop3(i, { text: e.target.value })}
+                        placeholder={`Priority ${i + 1}`}
+                        className={`flex-1 arch-input rounded-lg px-3 py-2 text-xs font-sans ${s.done ? 'line-through opacity-50' : ''}`}
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
 
-              <div className="lg:col-span-4 arch-panel rounded-xl p-5 space-y-3">
-                <Crosshair className="absolute top-2 right-2" />
+              <div className="lg:col-span-4 arch-panel rounded-xl p-5 flex flex-col justify-between space-y-3">
+                <Crosshair className="absolute top-2.5 right-2.5" />
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-mono text-[11px] uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
+                  <span className="font-mono text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--ink-muted)' }}>
                     STREAK // PER HABIT
                   </span>
-                  <span className="font-mono text-xs tabular-nums" style={{ color: 'var(--status-ok)' }}>
+                  <span
+                    className="font-mono text-[11px] tabular-nums px-2 py-0.5 rounded border"
+                    style={{
+                      color: 'var(--ink-primary)',
+                      backgroundColor: 'var(--bg-elevated)',
+                      borderColor: 'var(--border-elevated)'
+                    }}
+                  >
                     {overallStreak} DAY{overallStreak === 1 ? '' : 'S'} OVERALL
                   </span>
                 </div>
                 {habitStats.length === 0 ? (
-                  <p className="text-xs font-mono py-3" style={{ color: 'var(--ink-muted)' }}>
-                    NO HABITS YET. ADD ONE IN HABIT MATRIX.
-                  </p>
+                  <div className="rounded-lg border p-3.5 space-y-3 arch-dot-matrix" style={{ backgroundColor: 'var(--bg-canvas)', borderColor: 'var(--border-hairline)' }}>
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[10px] uppercase tracking-[0.12em]" style={{ color: 'var(--ink-muted)' }}>
+                        28-DAY CONSISTENCY MATRIX
+                      </span>
+                      <span className="font-mono text-[10px] tabular-nums" style={{ color: 'var(--ink-dim)' }}>
+                        0 / 28 NODES
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-7 gap-1.5" aria-hidden="true">
+                      {Array.from({ length: 21 }).map((_, idx) => (
+                        <div
+                          key={idx}
+                          className="h-2.5 rounded-[2px] border"
+                          style={{
+                            backgroundColor: idx === 20 ? 'var(--accent-subtle)' : 'var(--bg-elevated)',
+                            borderColor: idx === 20 ? 'var(--accent-border)' : 'var(--border-hairline)'
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-between gap-2 pt-0.5">
+                      <p className="text-[11px]" style={{ color: 'var(--ink-secondary)' }}>
+                        No habits tracked yet.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('habits')}
+                        className="arch-btn-ghost px-2.5 py-1 rounded text-[11px] font-medium"
+                      >
+                        Open Habit Matrix &rarr;
+                      </button>
+                    </div>
+                  </div>
                 ) : (
                   <div className="max-h-40 overflow-y-auto divide-y pr-1">
                     {habitStats.map((h) => (
                       <div key={h.id} className="py-2 flex items-center justify-between gap-3">
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: h.doneToday ? 'var(--status-ok)' : 'var(--ink-muted)' }} />
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: h.doneToday ? 'var(--accent)' : 'var(--ink-dim)' }} />
                           <span className="text-xs font-medium truncate">{h.name}</span>
                         </div>
                         <span className="font-mono text-xs tabular-nums shrink-0">
@@ -1379,30 +1488,51 @@ const NexoraContext = createContext(null);
                 )}
               </div>
 
-              <div className="lg:col-span-3 arch-panel rounded-xl p-5 space-y-2.5">
-                <Crosshair className="absolute top-2 right-2" />
-                <span className="font-mono text-[11px] uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
-                  COUNTDOWN
-                </span>
-                {daysToGo !== null && (
-                  <div className="font-mono text-3xl font-semibold tabular-nums">
-                    {daysToGo >= 0 ? daysToGo : 0}
-                    <span className="text-[11px] font-normal" style={{ color: 'var(--ink-secondary)' }}> DAYS TO {(cd.name || 'EVENT').toUpperCase()}</span>
+              <div className="lg:col-span-3 arch-panel rounded-xl p-5 flex flex-col justify-between space-y-3">
+                <Crosshair className="absolute top-2.5 right-2.5" />
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--ink-muted)' }}>
+                    COUNTDOWN
+                  </span>
+                  <span className="font-mono text-[10px] tabular-nums" style={{ color: daysToGo !== null ? 'var(--ink-primary)' : 'var(--ink-dim)' }}>
+                    {daysToGo !== null ? 'LOCKED' : 'STANDBY'}
+                  </span>
+                </div>
+                <div className="rounded-lg border px-3 py-2 flex items-center justify-between gap-2 arch-dot-matrix" style={{ backgroundColor: 'var(--bg-canvas)', borderColor: 'var(--border-hairline)' }}>
+                  <div className="font-mono text-lg font-semibold tabular-nums whitespace-nowrap shrink-0" style={{ color: daysToGo !== null ? 'var(--ink-primary)' : 'var(--ink-dim)' }}>
+                    {daysToGo !== null ? `${String(Math.max(0, daysToGo)).padStart(2, '0')}d` : '--d : --h'}
                   </div>
-                )}
-                <input value={cd.name} onChange={(e) => setCountdown({ name: e.target.value })} placeholder="Event name" className="w-full arch-input rounded-md px-3 py-1.5 text-xs" />
-                <input type="date" value={cd.date} onChange={(e) => setCountdown({ date: e.target.value })} className="w-full arch-input rounded-md px-3 py-1.5 text-xs font-mono" />
+                  <span className="font-mono text-[10px] uppercase tracking-[0.1em] truncate text-right" style={{ color: 'var(--ink-secondary)' }}>
+                    {cd.name ? cd.name : 'T-MINUS'}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  <input
+                    value={cd.name}
+                    onChange={(e) => setCountdown({ name: e.target.value })}
+                    placeholder="Event name"
+                    className="w-full arch-input rounded-lg px-3 py-1.5 text-xs font-sans"
+                  />
+                  <input
+                    type="date"
+                    value={cd.date}
+                    onChange={(e) => setCountdown({ date: e.target.value })}
+                    aria-label="Countdown target date"
+                    className="w-full arch-input rounded-lg px-3 py-1.5 text-xs font-mono tabular-nums"
+                  />
+                </div>
               </div>
             </div>
 
+            {/* Row 3: Instant Telemetry Capture + Priority Mission Queue + Deep Work Focus Engine */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
               <div className="lg:col-span-7 space-y-5">
                 <div className="arch-panel rounded-xl p-5 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-[11px] uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-mono text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--ink-muted)' }}>
                       02 // INSTANT TELEMETRY CAPTURE
                     </span>
-                    <div className="flex gap-1">
+                    <div className="flex flex-wrap gap-1 p-1 rounded-lg border" style={{ backgroundColor: 'var(--bg-canvas)', borderColor: 'var(--border-hairline)' }}>
                       {[
                         { id: 'mission', label: 'Mission' },
                         { id: 'expense', label: 'Expense (₹)' },
@@ -1413,8 +1543,8 @@ const NexoraContext = createContext(null);
                           key={t.id}
                           type="button"
                           onClick={() => setQuickType(t.id)}
-                          className={`px-2.5 py-1 rounded text-[11px] font-mono transition ${
-                            quickType === t.id ? 'arch-btn-primary' : 'arch-btn-ghost'
+                          className={`px-2.5 py-1 rounded-md text-xs font-medium transition ${
+                            quickType === t.id ? 'arch-btn-primary' : 'arch-btn-ghost border-transparent'
                           }`}
                         >
                           {t.label}
@@ -1434,7 +1564,7 @@ const NexoraContext = createContext(null);
                           ? 'Course name (e.g., Operating Systems)...'
                           : 'Transaction description...'
                       }
-                      className="sm:col-span-6 arch-input rounded-md px-3 py-2 text-xs"
+                      className="sm:col-span-6 arch-input rounded-lg px-3 py-2 text-xs font-sans"
                     />
                     <input
                       type={quickType === 'expense' || quickType === 'income' ? 'number' : 'text'}
@@ -1447,11 +1577,11 @@ const NexoraContext = createContext(null);
                           ? 'Code (e.g. CS302)'
                           : 'Amount in ₹'
                       }
-                      className="sm:col-span-3 arch-input rounded-md px-3 py-2 text-xs font-mono tabular-nums"
+                      className="sm:col-span-3 arch-input rounded-lg px-3 py-2 text-xs font-mono tabular-nums"
                     />
                     <button
                       type="submit"
-                      className="sm:col-span-3 arch-btn-primary rounded-md px-3 py-2 text-xs font-medium inline-flex items-center justify-center gap-1.5"
+                      className="sm:col-span-3 arch-btn-primary rounded-lg px-3 py-2 text-xs font-semibold inline-flex items-center justify-center gap-1.5"
                     >
                       <Icon name="plus" size={14} />
                       <span>Commit</span>
@@ -1459,28 +1589,41 @@ const NexoraContext = createContext(null);
                   </form>
                 </div>
 
-                <div className="arch-panel rounded-xl p-5 space-y-3">
+                <div className="arch-panel rounded-xl p-5 space-y-3.5">
                   <div className="flex items-center justify-between">
-                    <span className="font-mono text-[11px] uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
+                    <span className="font-mono text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--ink-muted)' }}>
                       03 // PRIORITY MISSION QUEUE
                     </span>
                     <button
                       type="button"
                       onClick={() => setActiveTab('missions')}
-                      className="text-xs font-mono hover:underline"
-                      style={{ color: 'var(--ink-secondary)' }}
+                      className="text-xs font-medium hover:underline inline-flex items-center gap-1"
+                      style={{ color: 'var(--ink-primary)' }}
                     >
-                      Open Mission Control &rarr;
+                      <span>Open Mission Control &rarr;</span>
                     </button>
                   </div>
 
                   {data.tasks.filter((t) => !t.completed).length === 0 ? (
-                    <div className="py-6 text-center border border-dashed rounded-lg">
-                      <p className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>
-                        NO PENDING MISSIONS IN QUEUE
-                      </p>
-                      <p className="text-[11px] mt-1" style={{ color: 'var(--ink-secondary)' }}>
-                        Use the capture bar above or jump to Mission Control to log tasks.
+                    <div className="rounded-lg border p-4 space-y-2.5 arch-dot-matrix" style={{ backgroundColor: 'var(--bg-canvas)', borderColor: 'var(--border-hairline)' }}>
+                      <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.12em]" style={{ color: 'var(--ink-muted)' }}>
+                        <span>QUEUE TELEMETRY // 0 ACTIVE PACKETS</span>
+                        <span style={{ color: 'var(--ink-secondary)' }}>STANDBY</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2" aria-hidden="true">
+                        {['SLOT.01 // IDLE', 'SLOT.02 // IDLE', 'SLOT.03 // IDLE'].map((slot) => (
+                          <div
+                            key={slot}
+                            className="px-3 py-2 rounded border border-dashed flex items-center justify-between font-mono text-[10px]"
+                            style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-elevated)', color: 'var(--ink-dim)' }}
+                          >
+                            <span>{slot}</span>
+                            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: 'var(--ink-dim)' }} />
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-xs pt-0.5" style={{ color: 'var(--ink-secondary)' }}>
+                        No pending missions in queue. Use the capture bar above or jump to Mission Control to log tasks.
                       </p>
                     </div>
                   ) : (
@@ -1495,13 +1638,15 @@ const NexoraContext = createContext(null);
                                 playTactileClick(data.profile.soundEnabled, 920, 14);
                                 completeMission(t.id, true);
                               }}
-                              className="w-3.5 h-3.5 rounded"
+                              className="w-4 h-4 rounded cursor-pointer"
                             />
                             <span className="text-xs font-medium">{t.title}</span>
                           </label>
                           <div className="flex items-center gap-2 font-mono text-[11px] tabular-nums" style={{ color: 'var(--ink-muted)' }}>
                             {Number(t.bounty) > 0 && (
-                              <span style={{ color: 'var(--status-ok)' }}>+₹{t.bounty}</span>
+                              <span className="px-1.5 py-0.5 rounded border" style={{ color: 'var(--ink-primary)', backgroundColor: 'var(--bg-elevated)', borderColor: 'var(--border-elevated)' }}>
+                                +₹{t.bounty}
+                              </span>
                             )}
                             <span>{t.priority}</span>
                             <span>&bull;</span>
@@ -1517,10 +1662,10 @@ const NexoraContext = createContext(null);
               <div className="lg:col-span-5 arch-panel rounded-xl p-5 flex flex-col justify-between space-y-4">
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <span className="font-mono text-[11px] uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
+                    <span className="font-mono text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--ink-muted)' }}>
                       04 // DEEP WORK FOCUS ENGINE
                     </span>
-                    <div className="flex gap-1">
+                    <div className="flex gap-1 p-1 rounded-lg border" style={{ backgroundColor: 'var(--bg-canvas)', borderColor: 'var(--border-hairline)' }}>
                       {[15, 25, 50, 90].map((m) => (
                         <button
                           key={m}
@@ -1531,7 +1676,7 @@ const NexoraContext = createContext(null);
                             setSecondsLeft(m * 60);
                           }}
                           className={`px-2 py-0.5 rounded font-mono text-[11px] tabular-nums ${
-                            focusMinutes === m ? 'arch-btn-primary' : 'arch-btn-ghost'
+                            focusMinutes === m ? 'arch-btn-primary' : 'arch-btn-ghost border-transparent'
                           }`}
                         >
                           {m}m
@@ -1544,30 +1689,77 @@ const NexoraContext = createContext(null);
                     value={focusLabel}
                     onChange={(e) => setFocusLabel(e.target.value)}
                     placeholder="Session objective (e.g., DSA Graph Algorithms)..."
-                    className="w-full arch-input rounded-md px-3 py-1.5 text-xs mb-4"
+                    className="w-full arch-input rounded-lg px-3 py-2 text-xs font-sans mb-4"
                   />
 
-                  <div className="py-5 text-center border rounded-lg" style={{ backgroundColor: 'var(--bg-canvas)' }}>
-                    <div className="font-mono text-4xl sm:text-5xl font-semibold tracking-tight tabular-nums">
-                      {mm}:{ss}
+                  <div className="p-4 border rounded-xl arch-dot-matrix flex items-center justify-between gap-4" style={{ backgroundColor: 'var(--bg-canvas)', borderColor: 'var(--border-hairline)' }}>
+                    <div className="relative w-28 h-28 shrink-0 flex items-center justify-center">
+                      <svg className="w-full h-full -rotate-90" viewBox="0 0 128 128" aria-hidden="true">
+                        <circle
+                          cx="64"
+                          cy="64"
+                          r={ringRadius}
+                          fill="none"
+                          stroke="var(--border-elevated)"
+                          strokeWidth="6"
+                          strokeDasharray="4 4"
+                        />
+                        <circle
+                          cx="64"
+                          cy="64"
+                          r={ringRadius}
+                          fill="none"
+                          stroke="var(--accent)"
+                          strokeWidth="6"
+                          strokeLinecap="round"
+                          strokeDasharray={ringCircumference}
+                          strokeDashoffset={ringDashOffset}
+                          style={{
+                            transition: 'stroke-dashoffset 300ms cubic-bezier(0.22, 1, 0.36, 1)'
+                          }}
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="font-mono text-[10px] tabular-nums" style={{ color: 'var(--ink-primary)' }}>
+                          {focusElapsedPct}%
+                        </span>
+                        <span className="font-mono text-[9px] uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
+                          CYCLE
+                        </span>
+                      </div>
                     </div>
-                    <div className="font-mono text-[10px] uppercase tracking-widest mt-2" style={{ color: 'var(--ink-muted)' }}>
-                      {timerRunning ? 'TELEMETRY RECORDING ACTIVE' : 'STANDBY // READY TO ENGAGE'}
+
+                    <div className="flex-1 min-w-0 text-right pr-1">
+                      <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border mb-1.5" style={{ backgroundColor: 'var(--bg-elevated)', borderColor: timerRunning ? 'var(--accent-border)' : 'var(--border-elevated)' }}>
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${timerRunning ? 'animate-pulse' : ''}`}
+                          style={{ backgroundColor: timerRunning ? 'var(--accent)' : 'var(--ink-muted)' }}
+                        />
+                        <span className="font-mono text-[9px] uppercase tracking-[0.14em]" style={{ color: timerRunning ? 'var(--ink-primary)' : 'var(--ink-muted)' }}>
+                          {timerRunning ? 'RECORDING ACTIVE' : 'STANDBY // READY'}
+                        </span>
+                      </div>
+                      <div className="font-mono text-4xl sm:text-5xl font-semibold tracking-tight tabular-nums" style={{ color: 'var(--ink-primary)' }}>
+                        {mm}:{ss}
+                      </div>
+                      <div className="font-mono text-[10px] uppercase tracking-[0.12em] mt-1 truncate" style={{ color: 'var(--ink-secondary)' }}>
+                        {focusLabel.trim() || `${focusMinutes}M DEEP WORK PROTOCOL`}
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2.5">
                   <button
                     type="button"
                     onClick={() => {
                       playTactileClick(data.profile.soundEnabled, 740, 12);
                       setTimerRunning((r) => !r);
                     }}
-                    className="arch-btn-primary py-2 rounded-md text-xs font-mono inline-flex items-center justify-center gap-1.5"
+                    className="arch-btn-primary py-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5"
                   >
                     <Icon name={timerRunning ? 'pause' : 'play'} size={14} />
-                    <span>{timerRunning ? 'PAUSE' : 'START BLOCK'}</span>
+                    <span>{timerRunning ? 'Pause Block' : 'Start Block'}</span>
                   </button>
                   <button
                     type="button"
@@ -1575,10 +1767,10 @@ const NexoraContext = createContext(null);
                       setTimerRunning(false);
                       setSecondsLeft(focusMinutes * 60);
                     }}
-                    className="arch-btn-ghost py-2 rounded-md text-xs font-mono inline-flex items-center justify-center gap-1.5"
+                    className="arch-btn-ghost py-2.5 rounded-lg text-xs font-medium inline-flex items-center justify-center gap-1.5"
                   >
                     <Icon name="reset" size={14} />
-                    <span>RESET</span>
+                    <span>Reset</span>
                   </button>
                 </div>
               </div>
@@ -6034,7 +6226,7 @@ const NexoraContext = createContext(null);
                 {[
                   { id: 'obsidian', name: 'Direction A: Obsidian Precision', sub: 'Linear / Raycast Matte Carbon (#09090B)' },
                   { id: 'paper', name: 'Direction B: Editorial Paper', sub: 'Stripe Press Warm Alabaster (#FAF8F5)' },
-                  { id: 'industrial', name: 'Direction C: Swiss Industrial', sub: 'Teenage Engineering Stone + Orange (#FF4F00)' }
+                  { id: 'industrial', name: 'Direction C: Swiss Industrial', sub: 'Teenage Eng. Stone + Orange (#FF4F00)' }
                 ].map((t) => (
                   <button
                     key={t.id}
@@ -7727,6 +7919,42 @@ const NexoraContext = createContext(null);
         const urgeMM = String(Math.floor(urgeSecLeft / 60)).padStart(2, '0');
         const urgeSS = String(urgeSecLeft % 60).padStart(2, '0');
 
+        const [selectedDayKey, setSelectedDayKey] = useState(todayKey);
+        const [sessionLabel, setSessionLabel] = useState('');
+        const [sessionMinInput, setSessionMinInput] = useState('50');
+
+        const logFocusSessionDirect = (minsToLog, customLabel) => {
+          const validMins = Math.max(1, Math.min(600, Number(minsToLog) || 25));
+          playTactileClick(data.profile.soundEnabled, 880, 12);
+          const targetDate = selectedDayKey || todayKey;
+          const record = {
+            id: 'fs-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+            label: (customLabel !== undefined ? customLabel : sessionLabel).trim() || 'Deep Work Block',
+            minutes: validMins,
+            date: targetDate
+          };
+          setData((prev) => ({
+            ...prev,
+            focusSessions: [record, ...(prev.focusSessions || [])]
+          }));
+          setSessionLabel('');
+          awardXP(Math.max(10, Math.round(validMins * 1.5)), `Logged ${validMins}m Deep Work (${targetDate})`);
+        };
+
+        const deleteFocusSession = (sessionId) => {
+          playTactileClick(data.profile.soundEnabled, 640, 10);
+          setData((prev) => ({
+            ...prev,
+            focusSessions: (prev.focusSessions || []).filter((s) => s.id !== sessionId)
+          }));
+          notify('Removed deep-work session');
+        };
+
+        const weekSessions = useMemo(
+          () => focusSessions.filter((s) => s.date >= weekStartKey && s.date <= weekEndKey),
+          [focusSessions, weekStartKey, weekEndKey]
+        );
+
         return (
           <div className="space-y-5 pt-6 border-t">
             <div>
@@ -7754,6 +7982,7 @@ const NexoraContext = createContext(null);
                       max="100"
                       value={focusGoalHrs}
                       onChange={(e) => updateGoalHrs(e.target.value)}
+                      aria-label="Weekly deep work goal hours"
                       className="w-14 arch-input rounded px-2 py-0.5 text-xs font-mono tabular-nums"
                     />
                     <span style={{ color: 'var(--ink-muted)' }}>HRS ({focusPct}%)</span>
@@ -7763,36 +7992,152 @@ const NexoraContext = createContext(null);
                 <div className="w-full h-2 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-elevated)' }}>
                   <div
                     className="h-full transition-all duration-300"
-                    style={{ width: `${focusPct}%`, backgroundColor: 'var(--status-ok)' }}
+                    style={{
+                      width: `${focusPct}%`,
+                      backgroundColor: 'var(--accent)'
+                    }}
                   />
                 </div>
 
-                <div className="grid grid-cols-7 gap-2 h-28 items-end pt-4 px-1 border-b pb-2">
+                {/* Calibrated 7-Day Vertical Gauge Matrix (Click any day to select target date) */}
+                <div
+                  className="grid grid-cols-7 gap-2 pt-3 pb-3 px-3 rounded-lg border arch-dot-matrix"
+                  style={{ backgroundColor: 'var(--bg-canvas)', borderColor: 'var(--border-hairline)' }}
+                >
                   {weekDays.map((d) => {
-                    const barPct = Math.round((d.focusMin / maxDayFocus) * 100);
+                    const barPct = d.focusMin > 0 ? Math.min(100, Math.max(14, Math.round((d.focusMin / maxDayFocus) * 100))) : 0;
                     const isToday = d.key === todayKey;
+                    const isSelected = d.key === selectedDayKey;
                     return (
-                      <div key={d.key} className="flex flex-col items-center justify-end h-full gap-1">
-                        <span className="font-mono text-[9px] tabular-nums" style={{ color: 'var(--ink-muted)' }}>
-                          {d.focusMin > 0 ? `${d.focusMin}m` : ''}
+                      <button
+                        key={d.key}
+                        type="button"
+                        onClick={() => setSelectedDayKey(d.key)}
+                        className="flex flex-col items-center gap-1.5 group cursor-pointer focus:outline-none"
+                        title={`Click to log deep work for ${d.label} (${d.key})`}
+                      >
+                        <span
+                          className="font-mono text-[10px] tabular-nums"
+                          style={{ color: d.focusMin > 0 ? 'var(--ink-primary)' : 'var(--ink-dim)' }}
+                        >
+                          {d.focusMin}m
                         </span>
                         <div
-                          className="w-full max-w-[30px] rounded-t transition-all duration-300"
+                          className="w-full max-w-[32px] h-24 rounded-md border p-0.5 flex items-end transition-colors"
                           style={{
-                            height: `${Math.max(8, barPct)}%`,
-                            backgroundColor: isToday ? 'var(--status-ok)' : 'var(--accent)',
-                            opacity: d.focusMin > 0 ? 0.9 : 0.18
+                            backgroundColor: 'var(--bg-surface)',
+                            borderColor: isSelected
+                              ? 'var(--accent)'
+                              : isToday
+                              ? 'var(--border-strong)'
+                              : 'var(--border-hairline)'
                           }}
-                        />
+                        >
+                          <div
+                            className="w-full rounded-[3px] transition-all duration-300"
+                            style={{
+                              height: d.focusMin > 0 ? `${barPct}%` : '4px',
+                              backgroundColor: d.focusMin > 0 ? 'var(--accent)' : 'var(--bg-elevated)'
+                            }}
+                          />
+                        </div>
                         <span
-                          className="font-mono text-[10px]"
-                          style={{ color: isToday ? 'var(--ink-primary)' : 'var(--ink-muted)' }}
+                          className="font-mono text-[10px] px-1.5 py-0.5 rounded"
+                          style={{
+                            color: isSelected ? 'var(--accent-fg)' : isToday ? 'var(--ink-primary)' : 'var(--ink-muted)',
+                            backgroundColor: isSelected ? 'var(--accent)' : 'transparent',
+                            fontWeight: isSelected || isToday ? 600 : 400
+                          }}
                         >
                           {d.label}
                         </span>
-                      </div>
+                      </button>
                     );
                   })}
+                </div>
+
+                {/* Direct Deep-Work Block Logger (Quick Presets + Custom Input) */}
+                <div
+                  className="rounded-lg border p-3.5 space-y-3"
+                  style={{ backgroundColor: 'var(--bg-canvas)', borderColor: 'var(--border-hairline)' }}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-mono text-[10px] uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
+                      LOG DEEP WORK FOR: <strong style={{ color: 'var(--ink-primary)' }}>{selectedDayKey === todayKey ? `TODAY (${selectedDayKey})` : selectedDayKey}</strong>
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {[25, 50, 90].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => logFocusSessionDirect(preset, `${preset}m Deep Work Block`)}
+                          className="arch-btn-ghost px-2.5 py-1 rounded text-[11px] font-mono tabular-nums"
+                        >
+                          +{preset}m
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      logFocusSessionDirect(sessionMinInput, sessionLabel);
+                    }}
+                    className="grid grid-cols-1 sm:grid-cols-12 gap-2"
+                  >
+                    <input
+                      type="text"
+                      value={sessionLabel}
+                      onChange={(e) => setSessionLabel(e.target.value)}
+                      placeholder="Session topic (e.g., OS Kernel Lab, Signals Revision)..."
+                      className="sm:col-span-6 arch-input rounded-md px-3 py-1.5 text-xs"
+                    />
+                    <input
+                      type="number"
+                      min="1"
+                      max="600"
+                      value={sessionMinInput}
+                      onChange={(e) => setSessionMinInput(e.target.value)}
+                      placeholder="Mins"
+                      aria-label="Session duration in minutes"
+                      className="sm:col-span-3 arch-input rounded-md px-3 py-1.5 text-xs font-mono tabular-nums"
+                    />
+                    <button
+                      type="submit"
+                      className="sm:col-span-3 arch-btn-primary rounded-md py-1.5 px-3 text-xs font-mono inline-flex items-center justify-center gap-1.5"
+                    >
+                      <Icon name="plus" size={13} />
+                      <span>Log Block</span>
+                    </button>
+                  </form>
+
+                  {weekSessions.length > 0 && (
+                    <div className="pt-2 border-t divide-y max-h-32 overflow-y-auto" style={{ borderColor: 'var(--border-hairline)' }}>
+                      {weekSessions.slice(0, 8).map((s) => (
+                        <div key={s.id} className="py-1.5 flex items-center justify-between gap-2 text-xs">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded border tabular-nums" style={{ color: 'var(--ink-primary)', backgroundColor: 'var(--bg-elevated)', borderColor: 'var(--border-elevated)' }}>
+                              +{s.minutes}m
+                            </span>
+                            <span className="truncate font-medium">{s.label}</span>
+                            <span className="font-mono text-[10px] shrink-0" style={{ color: 'var(--ink-muted)' }}>
+                              {s.date}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => deleteFocusSession(s.id)}
+                            className="font-mono text-xs px-1.5 hover:opacity-80"
+                            style={{ color: 'var(--ink-muted)' }}
+                            title="Delete session"
+                          >
+                            &times;
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -9450,25 +9795,34 @@ const NexoraContext = createContext(null);
       return (
         <NexoraContext.Provider value={contextValue}>
           <div className="min-h-screen flex flex-col lg:flex-row">
-            {/* Architectural Sidebar */}
+            {/* Architectural Sidebar (240px Fixed Collapsible Left Sidebar) */}
             <aside
               className={`border-b lg:border-b-0 lg:border-r lg:min-h-screen shrink-0 flex flex-col justify-between transition-all duration-200 ${
-                sidebarCollapsed ? 'lg:w-16' : 'lg:w-64'
+                sidebarCollapsed ? 'lg:w-16' : 'lg:w-[240px]'
               }`}
-              style={{ backgroundColor: 'var(--bg-surface)' }}
+              style={{
+                backgroundColor: 'var(--bg-surface)',
+                boxShadow: 'inset -1px 0 0 0 var(--border-hairline)'
+              }}
             >
-              <div className="p-3.5 space-y-4">
+              <div className="p-3.5 space-y-3.5">
                 <div className="flex items-center justify-between gap-2 px-1">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div
-                      className="w-7 h-7 rounded-md flex items-center justify-center font-mono text-xs font-bold shrink-0"
-                      style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
+                      className="w-7 h-7 rounded-lg flex items-center justify-center font-mono text-xs font-bold shrink-0"
+                      style={{
+                        backgroundColor: 'var(--accent)',
+                        color: 'var(--accent-fg)',
+                        border: '1px solid var(--border-elevated)'
+                      }}
                     >
                       XB
                     </div>
                     {!sidebarCollapsed && (
                       <div className="truncate">
-                        <div className="font-mono text-xs font-bold tracking-wider">XOR Bit | OS</div>
+                        <div className="font-sans text-xs font-semibold tracking-tight" style={{ color: 'var(--ink-primary)' }}>
+                          XOR Bit | OS
+                        </div>
                         <div className="font-mono text-[10px] truncate" style={{ color: 'var(--ink-muted)' }}>
                           {data.profile.name}
                         </div>
@@ -9489,14 +9843,16 @@ const NexoraContext = createContext(null);
                   <button
                     type="button"
                     onClick={() => setCmdOpen(true)}
-                    className="w-full arch-input rounded-md px-2.5 py-1.5 text-xs font-mono flex items-center justify-between"
-                    style={{ color: 'var(--ink-muted)' }}
+                    className="w-full arch-input rounded-lg px-2.5 py-2 text-xs font-sans flex items-center justify-between"
+                    style={{ color: 'var(--ink-secondary)' }}
                   >
                     <span className="inline-flex items-center gap-2">
                       <Icon name="search" size={13} />
                       <span>Command / Search...</span>
                     </span>
-                    <kbd className="text-[10px] border rounded px-1">⌘K</kbd>
+                    <kbd className="font-mono text-[10px] border rounded px-1.5 py-0.5" style={{ backgroundColor: 'var(--bg-canvas)', borderColor: 'var(--border-elevated)', color: 'var(--ink-muted)' }}>
+                      ⌘K
+                    </kbd>
                   </button>
                 )}
 
@@ -9513,24 +9869,36 @@ const NexoraContext = createContext(null);
                             playTactileClick(data.profile.soundEnabled, 680, 10);
                             setActiveTab(item.id);
                           }}
-                          className={`px-2.5 py-2 rounded-md text-xs font-mono flex items-center justify-between gap-2 shrink-0 transition ${
-                            isActive ? 'arch-btn-primary' : 'arch-btn-ghost border-transparent'
+                          aria-current={isActive ? 'page' : undefined}
+                          className={`px-2.5 py-2 rounded-lg text-[12px] font-sans font-medium flex items-center justify-between gap-2 shrink-0 ${
+                            isActive ? 'arch-nav-active' : 'arch-nav-idle'
                           }`}
                           title={item.label}
                         >
                           <span className="inline-flex items-center gap-2.5 truncate">
-                            <Icon name={item.icon} size={15} />
+                            <span style={{ color: isActive ? 'var(--ink-primary)' : 'var(--ink-muted)' }}>
+                              <Icon name={item.icon} size={15} />
+                            </span>
                             {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
                           </span>
                           {!sidebarCollapsed && (
-                            <span className="inline-flex items-center gap-1">
+                            <span className="inline-flex items-center gap-1.5">
                               {item.badge !== undefined && item.badge > 0 && (
-                                <span className="px-1.5 py-0.2 rounded text-[10px] border tabular-nums">
+                                <span
+                                  className="px-1.5 py-0.2 rounded font-mono text-[10px] border tabular-nums"
+                                  style={{
+                                    backgroundColor: isActive ? 'var(--bg-active)' : 'var(--bg-elevated)',
+                                    borderColor: isActive ? 'var(--border-strong)' : 'var(--border-elevated)',
+                                    color: isActive ? 'var(--ink-primary)' : 'var(--ink-secondary)'
+                                  }}
+                                >
                                   {item.badge}
                                 </span>
                               )}
                               {index < 9 && (
-                                <kbd className="font-mono text-[9px] opacity-50">{index + 1}</kbd>
+                                <kbd className="font-mono text-[10px] tabular-nums" style={{ color: isActive ? 'var(--ink-primary)' : 'var(--ink-dim)' }}>
+                                  {index + 1}
+                                </kbd>
                               )}
                             </span>
                           )}
@@ -9544,27 +9912,35 @@ const NexoraContext = createContext(null);
                   onClick={toggleAudio}
                   aria-pressed={isAudioPlaying}
                   aria-label={isAudioPlaying ? 'Turn background audio off' : 'Turn background audio on'}
-                  className="w-full arch-btn-ghost rounded-md px-2.5 py-2 text-xs font-mono flex items-center justify-between gap-2"
+                  className="w-full arch-btn-ghost rounded-lg px-2.5 py-2 text-[11px] font-mono flex items-center justify-between gap-2"
                   title={isAudioPlaying ? 'Background audio is on' : 'Background audio is off'}
                 >
                   <span className="inline-flex items-center gap-2">
                     <Icon name={isAudioPlaying ? 'volume' : 'mute'} size={14} />
                     {!sidebarCollapsed && <span>BACKGROUND AUDIO {isAudioPlaying ? 'ON' : 'OFF'}</span>}
                   </span>
-                  <span className={`w-2 h-2 rounded-full ${isAudioPlaying ? 'animate-pulse' : ''}`} style={{ backgroundColor: isAudioPlaying ? 'var(--status-ok)' : 'var(--ink-muted)' }} />
+                  <span
+                    className={`w-2 h-2 rounded-full ${isAudioPlaying ? 'animate-pulse' : ''}`}
+                    style={{
+                      backgroundColor: isAudioPlaying ? 'var(--accent)' : 'var(--ink-dim)'
+                    }}
+                  />
                 </button>
               </div>
 
               {!sidebarCollapsed && (
-                <div className="hidden lg:block p-3.5 border-t space-y-2">
+                <div className="hidden lg:block p-3.5 border-t space-y-2" style={{ backgroundColor: 'var(--bg-canvas)' }}>
                   <div className="flex items-center justify-between text-[11px] font-mono tabular-nums">
                     <span style={{ color: 'var(--ink-muted)' }}>OPERATOR LVL {telemetry.level}</span>
-                    <span>{telemetry.xpProgress}%</span>
+                    <span style={{ color: 'var(--ink-primary)' }}>{telemetry.xpProgress}%</span>
                   </div>
                   <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-elevated)' }}>
                     <div
                       className="h-full transition-all duration-300"
-                      style={{ width: `${telemetry.xpProgress}%`, backgroundColor: 'var(--status-ok)' }}
+                      style={{
+                        width: `${telemetry.xpProgress}%`,
+                        backgroundColor: 'var(--accent)'
+                      }}
                     />
                   </div>
                 </div>
@@ -9581,8 +9957,8 @@ const NexoraContext = createContext(null);
                 style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--ink-muted)' }}
               >
                 <div className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: 'var(--status-ok)' }} />
-                  <span>XOR Bit | Architectural OS</span>
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: 'var(--accent)' }} />
+                  <span>XOR Bit | Personal Life &amp; Engineering OS</span>
                 </div>
                 <div className="tracking-wider uppercase" style={{ color: 'var(--ink-primary)' }}>
                   DESIGNED &amp; DEVELOPED BY <span className="font-semibold">SHRISHAILA M</span>

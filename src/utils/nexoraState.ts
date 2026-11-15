@@ -183,3 +183,145 @@ export function ensureWritableFetch(target: any = typeof window !== 'undefined' 
   }
 }
 
+export interface ShowcaseMission {
+  id: string;
+  code: string;
+  title: string;
+  category: string;
+  status: 'active' | 'done' | 'queued';
+  xp: number;
+  updatedAt: string;
+}
+
+export const DEFAULT_SHOWCASE_MISSIONS: ShowcaseMission[] = [
+  {
+    id: 'm-raft',
+    code: 'SYS-104',
+    title: 'Implement Raft Consensus AppendEntries RPC & Log Replication',
+    category: 'DISTRIBUTED SYSTEMS',
+    status: 'active',
+    xp: 120,
+    updatedAt: '09:42 UTC'
+  },
+  {
+    id: 'm-dsp',
+    code: 'ACA-208',
+    title: 'Derive Z-Transform ROC & Butterworth Filter Poles for DSP Lab',
+    category: 'SIGNAL PROCESSING',
+    status: 'done',
+    xp: 90,
+    updatedAt: '11:15 UTC'
+  },
+  {
+    id: 'm-cap',
+    code: 'FIN-019',
+    title: 'Rebalance Semester Liquid Reserve & Emergency Hardware Pot',
+    category: 'CAPITAL TELEMETRY',
+    status: 'active',
+    xp: 60,
+    updatedAt: '14:05 UTC'
+  },
+  {
+    id: 'm-kern',
+    code: 'SYS-312',
+    title: 'Benchmark eBPF Packet Filter Latency Under 60k pps Synthetic Load',
+    category: 'KERNEL LAB',
+    status: 'queued',
+    xp: 150,
+    updatedAt: '16:30 UTC'
+  }
+];
+
+export function toggleShowcaseMissionStatus(
+  missions: ShowcaseMission[],
+  id: string
+): ShowcaseMission[] {
+  const order: Array<ShowcaseMission['status']> = ['active', 'done', 'queued'];
+  return missions.map((m) => {
+    if (m.id !== id) return m;
+    const nextIdx = (order.indexOf(m.status) + 1) % order.length;
+    return { ...m, status: order[nextIdx] };
+  });
+}
+
+export function stepShowcaseMissionXp(
+  missions: ShowcaseMission[],
+  id: string,
+  delta: number
+): ShowcaseMission[] {
+  return missions.map((m) => {
+    if (m.id !== id) return m;
+    const nextXp = Math.max(10, Math.min(500, m.xp + delta));
+    return { ...m, xp: nextXp };
+  });
+}
+
+export function calculateAttendanceProjection(
+  attended: number,
+  total: number,
+  targetPct = 75
+): {
+  currentPct: number;
+  status: 'SAFE' | 'CRITICAL' | 'STANDBY';
+  marginClasses: number;
+  summary: string;
+} {
+  const safeTotal = Math.max(0, Math.floor(total));
+  const safeAttended = Math.max(0, Math.min(safeTotal, Math.floor(attended)));
+  const safeTarget = Math.max(1, Math.min(99, targetPct));
+
+  if (safeTotal === 0) {
+    return {
+      currentPct: 0,
+      status: 'STANDBY',
+      marginClasses: 0,
+      summary: 'No sessions logged yet'
+    };
+  }
+
+  const currentPct = Math.round((safeAttended / safeTotal) * 1000) / 10;
+  const targetRatio = safeTarget / 100;
+
+  if (currentPct >= safeTarget) {
+    const canMiss = Math.max(0, Math.floor(safeAttended / targetRatio - safeTotal));
+    return {
+      currentPct,
+      status: 'SAFE',
+      marginClasses: canMiss,
+      summary: canMiss > 0 ? `Buffer: can miss ${canMiss} upcoming session${canMiss === 1 ? '' : 's'}` : 'On exact threshold boundary'
+    };
+  }
+
+  const needed = Math.max(
+    1,
+    Math.ceil((targetRatio * safeTotal - safeAttended) / (1 - targetRatio))
+  );
+  return {
+    currentPct,
+    status: 'CRITICAL',
+    marginClasses: -needed,
+    summary: `Attend next ${needed} consecutive session${needed === 1 ? '' : 's'} to reach ${safeTarget}%`
+  };
+}
+
+export interface CommandPaletteItem {
+  id: string;
+  label: string;
+  category: string;
+  shortcut?: string;
+  keywords?: string;
+}
+
+export function filterCommandPaletteItems<T extends CommandPaletteItem>(
+  items: T[],
+  query: string
+): T[] {
+  const q = (query || '').trim().toLowerCase();
+  if (!q) return items;
+  return items.filter((item) => {
+    const haystack = `${item.label} ${item.category} ${item.keywords || ''} ${item.shortcut || ''}`.toLowerCase();
+    return q.split(/\s+/).every((token) => haystack.includes(token));
+  });
+}
+
+

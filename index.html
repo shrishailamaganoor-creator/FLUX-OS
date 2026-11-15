@@ -47,6 +47,22 @@
           },
           true
         );
+        try {
+          if ('caches' in window) {
+            caches.keys().then(function (keys) {
+              keys.forEach(function (k) {
+                if (k !== 'xor-bit-v2.1.0') caches.delete(k);
+              });
+            });
+          }
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function (regs) {
+              regs.forEach(function (r) {
+                r.update();
+              });
+            });
+          }
+        } catch (e) {}
       })();
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
@@ -68,7 +84,7 @@
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
   </head>
   <body>
     <!-- Atmospheric Film Grain Overlay (0.025 opacity, non-blocking) -->
@@ -84,11 +100,11 @@
       if (window.location.hostname.endsWith('github.io')) {
         var link = document.createElement('link');
         link.rel = 'stylesheet';
-        link.href = './compiled/app.css';
+        link.href = './compiled/app.css?v=2.1.0';
         document.head.appendChild(link);
         var s = document.createElement('script');
         s.type = 'module';
-        s.src = './compiled/app.js';
+        s.src = './compiled/app.js?v=2.1.0';
         document.body.appendChild(s);
       }
     </script>

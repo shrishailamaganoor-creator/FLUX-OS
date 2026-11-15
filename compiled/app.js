@@ -12209,17 +12209,42 @@ var Crosshair = ({ className = "" }) => /* @__PURE__ */ (0, import_jsx_runtime.j
 		strokeWidth: "1"
 	})
 });
+var SegmentedTelemetryBar = ({ pct = 0, segments = 12 }) => {
+	const clamped = Math.max(0, Math.min(100, Number(pct) || 0));
+	const activeCount = Math.round(clamped / 100 * segments);
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+		className: "grid gap-1 mt-3",
+		style: { gridTemplateColumns: `repeat(${segments}, minmax(0, 1fr))` },
+		"aria-hidden": "true",
+		children: Array.from({ length: segments }).map((_, idx) => {
+			return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+				className: "h-1.5 rounded-[2px] transition-all duration-200",
+				style: { backgroundColor: idx < activeCount ? "var(--accent)" : "var(--bg-elevated)" }
+			}, idx);
+		})
+	});
+};
 var EmptyState = ({ code, title, subtitle, actionLabel, onAction }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-	className: "arch-panel rounded-xl p-8 text-center relative overflow-hidden",
+	className: "arch-panel arch-dot-matrix rounded-xl p-8 text-center relative overflow-hidden",
 	children: [
 		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Crosshair, { className: "absolute top-2.5 left-2.5" }),
 		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Crosshair, { className: "absolute top-2.5 right-2.5" }),
 		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Crosshair, { className: "absolute bottom-2.5 left-2.5" }),
 		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Crosshair, { className: "absolute bottom-2.5 right-2.5" }),
-		/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-			className: "font-mono text-[10px] uppercase tracking-widest mb-2",
-			style: { color: "var(--ink-muted)" },
-			children: code || "SYS.EMPTY // ZERO_RECORDS"
+		/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+			className: "inline-flex items-center gap-2 px-2.5 py-1 rounded-full border mb-3",
+			style: {
+				backgroundColor: "var(--bg-elevated)",
+				borderColor: "var(--border-elevated)"
+			},
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+				className: "w-1.5 h-1.5 rounded-full",
+				style: { backgroundColor: "var(--accent)" }
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+				className: "font-mono text-[10px] uppercase tracking-[0.14em]",
+				style: { color: "var(--ink-muted)" },
+				children: code || "SYS.EMPTY // ZERO_RECORDS"
+			})]
 		}),
 		/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
 			className: "text-sm font-semibold heading-tight mb-1",
@@ -12231,10 +12256,17 @@ var EmptyState = ({ code, title, subtitle, actionLabel, onAction }) => /* @__PUR
 			style: { color: "var(--ink-secondary)" },
 			children: subtitle
 		}),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+			className: "max-w-xs mx-auto",
+			children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SegmentedTelemetryBar, {
+				pct: 0,
+				segments: 10
+			})
+		}),
 		actionLabel && onAction && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
 			type: "button",
 			onClick: onAction,
-			className: "mt-4 arch-btn-primary px-3.5 py-1.5 rounded-md text-xs font-medium inline-flex items-center gap-1.5",
+			className: "mt-4 arch-btn-primary px-4 py-2 rounded-md text-xs font-medium inline-flex items-center gap-1.5",
 			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
 				name: "plus",
 				size: 14
@@ -13420,23 +13452,38 @@ var DashboardView = () => {
 		const start = new Date(todayDate.getFullYear(), todayDate.getMonth(), todayDate.getDate());
 		daysToGo = Math.round((target - start) / 864e5);
 	}
+	const totalFocusMins = (data.focusSessions || []).reduce((a, b) => a + (b.minutes || 0), 0);
+	const totalMissionsCount = telemetry.pendingMissions + telemetry.completedMissions;
+	const missionCompletionPct = totalMissionsCount > 0 ? Math.round(telemetry.completedMissions / totalMissionsCount * 100) : 0;
+	const capitalRatioPct = telemetry.netBalance > 0 ? Math.min(100, Math.max(15, Math.round(telemetry.totalSaved / Math.max(1, telemetry.netBalance + telemetry.totalSaved) * 100))) : 0;
+	const totalFocusSec = Math.max(1, focusMinutes * 60);
+	const focusElapsedPct = Math.min(100, Math.max(0, Math.round((totalFocusSec - secondsLeft) / totalFocusSec * 100)));
+	const ringRadius = 54;
+	const ringCircumference = 2 * Math.PI * ringRadius;
+	const ringDashOffset = ringCircumference * (1 - (timerRunning || secondsLeft < totalFocusSec ? (totalFocusSec - secondsLeft) / totalFocusSec : 0));
+	const completedTop3Count = slots.filter((s) => s.done && s.text.trim()).length;
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "space-y-6",
 		children: [
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 				className: "flex flex-wrap items-end justify-between gap-4 border-b pb-4",
 				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-					className: "font-mono text-[11px] uppercase tracking-widest",
+					className: "font-mono text-[11px] uppercase tracking-[0.14em] flex items-center gap-2",
 					style: { color: "var(--ink-muted)" },
-					children: ["01 // TELEMETRY WORKBENCH • ", (/* @__PURE__ */ new Date()).toISOString().split("T")[0]]
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+						className: "w-1.5 h-1.5 rounded-full",
+						style: { backgroundColor: "var(--accent)" }
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: ["01 // TELEMETRY WORKBENCH • ", (/* @__PURE__ */ new Date()).toISOString().split("T")[0]] })]
 				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h1", {
-					className: "text-2xl sm:text-3xl font-semibold heading-tight mt-1",
+					className: "text-2xl sm:text-3xl font-semibold heading-tight mt-1.5",
+					style: { color: "var(--ink-primary)" },
 					children: [
 						greeting,
 						", ",
 						firstName,
 						" — ",
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+							className: "font-normal",
 							style: { color: "var(--ink-secondary)" },
 							children: data.profile.semester
 						})
@@ -13446,107 +13493,135 @@ var DashboardView = () => {
 					children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
 						type: "button",
 						onClick: () => setProfileModal(true),
-						className: "arch-btn-ghost px-3 py-1.5 rounded-md text-xs font-mono inline-flex items-center gap-1.5",
+						className: "arch-btn-ghost px-3.5 py-2 rounded-lg text-xs font-medium inline-flex items-center gap-2",
 						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
 							name: "user",
 							size: 14
-						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "CONFIGURE OPERATOR" })]
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Configure Operator" })]
 					})
 				})]
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-				className: "hairline-grid grid grid-cols-2 lg:grid-cols-4 rounded-xl overflow-hidden",
+				className: "hairline-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 rounded-xl overflow-hidden",
 				children: [
 					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: "hairline-cell p-4 relative",
+						className: "hairline-cell p-5 relative flex flex-col justify-between",
 						children: [
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Crosshair, { className: "absolute top-2 right-2" }),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-								className: "font-mono text-[10px] uppercase tracking-wider",
-								style: { color: "var(--ink-muted)" },
-								children: "ATTENDANCE AGGREGATE"
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-								className: "text-2xl font-mono font-semibold tabular-nums mt-1.5",
-								children: telemetry.totalClasses > 0 ? `${telemetry.avgAttendance}%` : "--%"
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-								className: "font-mono text-[11px] mt-1 tabular-nums",
-								style: { color: "var(--ink-secondary)" },
-								children: [
-									telemetry.totalAttended,
-									" / ",
-									telemetry.totalClasses,
-									" sessions logged"
-								]
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Crosshair, { className: "absolute top-2.5 right-2.5" }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+									className: "font-mono text-[11px] uppercase tracking-[0.14em]",
+									style: { color: "var(--ink-muted)" },
+									children: "ATTENDANCE AGGREGATE"
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+									className: "text-2xl sm:text-3xl font-mono font-semibold tabular-nums mt-2",
+									style: { color: "var(--ink-primary)" },
+									children: telemetry.totalClasses > 0 ? `${telemetry.avgAttendance}%` : "--%"
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "font-mono text-[11px] mt-1 tabular-nums",
+									style: { color: "var(--ink-secondary)" },
+									children: [
+										telemetry.totalAttended,
+										" / ",
+										telemetry.totalClasses,
+										" sessions logged"
+									]
+								})
+							] }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SegmentedTelemetryBar, {
+								pct: telemetry.totalClasses > 0 ? telemetry.avgAttendance : 0,
+								segments: 12
 							})
 						]
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: "hairline-cell p-4 relative",
+						className: "hairline-cell p-5 relative flex flex-col justify-between",
 						children: [
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Crosshair, { className: "absolute top-2 right-2" }),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-								className: "font-mono text-[10px] uppercase tracking-wider",
-								style: { color: "var(--ink-muted)" },
-								children: "NET LIQUID CAPITAL"
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-								className: "text-2xl font-mono font-semibold tabular-nums mt-1.5",
-								children: ["₹", telemetry.netBalance.toLocaleString("en-IN")]
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-								className: "font-mono text-[11px] mt-1 tabular-nums",
-								style: { color: "var(--ink-secondary)" },
-								children: ["Saved in Pots: ₹", telemetry.totalSaved.toLocaleString("en-IN")]
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Crosshair, { className: "absolute top-2.5 right-2.5" }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+									className: "font-mono text-[11px] uppercase tracking-[0.14em]",
+									style: { color: "var(--ink-muted)" },
+									children: "NET LIQUID CAPITAL"
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "text-2xl sm:text-3xl font-mono font-semibold tabular-nums mt-2",
+									style: { color: "var(--ink-primary)" },
+									children: ["₹", telemetry.netBalance.toLocaleString("en-IN")]
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "font-mono text-[11px] mt-1 tabular-nums",
+									style: { color: "var(--ink-secondary)" },
+									children: ["Saved in Pots: ₹", telemetry.totalSaved.toLocaleString("en-IN")]
+								})
+							] }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SegmentedTelemetryBar, {
+								pct: capitalRatioPct,
+								segments: 12
 							})
 						]
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: "hairline-cell p-4 relative",
+						className: "hairline-cell p-5 relative flex flex-col justify-between",
 						children: [
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Crosshair, { className: "absolute top-2 right-2" }),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-								className: "font-mono text-[10px] uppercase tracking-wider",
-								style: { color: "var(--ink-muted)" },
-								children: "ACTIVE MISSIONS"
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-								className: "text-2xl font-mono font-semibold tabular-nums mt-1.5",
-								children: telemetry.pendingMissions
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-								className: "font-mono text-[11px] mt-1 tabular-nums",
-								style: { color: "var(--ink-secondary)" },
-								children: [telemetry.completedMissions, " completed total"]
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Crosshair, { className: "absolute top-2.5 right-2.5" }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+									className: "font-mono text-[11px] uppercase tracking-[0.14em]",
+									style: { color: "var(--ink-muted)" },
+									children: "ACTIVE MISSIONS"
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+									className: "text-2xl sm:text-3xl font-mono font-semibold tabular-nums mt-2",
+									style: { color: "var(--ink-primary)" },
+									children: telemetry.pendingMissions
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "font-mono text-[11px] mt-1 tabular-nums",
+									style: { color: "var(--ink-secondary)" },
+									children: [telemetry.completedMissions, " completed total"]
+								})
+							] }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SegmentedTelemetryBar, {
+								pct: missionCompletionPct,
+								segments: 12
 							})
 						]
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: "hairline-cell p-4 relative",
+						className: "hairline-cell p-5 relative flex flex-col justify-between",
 						children: [
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Crosshair, { className: "absolute top-2 right-2" }),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-								className: "font-mono text-[10px] uppercase tracking-wider",
-								style: { color: "var(--ink-muted)" },
-								children: "DEEP WORK LOGGED"
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-								className: "text-2xl font-mono font-semibold tabular-nums mt-1.5",
-								children: [(data.focusSessions || []).reduce((a, b) => a + (b.minutes || 0), 0), "m"]
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-								className: "font-mono text-[11px] mt-1 tabular-nums",
-								style: { color: "var(--ink-secondary)" },
-								children: [
-									"LVL ",
-									telemetry.level,
-									" • ",
-									data.profile.xp || 0,
-									" / ",
-									telemetry.nextThreshold,
-									" XP"
-								]
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Crosshair, { className: "absolute top-2.5 right-2.5" }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+									className: "font-mono text-[11px] uppercase tracking-[0.14em]",
+									style: { color: "var(--ink-muted)" },
+									children: "DEEP WORK LOGGED"
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "text-2xl sm:text-3xl font-mono font-semibold tabular-nums mt-2",
+									style: { color: "var(--ink-primary)" },
+									children: [totalFocusMins, "m"]
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "font-mono text-[11px] mt-1 tabular-nums",
+									style: { color: "var(--ink-secondary)" },
+									children: [
+										"LVL ",
+										telemetry.level,
+										" • ",
+										data.profile.xp || 0,
+										" / ",
+										telemetry.nextThreshold,
+										" XP"
+									]
+								})
+							] }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SegmentedTelemetryBar, {
+								pct: telemetry.xpProgress,
+								segments: 12
 							})
 						]
 					})
@@ -13556,43 +13631,70 @@ var DashboardView = () => {
 				className: "grid grid-cols-1 lg:grid-cols-12 gap-5",
 				children: [
 					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: "lg:col-span-5 arch-panel rounded-xl p-5 space-y-3",
+						className: "lg:col-span-5 arch-panel rounded-xl p-5 space-y-3.5",
 						children: [
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Crosshair, { className: "absolute top-2 right-2" }),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-								className: "font-mono text-[11px] uppercase tracking-wider",
-								style: { color: "var(--ink-muted)" },
-								children: "TODAY // TOP 3 PRIORITIES"
-							}),
-							slots.map((s, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-								className: "flex items-center gap-2.5",
-								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-									type: "checkbox",
-									checked: s.done,
-									onChange: () => updateTop3(i, { done: !s.done }),
-									className: "w-4 h-4 cursor-pointer"
-								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-									value: s.text,
-									onChange: (e) => updateTop3(i, { text: e.target.value }),
-									placeholder: `Priority ${i + 1}`,
-									className: `flex-1 arch-input rounded-md px-3 py-2 text-xs ${s.done ? "line-through opacity-50" : ""}`
-								})]
-							}, i))
-						]
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: "lg:col-span-4 arch-panel rounded-xl p-5 space-y-3",
-						children: [
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Crosshair, { className: "absolute top-2 right-2" }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Crosshair, { className: "absolute top-2.5 right-2.5" }),
 							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 								className: "flex items-center justify-between gap-2",
 								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-									className: "font-mono text-[11px] uppercase tracking-wider",
+									className: "font-mono text-[11px] uppercase tracking-[0.14em]",
+									style: { color: "var(--ink-muted)" },
+									children: "TODAY // TOP 3 PRIORITIES"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+									className: "font-mono text-[11px] tabular-nums px-2 py-0.5 rounded border",
+									style: {
+										backgroundColor: "var(--bg-elevated)",
+										borderColor: "var(--border-elevated)",
+										color: completedTop3Count > 0 ? "var(--ink-primary)" : "var(--ink-muted)"
+									},
+									children: [completedTop3Count, " / 3 LOCKED"]
+								})]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+								className: "space-y-2.5",
+								children: slots.map((s, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "flex items-center gap-2.5",
+									children: [
+										/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+											className: "font-mono text-[10px] tabular-nums w-5 shrink-0",
+											style: { color: s.done ? "var(--ink-primary)" : "var(--ink-dim)" },
+											children: ["0", i + 1]
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+											type: "checkbox",
+											checked: s.done,
+											onChange: () => updateTop3(i, { done: !s.done }),
+											"aria-label": `Mark Priority ${i + 1} complete`,
+											className: "w-4 h-4 rounded cursor-pointer shrink-0"
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+											value: s.text,
+											onChange: (e) => updateTop3(i, { text: e.target.value }),
+											placeholder: `Priority ${i + 1}`,
+											className: `flex-1 arch-input rounded-lg px-3 py-2 text-xs font-sans ${s.done ? "line-through opacity-50" : ""}`
+										})
+									]
+								}, i))
+							})
+						]
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "lg:col-span-4 arch-panel rounded-xl p-5 flex flex-col justify-between space-y-3",
+						children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Crosshair, { className: "absolute top-2.5 right-2.5" }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "flex items-center justify-between gap-2",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+									className: "font-mono text-[11px] uppercase tracking-[0.14em]",
 									style: { color: "var(--ink-muted)" },
 									children: "STREAK // PER HABIT"
 								}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-									className: "font-mono text-xs tabular-nums",
-									style: { color: "var(--status-ok)" },
+									className: "font-mono text-[11px] tabular-nums px-2 py-0.5 rounded border",
+									style: {
+										color: "var(--ink-primary)",
+										backgroundColor: "var(--bg-elevated)",
+										borderColor: "var(--border-elevated)"
+									},
 									children: [
 										overallStreak,
 										" DAY",
@@ -13601,10 +13703,50 @@ var DashboardView = () => {
 									]
 								})]
 							}),
-							habitStats.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-								className: "text-xs font-mono py-3",
-								style: { color: "var(--ink-muted)" },
-								children: "NO HABITS YET. ADD ONE IN HABIT MATRIX."
+							habitStats.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "rounded-lg border p-3.5 space-y-3 arch-dot-matrix",
+								style: {
+									backgroundColor: "var(--bg-canvas)",
+									borderColor: "var(--border-hairline)"
+								},
+								children: [
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "flex items-center justify-between",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+											className: "font-mono text-[10px] uppercase tracking-[0.12em]",
+											style: { color: "var(--ink-muted)" },
+											children: "28-DAY CONSISTENCY MATRIX"
+										}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+											className: "font-mono text-[10px] tabular-nums",
+											style: { color: "var(--ink-dim)" },
+											children: "0 / 28 NODES"
+										})]
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+										className: "grid grid-cols-7 gap-1.5",
+										"aria-hidden": "true",
+										children: Array.from({ length: 21 }).map((_, idx) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+											className: "h-2.5 rounded-[2px] border",
+											style: {
+												backgroundColor: idx === 20 ? "var(--accent-subtle)" : "var(--bg-elevated)",
+												borderColor: idx === 20 ? "var(--accent-border)" : "var(--border-hairline)"
+											}
+										}, idx))
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "flex items-center justify-between gap-2 pt-0.5",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+											className: "text-[11px]",
+											style: { color: "var(--ink-secondary)" },
+											children: "No habits tracked yet."
+										}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+											type: "button",
+											onClick: () => setActiveTab("habits"),
+											className: "arch-btn-ghost px-2.5 py-1 rounded text-[11px] font-medium",
+											children: "Open Habit Matrix →"
+										})]
+									})
+								]
 							}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 								className: "max-h-40 overflow-y-auto divide-y pr-1",
 								children: habitStats.map((h) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -13613,7 +13755,7 @@ var DashboardView = () => {
 										className: "flex items-center gap-2 min-w-0",
 										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 											className: "w-2 h-2 rounded-full shrink-0",
-											style: { backgroundColor: h.doneToday ? "var(--status-ok)" : "var(--ink-muted)" }
+											style: { backgroundColor: h.doneToday ? "var(--accent)" : "var(--ink-dim)" }
 										}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 											className: "text-xs font-medium truncate",
 											children: h.name
@@ -13639,33 +13781,51 @@ var DashboardView = () => {
 						]
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: "lg:col-span-3 arch-panel rounded-xl p-5 space-y-2.5",
+						className: "lg:col-span-3 arch-panel rounded-xl p-5 flex flex-col justify-between space-y-3",
 						children: [
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Crosshair, { className: "absolute top-2 right-2" }),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-								className: "font-mono text-[11px] uppercase tracking-wider",
-								style: { color: "var(--ink-muted)" },
-								children: "COUNTDOWN"
-							}),
-							daysToGo !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-								className: "font-mono text-3xl font-semibold tabular-nums",
-								children: [daysToGo >= 0 ? daysToGo : 0, /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-									className: "text-[11px] font-normal",
-									style: { color: "var(--ink-secondary)" },
-									children: [" DAYS TO ", (cd.name || "EVENT").toUpperCase()]
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Crosshair, { className: "absolute top-2.5 right-2.5" }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "flex items-center justify-between gap-2",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+									className: "font-mono text-[11px] uppercase tracking-[0.14em]",
+									style: { color: "var(--ink-muted)" },
+									children: "COUNTDOWN"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+									className: "font-mono text-[10px] tabular-nums",
+									style: { color: daysToGo !== null ? "var(--ink-primary)" : "var(--ink-dim)" },
+									children: daysToGo !== null ? "LOCKED" : "STANDBY"
 								})]
 							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-								value: cd.name,
-								onChange: (e) => setCountdown({ name: e.target.value }),
-								placeholder: "Event name",
-								className: "w-full arch-input rounded-md px-3 py-1.5 text-xs"
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "rounded-lg border px-3 py-2 flex items-center justify-between gap-2 arch-dot-matrix",
+								style: {
+									backgroundColor: "var(--bg-canvas)",
+									borderColor: "var(--border-hairline)"
+								},
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+									className: "font-mono text-lg font-semibold tabular-nums whitespace-nowrap shrink-0",
+									style: { color: daysToGo !== null ? "var(--ink-primary)" : "var(--ink-dim)" },
+									children: daysToGo !== null ? `${String(Math.max(0, daysToGo)).padStart(2, "0")}d` : "--d : --h"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+									className: "font-mono text-[10px] uppercase tracking-[0.1em] truncate text-right",
+									style: { color: "var(--ink-secondary)" },
+									children: cd.name ? cd.name : "T-MINUS"
+								})]
 							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-								type: "date",
-								value: cd.date,
-								onChange: (e) => setCountdown({ date: e.target.value }),
-								className: "w-full arch-input rounded-md px-3 py-1.5 text-xs font-mono"
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "space-y-2",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+									value: cd.name,
+									onChange: (e) => setCountdown({ name: e.target.value }),
+									placeholder: "Event name",
+									className: "w-full arch-input rounded-lg px-3 py-1.5 text-xs font-sans"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+									type: "date",
+									value: cd.date,
+									onChange: (e) => setCountdown({ date: e.target.value }),
+									"aria-label": "Countdown target date",
+									className: "w-full arch-input rounded-lg px-3 py-1.5 text-xs font-mono tabular-nums"
+								})]
 							})
 						]
 					})
@@ -13678,13 +13838,17 @@ var DashboardView = () => {
 					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 						className: "arch-panel rounded-xl p-5 space-y-4",
 						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-							className: "flex items-center justify-between",
+							className: "flex flex-wrap items-center justify-between gap-2",
 							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-								className: "font-mono text-[11px] uppercase tracking-wider",
+								className: "font-mono text-[11px] uppercase tracking-[0.14em]",
 								style: { color: "var(--ink-muted)" },
 								children: "02 // INSTANT TELEMETRY CAPTURE"
 							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-								className: "flex gap-1",
+								className: "flex flex-wrap gap-1 p-1 rounded-lg border",
+								style: {
+									backgroundColor: "var(--bg-canvas)",
+									borderColor: "var(--border-hairline)"
+								},
 								children: [
 									{
 										id: "mission",
@@ -13705,7 +13869,7 @@ var DashboardView = () => {
 								].map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 									type: "button",
 									onClick: () => setQuickType(t.id),
-									className: `px-2.5 py-1 rounded text-[11px] font-mono transition ${quickType === t.id ? "arch-btn-primary" : "arch-btn-ghost"}`,
+									className: `px-2.5 py-1 rounded-md text-xs font-medium transition ${quickType === t.id ? "arch-btn-primary" : "arch-btn-ghost border-transparent"}`,
 									children: t.label
 								}, t.id))
 							})]
@@ -13717,18 +13881,18 @@ var DashboardView = () => {
 									value: quickTitle,
 									onChange: (e) => setQuickTitle(e.target.value),
 									placeholder: quickType === "mission" ? "Mission title (e.g., Complete OS Kernel Lab)..." : quickType === "subject" ? "Course name (e.g., Operating Systems)..." : "Transaction description...",
-									className: "sm:col-span-6 arch-input rounded-md px-3 py-2 text-xs"
+									className: "sm:col-span-6 arch-input rounded-lg px-3 py-2 text-xs font-sans"
 								}),
 								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
 									type: quickType === "expense" || quickType === "income" ? "number" : "text",
 									value: quickMeta,
 									onChange: (e) => setQuickMeta(e.target.value),
 									placeholder: quickType === "mission" ? "YYYY-MM-DD (optional)" : quickType === "subject" ? "Code (e.g. CS302)" : "Amount in ₹",
-									className: "sm:col-span-3 arch-input rounded-md px-3 py-2 text-xs font-mono tabular-nums"
+									className: "sm:col-span-3 arch-input rounded-lg px-3 py-2 text-xs font-mono tabular-nums"
 								}),
 								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
 									type: "submit",
-									className: "sm:col-span-3 arch-btn-primary rounded-md px-3 py-2 text-xs font-medium inline-flex items-center justify-center gap-1.5",
+									className: "sm:col-span-3 arch-btn-primary rounded-lg px-3 py-2 text-xs font-semibold inline-flex items-center justify-center gap-1.5",
 									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
 										name: "plus",
 										size: 14
@@ -13737,31 +13901,61 @@ var DashboardView = () => {
 							]
 						})]
 					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: "arch-panel rounded-xl p-5 space-y-3",
+						className: "arch-panel rounded-xl p-5 space-y-3.5",
 						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 							className: "flex items-center justify-between",
 							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-								className: "font-mono text-[11px] uppercase tracking-wider",
+								className: "font-mono text-[11px] uppercase tracking-[0.14em]",
 								style: { color: "var(--ink-muted)" },
 								children: "03 // PRIORITY MISSION QUEUE"
 							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 								type: "button",
 								onClick: () => setActiveTab("missions"),
-								className: "text-xs font-mono hover:underline",
-								style: { color: "var(--ink-secondary)" },
-								children: "Open Mission Control →"
+								className: "text-xs font-medium hover:underline inline-flex items-center gap-1",
+								style: { color: "var(--ink-primary)" },
+								children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Open Mission Control →" })
 							})]
 						}), data.tasks.filter((t) => !t.completed).length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-							className: "py-6 text-center border border-dashed rounded-lg",
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-								className: "text-xs font-mono",
-								style: { color: "var(--ink-muted)" },
-								children: "NO PENDING MISSIONS IN QUEUE"
-							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-								className: "text-[11px] mt-1",
-								style: { color: "var(--ink-secondary)" },
-								children: "Use the capture bar above or jump to Mission Control to log tasks."
-							})]
+							className: "rounded-lg border p-4 space-y-2.5 arch-dot-matrix",
+							style: {
+								backgroundColor: "var(--bg-canvas)",
+								borderColor: "var(--border-hairline)"
+							},
+							children: [
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.12em]",
+									style: { color: "var(--ink-muted)" },
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "QUEUE TELEMETRY // 0 ACTIVE PACKETS" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+										style: { color: "var(--ink-secondary)" },
+										children: "STANDBY"
+									})]
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+									className: "grid grid-cols-1 sm:grid-cols-3 gap-2",
+									"aria-hidden": "true",
+									children: [
+										"SLOT.01 // IDLE",
+										"SLOT.02 // IDLE",
+										"SLOT.03 // IDLE"
+									].map((slot) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "px-3 py-2 rounded border border-dashed flex items-center justify-between font-mono text-[10px]",
+										style: {
+											backgroundColor: "var(--bg-surface)",
+											borderColor: "var(--border-elevated)",
+											color: "var(--ink-dim)"
+										},
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: slot }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+											className: "w-1.5 h-1.5 rounded-full",
+											style: { backgroundColor: "var(--ink-dim)" }
+										})]
+									}, slot))
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+									className: "text-xs pt-0.5",
+									style: { color: "var(--ink-secondary)" },
+									children: "No pending missions in queue. Use the capture bar above or jump to Mission Control to log tasks."
+								})
+							]
 						}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 							className: "divide-y",
 							children: data.tasks.filter((t) => !t.completed).slice(0, 5).map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -13775,7 +13969,7 @@ var DashboardView = () => {
 											playTactileClick(data.profile.soundEnabled, 920, 14);
 											completeMission(t.id, true);
 										},
-										className: "w-3.5 h-3.5 rounded"
+										className: "w-4 h-4 rounded cursor-pointer"
 									}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 										className: "text-xs font-medium",
 										children: t.title
@@ -13785,7 +13979,12 @@ var DashboardView = () => {
 									style: { color: "var(--ink-muted)" },
 									children: [
 										Number(t.bounty) > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-											style: { color: "var(--status-ok)" },
+											className: "px-1.5 py-0.5 rounded border",
+											style: {
+												color: "var(--ink-primary)",
+												backgroundColor: "var(--bg-elevated)",
+												borderColor: "var(--border-elevated)"
+											},
 											children: ["+₹", t.bounty]
 										}),
 										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: t.priority }),
@@ -13802,11 +14001,15 @@ var DashboardView = () => {
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 							className: "flex items-center justify-between mb-3",
 							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-								className: "font-mono text-[11px] uppercase tracking-wider",
+								className: "font-mono text-[11px] uppercase tracking-[0.14em]",
 								style: { color: "var(--ink-muted)" },
 								children: "04 // DEEP WORK FOCUS ENGINE"
 							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-								className: "flex gap-1",
+								className: "flex gap-1 p-1 rounded-lg border",
+								style: {
+									backgroundColor: "var(--bg-canvas)",
+									borderColor: "var(--border-hairline)"
+								},
 								children: [
 									15,
 									25,
@@ -13819,7 +14022,7 @@ var DashboardView = () => {
 										setFocusMinutes(m);
 										setSecondsLeft(m * 60);
 									},
-									className: `px-2 py-0.5 rounded font-mono text-[11px] tabular-nums ${focusMinutes === m ? "arch-btn-primary" : "arch-btn-ghost"}`,
+									className: `px-2 py-0.5 rounded font-mono text-[11px] tabular-nums ${focusMinutes === m ? "arch-btn-primary" : "arch-btn-ghost border-transparent"}`,
 									children: [m, "m"]
 								}, m))
 							})]
@@ -13828,48 +14031,111 @@ var DashboardView = () => {
 							value: focusLabel,
 							onChange: (e) => setFocusLabel(e.target.value),
 							placeholder: "Session objective (e.g., DSA Graph Algorithms)...",
-							className: "w-full arch-input rounded-md px-3 py-1.5 text-xs mb-4"
+							className: "w-full arch-input rounded-lg px-3 py-2 text-xs font-sans mb-4"
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-							className: "py-5 text-center border rounded-lg",
-							style: { backgroundColor: "var(--bg-canvas)" },
+							className: "p-4 border rounded-xl arch-dot-matrix flex items-center justify-between gap-4",
+							style: {
+								backgroundColor: "var(--bg-canvas)",
+								borderColor: "var(--border-hairline)"
+							},
 							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-								className: "font-mono text-4xl sm:text-5xl font-semibold tracking-tight tabular-nums",
+								className: "relative w-28 h-28 shrink-0 flex items-center justify-center",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", {
+									className: "w-full h-full -rotate-90",
+									viewBox: "0 0 128 128",
+									"aria-hidden": "true",
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("circle", {
+										cx: "64",
+										cy: "64",
+										r: ringRadius,
+										fill: "none",
+										stroke: "var(--border-elevated)",
+										strokeWidth: "6",
+										strokeDasharray: "4 4"
+									}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("circle", {
+										cx: "64",
+										cy: "64",
+										r: ringRadius,
+										fill: "none",
+										stroke: "var(--accent)",
+										strokeWidth: "6",
+										strokeLinecap: "round",
+										strokeDasharray: ringCircumference,
+										strokeDashoffset: ringDashOffset,
+										style: { transition: "stroke-dashoffset 300ms cubic-bezier(0.22, 1, 0.36, 1)" }
+									})]
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "absolute inset-0 flex flex-col items-center justify-center",
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+										className: "font-mono text-[10px] tabular-nums",
+										style: { color: "var(--ink-primary)" },
+										children: [focusElapsedPct, "%"]
+									}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+										className: "font-mono text-[9px] uppercase tracking-wider",
+										style: { color: "var(--ink-muted)" },
+										children: "CYCLE"
+									})]
+								})]
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "flex-1 min-w-0 text-right pr-1",
 								children: [
-									mm,
-									":",
-									ss
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border mb-1.5",
+										style: {
+											backgroundColor: "var(--bg-elevated)",
+											borderColor: timerRunning ? "var(--accent-border)" : "var(--border-elevated)"
+										},
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+											className: `w-1.5 h-1.5 rounded-full ${timerRunning ? "animate-pulse" : ""}`,
+											style: { backgroundColor: timerRunning ? "var(--accent)" : "var(--ink-muted)" }
+										}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+											className: "font-mono text-[9px] uppercase tracking-[0.14em]",
+											style: { color: timerRunning ? "var(--ink-primary)" : "var(--ink-muted)" },
+											children: timerRunning ? "RECORDING ACTIVE" : "STANDBY // READY"
+										})]
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "font-mono text-4xl sm:text-5xl font-semibold tracking-tight tabular-nums",
+										style: { color: "var(--ink-primary)" },
+										children: [
+											mm,
+											":",
+											ss
+										]
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+										className: "font-mono text-[10px] uppercase tracking-[0.12em] mt-1 truncate",
+										style: { color: "var(--ink-secondary)" },
+										children: focusLabel.trim() || `${focusMinutes}M DEEP WORK PROTOCOL`
+									})
 								]
-							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-								className: "font-mono text-[10px] uppercase tracking-widest mt-2",
-								style: { color: "var(--ink-muted)" },
-								children: timerRunning ? "TELEMETRY RECORDING ACTIVE" : "STANDBY // READY TO ENGAGE"
 							})]
 						})
 					] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: "grid grid-cols-2 gap-2",
+						className: "grid grid-cols-2 gap-2.5",
 						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
 							type: "button",
 							onClick: () => {
 								playTactileClick(data.profile.soundEnabled, 740, 12);
 								setTimerRunning((r) => !r);
 							},
-							className: "arch-btn-primary py-2 rounded-md text-xs font-mono inline-flex items-center justify-center gap-1.5",
+							className: "arch-btn-primary py-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5",
 							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
 								name: timerRunning ? "pause" : "play",
 								size: 14
-							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: timerRunning ? "PAUSE" : "START BLOCK" })]
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: timerRunning ? "Pause Block" : "Start Block" })]
 						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
 							type: "button",
 							onClick: () => {
 								setTimerRunning(false);
 								setSecondsLeft(focusMinutes * 60);
 							},
-							className: "arch-btn-ghost py-2 rounded-md text-xs font-mono inline-flex items-center justify-center gap-1.5",
+							className: "arch-btn-ghost py-2.5 rounded-lg text-xs font-medium inline-flex items-center justify-center gap-1.5",
 							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
 								name: "reset",
 								size: 14
-							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "RESET" })]
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Reset" })]
 						})]
 					})]
 				})]
@@ -19157,7 +19423,7 @@ var SettingsView = () => {
 						{
 							id: "industrial",
 							name: "Direction C: Swiss Industrial",
-							sub: "Teenage Engineering Stone + Orange (#FF4F00)"
+							sub: "Teenage Eng. Stone + Orange (#FF4F00)"
 						}
 					].map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
 						type: "button",
@@ -21084,6 +21350,39 @@ var FocusDisciplineView = () => {
 	}, [shutdownDays, todayKey]);
 	const urgeMM = String(Math.floor(urgeSecLeft / 60)).padStart(2, "0");
 	const urgeSS = String(urgeSecLeft % 60).padStart(2, "0");
+	const [selectedDayKey, setSelectedDayKey] = (0, import_react.useState)(todayKey);
+	const [sessionLabel, setSessionLabel] = (0, import_react.useState)("");
+	const [sessionMinInput, setSessionMinInput] = (0, import_react.useState)("50");
+	const logFocusSessionDirect = (minsToLog, customLabel) => {
+		const validMins = Math.max(1, Math.min(600, Number(minsToLog) || 25));
+		playTactileClick(data.profile.soundEnabled, 880, 12);
+		const targetDate = selectedDayKey || todayKey;
+		const record = {
+			id: "fs-" + Date.now() + "-" + Math.floor(Math.random() * 1e3),
+			label: (customLabel !== void 0 ? customLabel : sessionLabel).trim() || "Deep Work Block",
+			minutes: validMins,
+			date: targetDate
+		};
+		setData((prev) => ({
+			...prev,
+			focusSessions: [record, ...prev.focusSessions || []]
+		}));
+		setSessionLabel("");
+		awardXP(Math.max(10, Math.round(validMins * 1.5)), `Logged ${validMins}m Deep Work (${targetDate})`);
+	};
+	const deleteFocusSession = (sessionId) => {
+		playTactileClick(data.profile.soundEnabled, 640, 10);
+		setData((prev) => ({
+			...prev,
+			focusSessions: (prev.focusSessions || []).filter((s) => s.id !== sessionId)
+		}));
+		notify("Removed deep-work session");
+	};
+	const weekSessions = (0, import_react.useMemo)(() => focusSessions.filter((s) => s.date >= weekStartKey && s.date <= weekEndKey), [
+		focusSessions,
+		weekStartKey,
+		weekEndKey
+	]);
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "space-y-5 pt-6 border-t",
 		children: [
@@ -21124,6 +21423,7 @@ var FocusDisciplineView = () => {
 										max: "100",
 										value: focusGoalHrs,
 										onChange: (e) => updateGoalHrs(e.target.value),
+										"aria-label": "Weekly deep work goal hours",
 										className: "w-14 arch-input rounded px-2 py-0.5 text-xs font-mono tabular-nums"
 									}),
 									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
@@ -21144,39 +21444,168 @@ var FocusDisciplineView = () => {
 								className: "h-full transition-all duration-300",
 								style: {
 									width: `${focusPct}%`,
-									backgroundColor: "var(--status-ok)"
+									backgroundColor: "var(--accent)"
 								}
 							})
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-							className: "grid grid-cols-7 gap-2 h-28 items-end pt-4 px-1 border-b pb-2",
+							className: "grid grid-cols-7 gap-2 pt-3 pb-3 px-3 rounded-lg border arch-dot-matrix",
+							style: {
+								backgroundColor: "var(--bg-canvas)",
+								borderColor: "var(--border-hairline)"
+							},
 							children: weekDays.map((d) => {
-								const barPct = Math.round(d.focusMin / maxDayFocus * 100);
+								const barPct = d.focusMin > 0 ? Math.min(100, Math.max(14, Math.round(d.focusMin / maxDayFocus * 100))) : 0;
 								const isToday = d.key === todayKey;
-								return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-									className: "flex flex-col items-center justify-end h-full gap-1",
+								const isSelected = d.key === selectedDayKey;
+								return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+									type: "button",
+									onClick: () => setSelectedDayKey(d.key),
+									className: "flex flex-col items-center gap-1.5 group cursor-pointer focus:outline-none",
+									title: `Click to log deep work for ${d.label} (${d.key})`,
 									children: [
-										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-											className: "font-mono text-[9px] tabular-nums",
-											style: { color: "var(--ink-muted)" },
-											children: d.focusMin > 0 ? `${d.focusMin}m` : ""
+										/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+											className: "font-mono text-[10px] tabular-nums",
+											style: { color: d.focusMin > 0 ? "var(--ink-primary)" : "var(--ink-dim)" },
+											children: [d.focusMin, "m"]
 										}),
 										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-											className: "w-full max-w-[30px] rounded-t transition-all duration-300",
+											className: "w-full max-w-[32px] h-24 rounded-md border p-0.5 flex items-end transition-colors",
 											style: {
-												height: `${Math.max(8, barPct)}%`,
-												backgroundColor: isToday ? "var(--status-ok)" : "var(--accent)",
-												opacity: d.focusMin > 0 ? .9 : .18
-											}
+												backgroundColor: "var(--bg-surface)",
+												borderColor: isSelected ? "var(--accent)" : isToday ? "var(--border-strong)" : "var(--border-hairline)"
+											},
+											children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+												className: "w-full rounded-[3px] transition-all duration-300",
+												style: {
+													height: d.focusMin > 0 ? `${barPct}%` : "4px",
+													backgroundColor: d.focusMin > 0 ? "var(--accent)" : "var(--bg-elevated)"
+												}
+											})
 										}),
 										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-											className: "font-mono text-[10px]",
-											style: { color: isToday ? "var(--ink-primary)" : "var(--ink-muted)" },
+											className: "font-mono text-[10px] px-1.5 py-0.5 rounded",
+											style: {
+												color: isSelected ? "var(--accent-fg)" : isToday ? "var(--ink-primary)" : "var(--ink-muted)",
+												backgroundColor: isSelected ? "var(--accent)" : "transparent",
+												fontWeight: isSelected || isToday ? 600 : 400
+											},
 											children: d.label
 										})
 									]
 								}, d.key);
 							})
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "rounded-lg border p-3.5 space-y-3",
+							style: {
+								backgroundColor: "var(--bg-canvas)",
+								borderColor: "var(--border-hairline)"
+							},
+							children: [
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "flex flex-wrap items-center justify-between gap-2",
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+										className: "font-mono text-[10px] uppercase tracking-wider",
+										style: { color: "var(--ink-muted)" },
+										children: ["LOG DEEP WORK FOR: ", /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", {
+											style: { color: "var(--ink-primary)" },
+											children: selectedDayKey === todayKey ? `TODAY (${selectedDayKey})` : selectedDayKey
+										})]
+									}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+										className: "flex items-center gap-1.5",
+										children: [
+											25,
+											50,
+											90
+										].map((preset) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+											type: "button",
+											onClick: () => logFocusSessionDirect(preset, `${preset}m Deep Work Block`),
+											className: "arch-btn-ghost px-2.5 py-1 rounded text-[11px] font-mono tabular-nums",
+											children: [
+												"+",
+												preset,
+												"m"
+											]
+										}, preset))
+									})]
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
+									onSubmit: (e) => {
+										e.preventDefault();
+										logFocusSessionDirect(sessionMinInput, sessionLabel);
+									},
+									className: "grid grid-cols-1 sm:grid-cols-12 gap-2",
+									children: [
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+											type: "text",
+											value: sessionLabel,
+											onChange: (e) => setSessionLabel(e.target.value),
+											placeholder: "Session topic (e.g., OS Kernel Lab, Signals Revision)...",
+											className: "sm:col-span-6 arch-input rounded-md px-3 py-1.5 text-xs"
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+											type: "number",
+											min: "1",
+											max: "600",
+											value: sessionMinInput,
+											onChange: (e) => setSessionMinInput(e.target.value),
+											placeholder: "Mins",
+											"aria-label": "Session duration in minutes",
+											className: "sm:col-span-3 arch-input rounded-md px-3 py-1.5 text-xs font-mono tabular-nums"
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+											type: "submit",
+											className: "sm:col-span-3 arch-btn-primary rounded-md py-1.5 px-3 text-xs font-mono inline-flex items-center justify-center gap-1.5",
+											children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
+												name: "plus",
+												size: 13
+											}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Log Block" })]
+										})
+									]
+								}),
+								weekSessions.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+									className: "pt-2 border-t divide-y max-h-32 overflow-y-auto",
+									style: { borderColor: "var(--border-hairline)" },
+									children: weekSessions.slice(0, 8).map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "py-1.5 flex items-center justify-between gap-2 text-xs",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+											className: "flex items-center gap-2 min-w-0",
+											children: [
+												/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+													className: "font-mono text-[10px] px-1.5 py-0.5 rounded border tabular-nums",
+													style: {
+														color: "var(--ink-primary)",
+														backgroundColor: "var(--bg-elevated)",
+														borderColor: "var(--border-elevated)"
+													},
+													children: [
+														"+",
+														s.minutes,
+														"m"
+													]
+												}),
+												/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+													className: "truncate font-medium",
+													children: s.label
+												}),
+												/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+													className: "font-mono text-[10px] shrink-0",
+													style: { color: "var(--ink-muted)" },
+													children: s.date
+												})
+											]
+										}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+											type: "button",
+											onClick: () => deleteFocusSession(s.id),
+											className: "font-mono text-xs px-1.5 hover:opacity-80",
+											style: { color: "var(--ink-muted)" },
+											title: "Delete session",
+											children: "×"
+										})]
+									}, s.id))
+								})
+							]
 						})
 					]
 				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -23124,26 +23553,31 @@ var NexoraApp = () => {
 			className: "min-h-screen flex flex-col lg:flex-row",
 			children: [
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", {
-					className: `border-b lg:border-b-0 lg:border-r lg:min-h-screen shrink-0 flex flex-col justify-between transition-all duration-200 ${sidebarCollapsed ? "lg:w-16" : "lg:w-64"}`,
-					style: { backgroundColor: "var(--bg-surface)" },
+					className: `border-b lg:border-b-0 lg:border-r lg:min-h-screen shrink-0 flex flex-col justify-between transition-all duration-200 ${sidebarCollapsed ? "lg:w-16" : "lg:w-[240px]"}`,
+					style: {
+						backgroundColor: "var(--bg-surface)",
+						boxShadow: "inset -1px 0 0 0 var(--border-hairline)"
+					},
 					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: "p-3.5 space-y-4",
+						className: "p-3.5 space-y-3.5",
 						children: [
 							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 								className: "flex items-center justify-between gap-2 px-1",
 								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 									className: "flex items-center gap-2.5 min-w-0",
 									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-										className: "w-7 h-7 rounded-md flex items-center justify-center font-mono text-xs font-bold shrink-0",
+										className: "w-7 h-7 rounded-lg flex items-center justify-center font-mono text-xs font-bold shrink-0",
 										style: {
 											backgroundColor: "var(--accent)",
-											color: "var(--accent-fg)"
+											color: "var(--accent-fg)",
+											border: "1px solid var(--border-elevated)"
 										},
 										children: "XB"
 									}), !sidebarCollapsed && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 										className: "truncate",
 										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-											className: "font-mono text-xs font-bold tracking-wider",
+											className: "font-sans text-xs font-semibold tracking-tight",
+											style: { color: "var(--ink-primary)" },
 											children: "XOR Bit | OS"
 										}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 											className: "font-mono text-[10px] truncate",
@@ -23165,8 +23599,8 @@ var NexoraApp = () => {
 							!sidebarCollapsed && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
 								type: "button",
 								onClick: () => setCmdOpen(true),
-								className: "w-full arch-input rounded-md px-2.5 py-1.5 text-xs font-mono flex items-center justify-between",
-								style: { color: "var(--ink-muted)" },
+								className: "w-full arch-input rounded-lg px-2.5 py-2 text-xs font-sans flex items-center justify-between",
+								style: { color: "var(--ink-secondary)" },
 								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
 									className: "inline-flex items-center gap-2",
 									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
@@ -23174,7 +23608,12 @@ var NexoraApp = () => {
 										size: 13
 									}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Command / Search..." })]
 								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("kbd", {
-									className: "text-[10px] border rounded px-1",
+									className: "font-mono text-[10px] border rounded px-1.5 py-0.5",
+									style: {
+										backgroundColor: "var(--bg-canvas)",
+										borderColor: "var(--border-elevated)",
+										color: "var(--ink-muted)"
+									},
 									children: "⌘K"
 								})]
 							}),
@@ -23188,24 +23627,34 @@ var NexoraApp = () => {
 											playTactileClick(data.profile.soundEnabled, 680, 10);
 											setActiveTab(item.id);
 										},
-										className: `px-2.5 py-2 rounded-md text-xs font-mono flex items-center justify-between gap-2 shrink-0 transition ${isActive ? "arch-btn-primary" : "arch-btn-ghost border-transparent"}`,
+										"aria-current": isActive ? "page" : void 0,
+										className: `px-2.5 py-2 rounded-lg text-[12px] font-sans font-medium flex items-center justify-between gap-2 shrink-0 ${isActive ? "arch-nav-active" : "arch-nav-idle"}`,
 										title: item.label,
 										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
 											className: "inline-flex items-center gap-2.5 truncate",
-											children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
-												name: item.icon,
-												size: 15
+											children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+												style: { color: isActive ? "var(--ink-primary)" : "var(--ink-muted)" },
+												children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
+													name: item.icon,
+													size: 15
+												})
 											}), !sidebarCollapsed && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 												className: "truncate",
 												children: item.label
 											})]
 										}), !sidebarCollapsed && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-											className: "inline-flex items-center gap-1",
+											className: "inline-flex items-center gap-1.5",
 											children: [item.badge !== void 0 && item.badge > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-												className: "px-1.5 py-0.2 rounded text-[10px] border tabular-nums",
+												className: "px-1.5 py-0.2 rounded font-mono text-[10px] border tabular-nums",
+												style: {
+													backgroundColor: isActive ? "var(--bg-active)" : "var(--bg-elevated)",
+													borderColor: isActive ? "var(--border-strong)" : "var(--border-elevated)",
+													color: isActive ? "var(--ink-primary)" : "var(--ink-secondary)"
+												},
 												children: item.badge
 											}), index < 9 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("kbd", {
-												className: "font-mono text-[9px] opacity-50",
+												className: "font-mono text-[10px] tabular-nums",
+												style: { color: isActive ? "var(--ink-primary)" : "var(--ink-dim)" },
 												children: index + 1
 											})]
 										})]
@@ -23217,7 +23666,7 @@ var NexoraApp = () => {
 								onClick: toggleAudio,
 								"aria-pressed": isAudioPlaying,
 								"aria-label": isAudioPlaying ? "Turn background audio off" : "Turn background audio on",
-								className: "w-full arch-btn-ghost rounded-md px-2.5 py-2 text-xs font-mono flex items-center justify-between gap-2",
+								className: "w-full arch-btn-ghost rounded-lg px-2.5 py-2 text-[11px] font-mono flex items-center justify-between gap-2",
 								title: isAudioPlaying ? "Background audio is on" : "Background audio is off",
 								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
 									className: "inline-flex items-center gap-2",
@@ -23227,18 +23676,22 @@ var NexoraApp = () => {
 									}), !sidebarCollapsed && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: ["BACKGROUND AUDIO ", isAudioPlaying ? "ON" : "OFF"] })]
 								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 									className: `w-2 h-2 rounded-full ${isAudioPlaying ? "animate-pulse" : ""}`,
-									style: { backgroundColor: isAudioPlaying ? "var(--status-ok)" : "var(--ink-muted)" }
+									style: { backgroundColor: isAudioPlaying ? "var(--accent)" : "var(--ink-dim)" }
 								})]
 							})
 						]
 					}), !sidebarCollapsed && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 						className: "hidden lg:block p-3.5 border-t space-y-2",
+						style: { backgroundColor: "var(--bg-canvas)" },
 						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 							className: "flex items-center justify-between text-[11px] font-mono tabular-nums",
 							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
 								style: { color: "var(--ink-muted)" },
 								children: ["OPERATOR LVL ", telemetry.level]
-							}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [telemetry.xpProgress, "%"] })]
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+								style: { color: "var(--ink-primary)" },
+								children: [telemetry.xpProgress, "%"]
+							})]
 						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 							className: "w-full h-1.5 rounded-full overflow-hidden",
 							style: { backgroundColor: "var(--bg-elevated)" },
@@ -23246,7 +23699,7 @@ var NexoraApp = () => {
 								className: "h-full transition-all duration-300",
 								style: {
 									width: `${telemetry.xpProgress}%`,
-									backgroundColor: "var(--status-ok)"
+									backgroundColor: "var(--accent)"
 								}
 							})
 						})]
@@ -23267,8 +23720,8 @@ var NexoraApp = () => {
 							className: "flex items-center gap-2",
 							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 								className: "w-1.5 h-1.5 rounded-full",
-								style: { backgroundColor: "var(--status-ok)" }
-							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "XOR Bit | Architectural OS" })]
+								style: { backgroundColor: "var(--accent)" }
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "XOR Bit | Personal Life & Engineering OS" })]
 						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 							className: "tracking-wider uppercase",
 							style: { color: "var(--ink-primary)" },
