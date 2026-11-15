@@ -6170,7 +6170,10 @@ const NexoraContext = createContext(null);
           if (typeof window === 'undefined') return false;
           return (
             window.matchMedia('(display-mode: standalone)').matches ||
-            window.navigator.standalone === true
+            window.matchMedia('(display-mode: window-controls-overlay)').matches ||
+            window.matchMedia('(display-mode: minimal-ui)').matches ||
+            window.navigator.standalone === true ||
+            localStorage.getItem('FLUX_PWA_INSTALLED_V1') === '1'
           );
         });
         const [showInstallGuide, setShowInstallGuide] = useState(false);
@@ -6183,19 +6186,39 @@ const NexoraContext = createContext(null);
           const checkStandalone = () => {
             const standalone =
               window.matchMedia('(display-mode: standalone)').matches ||
+              window.matchMedia('(display-mode: window-controls-overlay)').matches ||
+              window.matchMedia('(display-mode: minimal-ui)').matches ||
               window.navigator.standalone === true;
-            setIsInstalled(standalone);
+            if (standalone) {
+              try {
+                localStorage.setItem('FLUX_PWA_INSTALLED_V1', '1');
+              } catch (e) {}
+              setIsInstalled(true);
+            }
           };
           const onBeforeInstall = (e) => {
             e.preventDefault();
             window.__fluxInstallPrompt = e;
+            try {
+              localStorage.removeItem('FLUX_PWA_INSTALLED_V1');
+            } catch (err) {}
             setDeferredPrompt(e);
+            setIsInstalled(false);
           };
           const onInstallReady = () => {
-            setDeferredPrompt(window.__fluxInstallPrompt || null);
+            if (window.__fluxInstallPrompt) {
+              try {
+                localStorage.removeItem('FLUX_PWA_INSTALLED_V1');
+              } catch (err) {}
+              setDeferredPrompt(window.__fluxInstallPrompt);
+              setIsInstalled(false);
+            }
           };
           const onAppInstalled = () => {
             window.__fluxInstallPrompt = null;
+            try {
+              localStorage.setItem('FLUX_PWA_INSTALLED_V1', '1');
+            } catch (err) {}
             setDeferredPrompt(null);
             setIsInstalled(true);
             setShowInstallGuide(false);
@@ -6203,6 +6226,9 @@ const NexoraContext = createContext(null);
           };
           const mq = window.matchMedia('(display-mode: standalone)');
           checkStandalone();
+          if (window.__fluxInstallPrompt) {
+            onInstallReady();
+          }
           window.addEventListener('beforeinstallprompt', onBeforeInstall);
           window.addEventListener('flux-install-ready', onInstallReady);
           window.addEventListener('appinstalled', onAppInstalled);
@@ -6225,6 +6251,9 @@ const NexoraContext = createContext(null);
               const choice = await promptEvent.userChoice;
               if (choice && choice.outcome === 'accepted') {
                 window.__fluxInstallPrompt = null;
+                try {
+                  localStorage.setItem('FLUX_PWA_INSTALLED_V1', '1');
+                } catch (err) {}
                 setDeferredPrompt(null);
                 setIsInstalled(true);
                 setShowInstallGuide(false);
@@ -6233,48 +6262,39 @@ const NexoraContext = createContext(null);
               setShowInstallGuide(true);
             }
           } else {
-            setShowInstallGuide(true);
-            notify('Follow the browser install steps shown in System Core');
+            setShowInstallGuide((prev) => !prev);
           }
         };
 
+        const canShowInstall =
+          !isInstalled &&
+          (Boolean(deferredPrompt) || (isIOSDevice && typeof window !== 'undefined' && !('onbeforeinstallprompt' in window)));
+
         return (
           <div className="space-y-6 max-w-4xl">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="font-mono text-[11px] uppercase tracking-widest" style={{ color: 'var(--ink-muted)' }}>
-                  14 // SYSTEM CONFIGURATION & STORAGE
-                </div>
-                <h1 className="text-2xl font-semibold heading-tight mt-1">System Core</h1>
+            <div>
+              <div className="font-mono text-[11px] uppercase tracking-widest" style={{ color: 'var(--ink-muted)' }}>
+                14 // SYSTEM CONFIGURATION & STORAGE
               </div>
-              {!isInstalled && (
-                <button
-                  type="button"
-                  onClick={handleInstallApp}
-                  className="arch-btn-primary px-4 py-2 rounded-md text-xs font-mono inline-flex items-center gap-2"
-                >
-                  <Icon name="download" size={14} />
-                  <span>Install FLUX App</span>
-                </button>
-              )}
+              <h1 className="text-2xl font-semibold heading-tight mt-1">System Core</h1>
             </div>
 
-            {!isInstalled ? (
+            {canShowInstall && (
               <div className="arch-panel p-5 rounded-xl space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div className="flex items-center gap-3 min-w-0">
                     <img
-                      src="./icon-192.png?v=2.7.0"
+                      src="./icon-192.png?v=2.8.0"
                       alt="FLUX"
                       className="w-10 h-10 rounded-xl object-cover shrink-0 border"
                       style={{ borderColor: 'var(--border-elevated)' }}
                     />
                     <div className="min-w-0">
                       <div className="font-mono text-xs uppercase" style={{ color: 'var(--ink-muted)' }}>
-                        DEVICE INSTALLATION // BROWSER SESSION DETECTED
+                        DEVICE INSTALLATION // WEB APP
                       </div>
                       <p className="text-xs mt-0.5" style={{ color: 'var(--ink-secondary)' }}>
-                        Install FLUX on your device for instant offline launch, dedicated window mode, and Start Menu / home screen icon.
+                        Install FLUX on your device for instant offline launch, dedicated window mode, and Start Menu / home screen access.
                       </p>
                     </div>
                   </div>
@@ -6295,7 +6315,7 @@ const NexoraContext = createContext(null);
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-mono text-[11px] uppercase font-semibold" style={{ color: 'var(--ink-primary)' }}>
-                        {isIOSDevice ? 'Install on iPhone / iPad (Safari)' : 'Install from Browser Menu'}
+                        Install on iPhone / iPad (Safari)
                       </span>
                       <button
                         type="button"
@@ -6305,38 +6325,12 @@ const NexoraContext = createContext(null);
                         CLOSE
                       </button>
                     </div>
-                    {isIOSDevice ? (
-                      <ol className="list-decimal list-inside space-y-1 text-[11px]" style={{ color: 'var(--ink-secondary)' }}>
-                        <li>Tap the <strong>Share</strong> icon in the Safari toolbar.</li>
-                        <li>Scroll down and tap <strong>Add to Home Screen</strong>, then tap <strong>Add</strong>.</li>
-                      </ol>
-                    ) : (
-                      <ol className="list-decimal list-inside space-y-1 text-[11px]" style={{ color: 'var(--ink-secondary)' }}>
-                        <li>Click the <strong>Install FLUX</strong> icon on the right side of your browser address bar, or open the browser menu (<strong>⋮</strong>).</li>
-                        <li>Select <strong>Install app</strong> / <strong>Add to Home screen</strong> (or <strong>Apps → Install this site as an app</strong> in Edge/Chrome).</li>
-                      </ol>
-                    )}
+                    <ol className="list-decimal list-inside space-y-1 text-[11px]" style={{ color: 'var(--ink-secondary)' }}>
+                      <li>Tap the <strong>Share</strong> icon in the Safari toolbar.</li>
+                      <li>Scroll down and tap <strong>Add to Home Screen</strong>, then tap <strong>Add</strong>.</li>
+                    </ol>
                   </div>
                 )}
-              </div>
-            ) : (
-              <div className="arch-panel p-4 rounded-xl flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <img
-                    src="./icon-192.png?v=2.7.0"
-                    alt="FLUX"
-                    className="w-9 h-9 rounded-xl object-cover shrink-0 border"
-                    style={{ borderColor: 'var(--border-elevated)' }}
-                  />
-                  <div className="min-w-0">
-                    <div className="font-mono text-[11px] uppercase" style={{ color: 'var(--status-ok)' }}>
-                      STANDALONE APP INSTALLED
-                    </div>
-                    <p className="text-[11px] mt-0.5" style={{ color: 'var(--ink-secondary)' }}>
-                      If Windows Start Menu still shows an older &ldquo;F&rdquo; tile from an earlier install, uninstall the app once from Start Menu (Options → Uninstall) and reinstall from your browser to refresh the Windows .ico cache.
-                    </p>
-                  </div>
-                </div>
               </div>
             )}
 
@@ -6460,16 +6454,6 @@ const NexoraContext = createContext(null);
                   <Icon name={data.profile.soundEnabled ? 'volume' : 'mute'} size={14} />
                   <span>Tactile Audio: {data.profile.soundEnabled ? 'ACTIVE' : 'MUTED'}</span>
                 </button>
-                {!isInstalled && (
-                  <button
-                    type="button"
-                    onClick={handleInstallApp}
-                    className="arch-btn-primary px-3.5 py-1.5 rounded-md text-xs font-mono inline-flex items-center gap-1.5"
-                  >
-                    <Icon name="download" size={14} />
-                    <span>Install FLUX App on Device</span>
-                  </button>
-                )}
               </div>
             </div>
 
@@ -6478,16 +6462,6 @@ const NexoraContext = createContext(null);
                 LOCAL STORAGE VAULT
               </div>
               <div className="flex flex-wrap gap-2.5">
-                {!isInstalled && (
-                  <button
-                    type="button"
-                    onClick={handleInstallApp}
-                    className="arch-btn-primary px-4 py-2 rounded-md text-xs font-mono inline-flex items-center gap-1.5"
-                  >
-                    <Icon name="download" size={14} />
-                    <span>Install FLUX App</span>
-                  </button>
-                )}
                 <button type="button" onClick={exportJSON} className="arch-btn-primary px-4 py-2 rounded-md text-xs font-mono inline-flex items-center gap-1.5">
                   <Icon name="download" size={14} />
                   <span>Export JSON Snapshot</span>
