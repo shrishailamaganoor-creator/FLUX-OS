@@ -23566,7 +23566,7 @@ var NexoraApp = () => {
 								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 									className: "flex items-center gap-2.5 min-w-0",
 									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
-										src: "./icon-192.png?v=2.3.0",
+										src: "./icon-192.png?v=2.4.0",
 										alt: "FLUX",
 										className: "w-7 h-7 rounded-lg object-cover shrink-0 shadow-sm"
 									}), !sidebarCollapsed && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -24013,7 +24013,7 @@ var SignInScreen = ({ onAuth }) => {
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 					className: "text-center space-y-3",
 					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
-						src: "./icon-512.png?v=2.3.0",
+						src: "./icon-512.png?v=2.4.0",
 						alt: "FLUX",
 						className: "w-16 h-16 rounded-2xl object-cover mx-auto shadow-2xl"
 					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {

@@ -9809,7 +9809,7 @@ const NexoraContext = createContext(null);
                 <div className="flex items-center justify-between gap-2 px-1">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <img
-                      src="./icon-192.png?v=2.3.0"
+                      src="./icon-192.png?v=2.4.0"
                       alt="FLUX"
                       className="w-7 h-7 rounded-lg object-cover shrink-0 shadow-sm"
                     />
@@ -10215,7 +10215,7 @@ export const SignInScreen = ({ onAuth }) => {
       <div className="relative z-10 w-full max-w-sm space-y-8">
         <div className="text-center space-y-3">
           <img
-            src="./icon-512.png?v=2.3.0"
+            src="./icon-512.png?v=2.4.0"
             alt="FLUX"
             className="w-16 h-16 rounded-2xl object-cover mx-auto shadow-2xl"
           />
