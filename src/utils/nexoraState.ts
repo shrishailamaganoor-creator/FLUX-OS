@@ -9,7 +9,8 @@ export const DEFAULT_DAY_TYPES = [
   { id: 'chill', label: 'Movie / Chill Day', color: '#EAB308' },
   { id: 'travel', label: 'Outing / Travel Day', color: '#06B6D4' },
   { id: 'deadline', label: 'Holiday / Exam / Deadline', color: '#F43F5E' },
-  { id: 'rest', label: 'Rest / Recharge Day', color: '#A855F7' }
+  { id: 'rest', label: 'Rest / Recharge Day', color: '#A855F7' },
+  { id: 'zeroday', label: 'Zero Day', color: '#71717A' }
 ];
 
 export const EMPTY_STATE = {

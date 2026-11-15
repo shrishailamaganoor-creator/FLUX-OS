@@ -1149,7 +1149,7 @@ const NexoraContext = createContext(null);
       );
     };
 
-    // Execution Hub Sub-View Switcher Bar (Shared across Missions, Projects, Academy)
+    // Execution Hub Sub-View Switcher Bar (Shared across Missions, Projects, Academy, Unified Calendar)
     const ExecutionHubSubNav = ({ current, onSelect }) => (
       <div className="flex flex-wrap items-center gap-1.5 p-1.5 rounded-lg border" style={{ backgroundColor: 'var(--bg-surface)' }}>
         <span className="font-mono text-[10px] uppercase tracking-wider px-2" style={{ color: 'var(--ink-muted)' }}>
@@ -1158,7 +1158,58 @@ const NexoraContext = createContext(null);
         {[
           { id: 'missions', label: 'Missions & ₹ Bounties', icon: 'missions' },
           { id: 'projects', label: 'Project Lab', icon: 'projects' },
-          { id: 'academy', label: 'Academy Matrix', icon: 'academy' }
+          { id: 'academy', label: 'Academy Matrix', icon: 'academy' },
+          { id: 'calendar', label: 'Unified Calendar', icon: 'calendar' }
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => onSelect(tab.id)}
+            className={`px-3 py-1 rounded-md text-xs font-mono inline-flex items-center gap-1.5 transition ${
+              current === tab.id ? 'arch-btn-primary' : 'arch-btn-ghost border-transparent'
+            }`}
+          >
+            <Icon name={tab.icon} size={13} />
+            <span>{tab.label}</span>
+          </button>
+        ))}
+      </div>
+    );
+
+    // Wallet Hub Sub-View Switcher Bar (Shared across My Wallet & Pay Yourself First Allocator)
+    const WalletHubSubNav = ({ current, onSelect }) => (
+      <div className="flex flex-wrap items-center gap-1.5 p-1.5 rounded-lg border" style={{ backgroundColor: 'var(--bg-surface)' }}>
+        <span className="font-mono text-[10px] uppercase tracking-wider px-2" style={{ color: 'var(--ink-muted)' }}>
+          WALLET HUB:
+        </span>
+        {[
+          { id: 'bank', label: 'My Wallet & Ledger', icon: 'bank' },
+          { id: 'money-allocator', label: 'Pay Yourself First', icon: 'shield' }
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => onSelect(tab.id)}
+            className={`px-3 py-1 rounded-md text-xs font-mono inline-flex items-center gap-1.5 transition ${
+              current === tab.id ? 'arch-btn-primary' : 'arch-btn-ghost border-transparent'
+            }`}
+          >
+            <Icon name={tab.icon} size={13} />
+            <span>{tab.label}</span>
+          </button>
+        ))}
+      </div>
+    );
+
+    // Bio-State Hub Sub-View Switcher Bar (Shared across Bio-State & NSDR Lab and Life Wheel & Weeks)
+    const BioStateHubSubNav = ({ current, onSelect }) => (
+      <div className="flex flex-wrap items-center gap-1.5 p-1.5 rounded-lg border" style={{ backgroundColor: 'var(--bg-surface)' }}>
+        <span className="font-mono text-[10px] uppercase tracking-wider px-2" style={{ color: 'var(--ink-muted)' }}>
+          BIO-STATE HUB:
+        </span>
+        {[
+          { id: 'bio-state', label: 'Bio-State & NSDR Lab', icon: 'clock' },
+          { id: 'life-audit', label: 'Life Wheel & Life in Weeks', icon: 'habits' }
         ].map((tab) => (
           <button
             key={tab.id}
@@ -2137,6 +2188,7 @@ const NexoraContext = createContext(null);
 
         return (
           <div className="space-y-6">
+            <WalletHubSubNav current="bank" onSelect={setActiveTab} />
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div>
                 <div className="font-mono text-[11px] uppercase tracking-widest" style={{ color: 'var(--ink-muted)' }}>
@@ -4434,6 +4486,7 @@ const NexoraContext = createContext(null);
 
         return (
           <div className="space-y-6">
+            <ExecutionHubSubNav current="calendar" onSelect={setActiveTab} />
             <div>
               <div className="font-mono text-[11px] uppercase tracking-widest" style={{ color: 'var(--ink-muted)' }}>
                 10 // COLOR-CODED LIFE CALENDAR &amp; MASTER CHRONOLOGY
@@ -7021,7 +7074,7 @@ const NexoraContext = createContext(null);
 
       // VIEW 17: BIO-STATE & NSDR LAB
       const BioStateView = () => {
-        const { data, setData, notify, awardXP, isAudioPlaying: isPlaying, sleepTimerSec, nsdrRunning, nsdrSecLeft, breathTick, stopAudio, startAudio, toggleNsdr, setNsdrSecLeft, setSleepTimerSec } = useContext(NexoraContext);
+        const { data, setData, setActiveTab, notify, awardXP, isAudioPlaying: isPlaying, sleepTimerSec, nsdrRunning, nsdrSecLeft, breathTick, stopAudio, startAudio, toggleNsdr, setNsdrSecLeft, setSleepTimerSec } = useContext(NexoraContext);
 
         const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         const today = new Date();
@@ -7188,6 +7241,7 @@ const NexoraContext = createContext(null);
 
         return (
           <div className="space-y-6">
+            <BioStateHubSubNav current="bio-state" onSelect={setActiveTab} />
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div>
                 <div className="font-mono text-[11px] uppercase tracking-widest" style={{ color: 'var(--ink-muted)' }}>
@@ -9561,46 +9615,15 @@ const NexoraContext = createContext(null);
         );
       };
 
-      // VIEW 22: LIFE & MONEY (Pay Yourself First + Life Wheel + Life in Weeks)
-      const LifeMoneyView = () => {
-        const { data, setData, notify, awardXP } = useContext(NexoraContext);
-
-        const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        const today = new Date();
-        const todayKey = ymd(today);
-
-        const AREAS = [
-          'Health',
-          'Academics',
-          'Skills',
-          'Money',
-          'Friends',
-          'Family',
-          'Fun',
-          'Peace of mind'
-        ];
-
-        const lifeWheel = data.lifeWheel || [];
+      // VIEW 22A: MONEY ALLOCATOR (Pay Yourself First — Integrated in Wallet Hub)
+      const MoneyAllocatorView = () => {
+        const { data, setData, setActiveTab, notify } = useContext(NexoraContext);
         const lifeSettings = data.lifeSettings || {};
         const savingsPots = data.savingsPots || [];
-
         const payFirstPct = lifeSettings.payFirstPct !== undefined ? Number(lifeSettings.payFirstPct) : 10;
-        const birthDate = lifeSettings.birthDate || '';
-        const targetAge = Math.max(20, Math.min(110, Number(lifeSettings.targetAge) || 80));
 
         const [incomeInput, setIncomeInput] = useState('');
         const [selectedPotId, setSelectedPotId] = useState(() => savingsPots[0]?.id || '');
-
-        const latestSnapshot = lifeWheel[0] || null;
-        const previousSnapshot = lifeWheel[1] || lifeWheel[0] || null;
-
-        const [scores, setScores] = useState(() => {
-          const base = {};
-          AREAS.forEach((a) => {
-            base[a] = latestSnapshot?.scores?.[a] ?? 6;
-          });
-          return base;
-        });
 
         const updateSettings = (patch) => {
           setData((prev) => ({
@@ -9621,7 +9644,7 @@ const NexoraContext = createContext(null);
             return;
           }
           if (!activePotId) {
-            notify('Create a savings goal in Wallet first', 'err');
+            notify('Create a savings goal in My Wallet first', 'err');
             return;
           }
           playTactileClick(data.profile.soundEnabled, 880, 12);
@@ -9636,63 +9659,18 @@ const NexoraContext = createContext(null);
           notify(`Moved ₹${saveAmount.toLocaleString('en-IN')} (${payFirstPct}%) to ${targetPot?.name || 'Savings Pot'}`);
         };
 
-        const minScore = useMemo(
-          () => Math.min(...AREAS.map((a) => Number(scores[a]) || 1)),
-          [scores]
-        );
-
-        const saveWheelSnapshot = () => {
-          playTactileClick(data.profile.soundEnabled, 880, 12);
-          const alreadySavedToday = lifeWheel.some((s) => s.date === todayKey);
-          const entry = {
-            id: 'lw-' + Date.now(),
-            date: todayKey,
-            scores: { ...scores }
-          };
-          setData((prev) => ({
-            ...prev,
-            lifeWheel: [entry, ...(prev.lifeWheel || [])]
-          }));
-          if (!alreadySavedToday) {
-            awardXP(15, 'Saved Life Wheel Snapshot');
-          } else {
-            notify('Life Wheel snapshot saved');
-          }
-        };
-
-        const deleteSnapshot = (id) => {
-          playTactileClick(data.profile.soundEnabled, 880, 12);
-          setData((prev) => ({
-            ...prev,
-            lifeWheel: (prev.lifeWheel || []).filter((s) => s.id !== id)
-          }));
-        };
-
-        const totalWeeks = targetAge * 52;
-        const livedWeeks = useMemo(() => {
-          if (!birthDate) return 0;
-          const bDate = new Date(birthDate + 'T00:00:00');
-          const diffMs = today - bDate;
-          if (isNaN(diffMs) || diffMs <= 0) return 0;
-          const wks = Math.floor(diffMs / (7 * 86400000));
-          return Math.min(totalWeeks, Math.max(0, wks));
-        }, [birthDate, totalWeeks, todayKey]);
-
-        const remainingWeeks = Math.max(0, totalWeeks - livedWeeks);
-
         return (
-          <div className="space-y-5 pt-6 border-t">
+          <div className="space-y-6">
+            <WalletHubSubNav current="money-allocator" onSelect={setActiveTab} />
             <div>
               <div className="font-mono text-[11px] uppercase tracking-widest" style={{ color: 'var(--ink-muted)' }}>
-                CAPITAL ALLOCATION, BALANCE AUDIT &amp; MEMENTO MORI
+                03B // CAPITAL ALLOCATION &amp; AUTOMATED SAVINGS CUT
               </div>
-              <h2 className="text-lg font-semibold heading-tight mt-0.5">
-                Pay Yourself First, Life Wheel &amp; Life in Weeks
-              </h2>
+              <h1 className="text-2xl font-semibold heading-tight mt-1">Pay Yourself First Allocator</h1>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-              <div className="lg:col-span-5 arch-panel rounded-xl p-5 space-y-4">
+              <div className="lg:col-span-6 arch-panel rounded-xl p-5 space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="font-mono text-[11px] uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
                     01 // PAY YOURSELF FIRST ALLOCATOR
@@ -9766,113 +9744,44 @@ const NexoraContext = createContext(null);
                 </form>
               </div>
 
-              <div className="lg:col-span-7 arch-panel rounded-xl p-5 space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <span className="font-mono text-[11px] uppercase tracking-wider block" style={{ color: 'var(--ink-muted)' }}>
-                      02 // 8-AXIS LIFE WHEEL AUDIT
-                    </span>
-                    {previousSnapshot && (
-                      <span className="font-mono text-[10px]" style={{ color: 'var(--ink-muted)' }}>
-                        Comparing against snapshot from {previousSnapshot.date}
-                      </span>
-                    )}
-                  </div>
+              <div className="lg:col-span-6 arch-panel rounded-xl p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[11px] uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
+                    02 // ACTIVE SAVINGS POTS IN WALLET ({savingsPots.length})
+                  </span>
                   <button
                     type="button"
-                    onClick={saveWheelSnapshot}
-                    className="arch-btn-primary px-3.5 py-1.5 rounded-md text-xs font-mono inline-flex items-center gap-1.5"
+                    onClick={() => setActiveTab('bank')}
+                    className="arch-btn-ghost px-2.5 py-1 rounded text-[11px] font-mono"
                   >
-                    <Icon name="check" size={13} />
-                    <span>Save snapshot</span>
+                    Manage Pots in Wallet &rarr;
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {AREAS.map((area) => {
-                    const val = Number(scores[area]) || 1;
-                    const prevVal = previousSnapshot?.scores?.[area];
-                    const isLowest = val === minScore;
-
-                    return (
-                      <div
-                        key={area}
-                        className="p-3 rounded-lg border space-y-1.5"
-                        style={{
-                          backgroundColor: 'var(--bg-canvas)',
-                          borderColor: isLowest ? 'var(--status-warn)' : 'var(--border-hairline)'
-                        }}
-                      >
-                        <div className="flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-semibold">{area}</span>
-                            {isLowest && (
-                              <span className="font-mono text-[9px] px-1.5 py-0.2 rounded border uppercase" style={{ color: 'var(--status-warn)', borderColor: 'var(--status-warn)' }}>
-                                LOWEST
-                              </span>
-                            )}
-                          </div>
-                          <div className="font-mono text-[11px] tabular-nums">
-                            <span>{val}/10</span>
-                            {prevVal !== undefined && (
-                              <span className="ml-1.5 text-[10px]" style={{ color: 'var(--ink-muted)' }}>
-                                (Prev: {prevVal})
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-elevated)' }}>
-                          <div
-                            className="h-full transition-all duration-200"
-                            style={{
-                              width: `${val * 10}%`,
-                              backgroundColor: isLowest ? 'var(--status-warn)' : 'var(--status-ok)'
-                            }}
-                          />
-                        </div>
-
-                        <input
-                          type="range"
-                          min="1"
-                          max="10"
-                          step="1"
-                          value={val}
-                          onChange={(e) =>
-                            setScores((prev) => ({ ...prev, [area]: Number(e.target.value) }))
-                          }
-                          className="w-full cursor-pointer"
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {lifeWheel.length === 0 ? (
+                {savingsPots.length === 0 ? (
                   <EmptyState
-                    code="LIFE.WHEEL // 0_SNAPSHOTS"
-                    title="No Life Wheel snapshots saved yet"
-                    subtitle="Adjust the 8 sliders above and click 'Save snapshot' to record a dated baseline for future comparison."
+                    code="WALLET.POTS // 0_ACTIVE"
+                    title="No savings pots created yet"
+                    subtitle="Switch to 'My Wallet & Ledger' above to create a savings pot (e.g., Laptop or Trip) and allocate a percentage of every income automatically."
                   />
                 ) : (
-                  <div className="pt-2 border-t space-y-2 max-h-40 overflow-y-auto pr-1">
-                    <div className="font-mono text-[10px] uppercase" style={{ color: 'var(--ink-muted)' }}>
-                      SAVED SNAPSHOT HISTORY ({lifeWheel.length})
-                    </div>
-                    {lifeWheel.map((snap) => {
-                      const vals = AREAS.map((a) => Number(snap.scores?.[a]) || 0);
-                      const avg = (vals.reduce((s, v) => s + v, 0) / AREAS.length).toFixed(1);
+                  <div className="space-y-3">
+                    {savingsPots.map((p) => {
+                      const pct = Math.min(100, Math.round(((Number(p.saved) || 0) / Math.max(1, Number(p.target) || 1)) * 100));
                       return (
-                        <div key={snap.id} className="py-1.5 px-2.5 rounded border flex items-center justify-between gap-2 text-xs font-mono" style={{ backgroundColor: 'var(--bg-canvas)' }}>
-                          <span>{snap.date} &bull; AVG: {avg}/10</span>
-                          <button
-                            type="button"
-                            onClick={() => deleteSnapshot(snap.id)}
-                            className="arch-btn-ghost p-1 rounded"
-                            title="Delete snapshot"
-                          >
-                            <Icon name="trash" size={12} />
-                          </button>
+                        <div key={p.id} className="p-3 rounded-lg border space-y-2" style={{ backgroundColor: 'var(--bg-canvas)' }}>
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-semibold">{p.name}</span>
+                            <span className="font-mono tabular-nums">
+                              ₹{Number(p.saved || 0).toLocaleString('en-IN')} / ₹{Number(p.target || 0).toLocaleString('en-IN')} ({pct}%)
+                            </span>
+                          </div>
+                          <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-elevated)' }}>
+                            <div
+                              className="h-full transition-all duration-300"
+                              style={{ width: `${pct}%`, backgroundColor: 'var(--status-ok)' }}
+                            />
+                          </div>
                         </div>
                       );
                     })}
@@ -9880,12 +9789,227 @@ const NexoraContext = createContext(null);
                 )}
               </div>
             </div>
+          </div>
+        );
+      };
+
+      // VIEW 22B: LIFE AUDIT (8-Axis Life Wheel + Life in Weeks — Integrated in Bio-State Hub)
+      const LifeAuditView = () => {
+        const { data, setData, setActiveTab, notify, awardXP } = useContext(NexoraContext);
+
+        const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const today = new Date();
+        const todayKey = ymd(today);
+
+        const AREAS = [
+          'Health',
+          'Academics',
+          'Skills',
+          'Money',
+          'Friends',
+          'Family',
+          'Fun',
+          'Peace of mind'
+        ];
+
+        const lifeWheel = data.lifeWheel || [];
+        const lifeSettings = data.lifeSettings || {};
+        const birthDate = lifeSettings.birthDate || '';
+        const targetAge = Math.max(20, Math.min(110, Number(lifeSettings.targetAge) || 80));
+
+        const latestSnapshot = lifeWheel[0] || null;
+        const previousSnapshot = lifeWheel[1] || lifeWheel[0] || null;
+
+        const [scores, setScores] = useState(() => {
+          const base = {};
+          AREAS.forEach((a) => {
+            base[a] = latestSnapshot?.scores?.[a] ?? 6;
+          });
+          return base;
+        });
+
+        const updateSettings = (patch) => {
+          setData((prev) => ({
+            ...prev,
+            lifeSettings: { ...(prev.lifeSettings || {}), ...patch }
+          }));
+        };
+
+        const minScore = useMemo(
+          () => Math.min(...AREAS.map((a) => Number(scores[a]) || 1)),
+          [scores]
+        );
+
+        const saveWheelSnapshot = () => {
+          playTactileClick(data.profile.soundEnabled, 880, 12);
+          const alreadySavedToday = lifeWheel.some((s) => s.date === todayKey);
+          const entry = {
+            id: 'lw-' + Date.now(),
+            date: todayKey,
+            scores: { ...scores }
+          };
+          setData((prev) => ({
+            ...prev,
+            lifeWheel: [entry, ...(prev.lifeWheel || [])]
+          }));
+          if (!alreadySavedToday) {
+            awardXP(15, 'Saved Life Wheel Snapshot');
+          } else {
+            notify('Life Wheel snapshot saved');
+          }
+        };
+
+        const deleteSnapshot = (id) => {
+          playTactileClick(data.profile.soundEnabled, 880, 12);
+          setData((prev) => ({
+            ...prev,
+            lifeWheel: (prev.lifeWheel || []).filter((s) => s.id !== id)
+          }));
+        };
+
+        const totalWeeks = targetAge * 52;
+        const livedWeeks = useMemo(() => {
+          if (!birthDate) return 0;
+          const bDate = new Date(birthDate + 'T00:00:00');
+          const diffMs = today - bDate;
+          if (isNaN(diffMs) || diffMs <= 0) return 0;
+          const wks = Math.floor(diffMs / (7 * 86400000));
+          return Math.min(totalWeeks, Math.max(0, wks));
+        }, [birthDate, totalWeeks, todayKey]);
+
+        const remainingWeeks = Math.max(0, totalWeeks - livedWeeks);
+
+        return (
+          <div className="space-y-6">
+            <BioStateHubSubNav current="life-audit" onSelect={setActiveTab} />
+            <div>
+              <div className="font-mono text-[11px] uppercase tracking-widest" style={{ color: 'var(--ink-muted)' }}>
+                17B // BALANCE AUDIT &amp; MEMENTO MORI CHRONOLOGY
+              </div>
+              <h1 className="text-2xl font-semibold heading-tight mt-1">
+                Life Wheel &amp; Life in Weeks
+              </h1>
+            </div>
+
+            <div className="arch-panel rounded-xl p-5 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <span className="font-mono text-[11px] uppercase tracking-wider block" style={{ color: 'var(--ink-muted)' }}>
+                    01 // 8-AXIS LIFE WHEEL AUDIT
+                  </span>
+                  {previousSnapshot && (
+                    <span className="font-mono text-[10px]" style={{ color: 'var(--ink-muted)' }}>
+                      Comparing against snapshot from {previousSnapshot.date}
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={saveWheelSnapshot}
+                  className="arch-btn-primary px-3.5 py-1.5 rounded-md text-xs font-mono inline-flex items-center gap-1.5"
+                >
+                  <Icon name="check" size={13} />
+                  <span>Save snapshot</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {AREAS.map((area) => {
+                  const val = Number(scores[area]) || 1;
+                  const prevVal = previousSnapshot?.scores?.[area];
+                  const isLowest = val === minScore;
+
+                  return (
+                    <div
+                      key={area}
+                      className="p-3 rounded-lg border space-y-1.5"
+                      style={{
+                        backgroundColor: 'var(--bg-canvas)',
+                        borderColor: isLowest ? 'var(--status-warn)' : 'var(--border-hairline)'
+                      }}
+                    >
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-semibold">{area}</span>
+                          {isLowest && (
+                            <span className="font-mono text-[9px] px-1.5 py-0.2 rounded border uppercase" style={{ color: 'var(--status-warn)', borderColor: 'var(--status-warn)' }}>
+                              LOWEST
+                            </span>
+                          )}
+                        </div>
+                        <div className="font-mono text-[11px] tabular-nums">
+                          <span>{val}/10</span>
+                          {prevVal !== undefined && (
+                            <span className="ml-1.5 text-[10px]" style={{ color: 'var(--ink-muted)' }}>
+                              (Prev: {prevVal})
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-elevated)' }}>
+                        <div
+                          className="h-full transition-all duration-200"
+                          style={{
+                            width: `${val * 10}%`,
+                            backgroundColor: isLowest ? 'var(--status-warn)' : 'var(--status-ok)'
+                          }}
+                        />
+                      </div>
+
+                      <input
+                        type="range"
+                        min="1"
+                        max="10"
+                        step="1"
+                        value={val}
+                        onChange={(e) =>
+                          setScores((prev) => ({ ...prev, [area]: Number(e.target.value) }))
+                        }
+                        className="w-full cursor-pointer"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+
+              {lifeWheel.length === 0 ? (
+                <EmptyState
+                  code="LIFE.WHEEL // 0_SNAPSHOTS"
+                  title="No Life Wheel snapshots saved yet"
+                  subtitle="Adjust the 8 sliders above and click 'Save snapshot' to record a dated baseline for future comparison."
+                />
+              ) : (
+                <div className="pt-2 border-t space-y-2 max-h-40 overflow-y-auto pr-1">
+                  <div className="font-mono text-[10px] uppercase" style={{ color: 'var(--ink-muted)' }}>
+                    SAVED SNAPSHOT HISTORY ({lifeWheel.length})
+                  </div>
+                  {lifeWheel.map((snap) => {
+                    const vals = AREAS.map((a) => Number(snap.scores?.[a]) || 0);
+                    const avg = (vals.reduce((s, v) => s + v, 0) / AREAS.length).toFixed(1);
+                    return (
+                      <div key={snap.id} className="py-1.5 px-2.5 rounded border flex items-center justify-between gap-2 text-xs font-mono" style={{ backgroundColor: 'var(--bg-canvas)' }}>
+                        <span>{snap.date} &bull; AVG: {avg}/10</span>
+                        <button
+                          type="button"
+                          onClick={() => deleteSnapshot(snap.id)}
+                          className="arch-btn-ghost p-1 rounded"
+                          title="Delete snapshot"
+                        >
+                          <Icon name="trash" size={12} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
 
             <div className="arch-panel rounded-xl p-5 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <span className="font-mono text-[11px] uppercase tracking-wider block" style={{ color: 'var(--ink-muted)' }}>
-                    03 // LIFE IN WEEKS (52 WEEKS PER ROW)
+                    02 // LIFE IN WEEKS (52 WEEKS PER ROW)
                   </span>
                   <div className="font-mono text-xs tabular-nums mt-0.5">
                     <span style={{ color: 'var(--status-ok)' }}>LIVED: {livedWeeks.toLocaleString()} WKS</span>
@@ -10272,24 +10396,21 @@ const NexoraContext = createContext(null);
         return () => clearTimeout(timerId);
       }, [timerRunning, secondsLeft, focusMinutes, focusLabel, data.profile.soundEnabled, awardXP]);
 
-      // Navigation definitions with Focus Discipline, Learning Engine, and Life & Money integrated
+      // Navigation definitions with streamlined Sidebar (Simulation Deck placed above System Core)
       const navItems = useMemo(() => [
         { id: 'dashboard', label: 'Today', icon: 'dashboard', keyHint: '1' },
         { id: 'academy', label: 'Academy', icon: 'academy', badge: data.subjects.length, keyHint: '2' },
         { id: 'bank', label: 'Wallet', icon: 'bank', badge: data.transactions.length, keyHint: '3' },
-        { id: 'skills', label: 'Skill Matrix', icon: 'skills', badge: data.skills.length, keyHint: '4' },
-        { id: 'innovation', label: 'Innovation Canvas', icon: 'innovation', badge: (data.ideas || []).length, keyHint: '5' },
-        { id: 'calendar', label: 'Unified Calendar', icon: 'calendar', keyHint: '6' },
-        { id: 'habits', label: 'Habit Matrix', icon: 'habits', badge: data.habits.length, keyHint: '7' },
-        { id: 'focus-discipline', label: 'Focus Discipline', icon: 'clock', badge: (data.distractionLog || []).length, keyHint: '8' },
-        { id: 'learning-engine', label: 'Learning Engine', icon: 'memory', badge: (data.feynmanNotes || []).length + (data.recallQs || []).length, keyHint: '9' },
-        { id: 'life-money', label: 'Life & Money', icon: 'bank', badge: (data.lifeWheel || []).length },
-        { id: 'arcade', label: 'Simulation Deck', icon: 'arcade' },
-        { id: 'habit-design', label: 'Habit Design', icon: 'habits', badge: (data.habitDesigns || []).length },
-        { id: 'study-vault', label: 'Study Vault', icon: 'memory', badge: (data.revisionTopics || []).length },
+        { id: 'innovation', label: 'Innovation Canvas', icon: 'innovation', badge: (data.ideas || []).length, keyHint: '4' },
+        { id: 'habits', label: 'Habit Matrix', icon: 'habits', badge: data.habits.length, keyHint: '5' },
+        { id: 'focus-discipline', label: 'Focus Discipline', icon: 'clock', badge: (data.distractionLog || []).length, keyHint: '6' },
+        { id: 'learning-engine', label: 'Learning Engine', icon: 'memory', badge: (data.feynmanNotes || []).length + (data.recallQs || []).length, keyHint: '7' },
+        { id: 'habit-design', label: 'Habit Design', icon: 'habits', badge: (data.habitDesigns || []).length, keyHint: '8' },
+        { id: 'study-vault', label: 'Study Vault', icon: 'memory', badge: (data.revisionTopics || []).length, keyHint: '9' },
         { id: 'bio-state', label: 'Bio-State Lab', icon: 'clock' },
         { id: 'executive', label: 'Executive Lab', icon: 'shield', badge: (data.decisions || []).filter((d) => !d.resolved).length },
         { id: 'trajectory', label: 'Trajectory', icon: 'skills', badge: (data.roadmaps || []).length },
+        { id: 'arcade', label: 'Simulation Deck', icon: 'arcade' },
         { id: 'settings', label: 'System Core', icon: 'settings' }
       ], [data]);
 
@@ -10460,19 +10581,19 @@ const NexoraContext = createContext(null);
           case 'dashboard': return <DashboardView />;
           case 'academy': return <AcademyView />;
           case 'bank': return <BankView />;
+          case 'money-allocator': return <MoneyAllocatorView />;
           case 'missions': return <MissionsView />;
-          case 'skills': return <SkillsView />;
           case 'projects': return <ProjectsView />;
           case 'innovation': return <InnovationCanvasView />;
           case 'calendar': return <CalendarView />;
           case 'habits': return <HabitsView />;
           case 'focus-discipline': return <FocusDisciplineView />;
           case 'learning-engine': return <LearningEngineView />;
-          case 'life-money': return <LifeMoneyView />;
           case 'arcade': return <ArcadeView />;
           case 'habit-design': return <HabitDesignView />;
           case 'study-vault': return <StudyVaultView />;
           case 'bio-state': return <BioStateView />;
+          case 'life-audit': return <LifeAuditView />;
           case 'executive': return <ExecutiveView />;
           case 'trajectory': return <TrajectoryView />;
           case 'secret-vault': return <SecretVaultView />;

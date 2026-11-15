@@ -11487,6 +11487,11 @@ var DEFAULT_DAY_TYPES = [
 		id: "rest",
 		label: "Rest / Recharge Day",
 		color: "#A855F7"
+	},
+	{
+		id: "zeroday",
+		label: "Zero Day",
+		color: "#71717A"
 	}
 ];
 var EMPTY_STATE = {
@@ -12790,8 +12795,63 @@ var ExecutionHubSubNav = ({ current, onSelect }) => /* @__PURE__ */ (0, import_j
 			id: "academy",
 			label: "Academy Matrix",
 			icon: "academy"
+		},
+		{
+			id: "calendar",
+			label: "Unified Calendar",
+			icon: "calendar"
 		}
 	].map((tab) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+		type: "button",
+		onClick: () => onSelect(tab.id),
+		className: `px-3 py-1 rounded-md text-xs font-mono inline-flex items-center gap-1.5 transition ${current === tab.id ? "arch-btn-primary" : "arch-btn-ghost border-transparent"}`,
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
+			name: tab.icon,
+			size: 13
+		}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: tab.label })]
+	}, tab.id))]
+});
+var WalletHubSubNav = ({ current, onSelect }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+	className: "flex flex-wrap items-center gap-1.5 p-1.5 rounded-lg border",
+	style: { backgroundColor: "var(--bg-surface)" },
+	children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+		className: "font-mono text-[10px] uppercase tracking-wider px-2",
+		style: { color: "var(--ink-muted)" },
+		children: "WALLET HUB:"
+	}), [{
+		id: "bank",
+		label: "My Wallet & Ledger",
+		icon: "bank"
+	}, {
+		id: "money-allocator",
+		label: "Pay Yourself First",
+		icon: "shield"
+	}].map((tab) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+		type: "button",
+		onClick: () => onSelect(tab.id),
+		className: `px-3 py-1 rounded-md text-xs font-mono inline-flex items-center gap-1.5 transition ${current === tab.id ? "arch-btn-primary" : "arch-btn-ghost border-transparent"}`,
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
+			name: tab.icon,
+			size: 13
+		}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: tab.label })]
+	}, tab.id))]
+});
+var BioStateHubSubNav = ({ current, onSelect }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+	className: "flex flex-wrap items-center gap-1.5 p-1.5 rounded-lg border",
+	style: { backgroundColor: "var(--bg-surface)" },
+	children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+		className: "font-mono text-[10px] uppercase tracking-wider px-2",
+		style: { color: "var(--ink-muted)" },
+		children: "BIO-STATE HUB:"
+	}), [{
+		id: "bio-state",
+		label: "Bio-State & NSDR Lab",
+		icon: "clock"
+	}, {
+		id: "life-audit",
+		label: "Life Wheel & Life in Weeks",
+		icon: "habits"
+	}].map((tab) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
 		type: "button",
 		onClick: () => onSelect(tab.id),
 		className: `px-3 py-1 rounded-md text-xs font-mono inline-flex items-center gap-1.5 transition ${current === tab.id ? "arch-btn-primary" : "arch-btn-ghost border-transparent"}`,
@@ -14032,6 +14092,10 @@ var BankView = () => {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "space-y-6",
 		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(WalletHubSubNav, {
+				current: "bank",
+				onSelect: setActiveTab
+			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 				className: "flex flex-wrap items-end justify-between gap-4",
 				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
@@ -14733,204 +14797,6 @@ var MissionsView = () => {
 						})]
 					}, t.id))]
 				}, col))
-			})
-		]
-	});
-};
-var SkillsView = () => {
-	const { awardXP, data, focusLabel, focusMinutes, mediaMap, notify, secondsLeft, setActiveTab, setConfirmResetModal, setData, setFocusLabel, setFocusMinutes, setMediaMap, setProfileModal, setSecondsLeft, setTimerRunning, telemetry, timerRunning } = (0, import_react.useContext)(NexoraContext);
-	const [name, setName] = (0, import_react.useState)("");
-	const [cat, setCat] = (0, import_react.useState)("Systems & Core CS");
-	const [milestoneText, setMilestoneText] = (0, import_react.useState)({});
-	const addSkill = (e) => {
-		e.preventDefault();
-		if (!name.trim()) return;
-		const ns = {
-			id: "sk-" + Date.now(),
-			name: name.trim(),
-			category: cat,
-			level: 1,
-			targetLevel: 5,
-			progress: 0,
-			milestones: []
-		};
-		setData((prev) => ({
-			...prev,
-			skills: [...prev.skills, ns]
-		}));
-		setName("");
-		notify("Skill node initialized");
-	};
-	const addMilestone = (skId) => {
-		const txt = (milestoneText[skId] || "").trim();
-		if (!txt) return;
-		setData((prev) => ({
-			...prev,
-			skills: prev.skills.map((s) => s.id === skId ? {
-				...s,
-				milestones: [...s.milestones || [], {
-					title: txt,
-					done: false
-				}]
-			} : s)
-		}));
-		setMilestoneText((prev) => ({
-			...prev,
-			[skId]: ""
-		}));
-	};
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-		className: "space-y-6",
-		children: [
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-				className: "font-mono text-[11px] uppercase tracking-widest",
-				style: { color: "var(--ink-muted)" },
-				children: "05 // COMPETENCY ARCHITECTURE"
-			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", {
-				className: "text-2xl font-semibold heading-tight mt-1",
-				children: "Skill Tree Matrix"
-			})] }),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
-				onSubmit: addSkill,
-				className: "arch-panel rounded-xl p-4 grid grid-cols-1 sm:grid-cols-12 gap-2.5",
-				children: [
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-						value: name,
-						onChange: (e) => setName(e.target.value),
-						placeholder: "Skill Node (e.g., Rust, Distributed Systems, Linear Algebra)",
-						className: "sm:col-span-6 arch-input rounded-md px-3 py-2 text-xs"
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", {
-						value: cat,
-						onChange: (e) => setCat(e.target.value),
-						className: "sm:col-span-4 arch-input rounded-md px-3 py-2 text-xs",
-						children: [
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Systems & Core CS" }),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Full-Stack Engineering" }),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "AI & Machine Learning" }),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Design & Product" }),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Communication & Leadership" })
-						]
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-						type: "submit",
-						className: "sm:col-span-2 arch-btn-primary rounded-md py-2 text-xs font-medium",
-						children: "+ Add Node"
-					})
-				]
-			}),
-			data.skills.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyState, {
-				code: "SKILL.MATRIX // 0_NODES",
-				title: "No skill nodes unlocked",
-				subtitle: "Add technical languages, frameworks, or domain competencies above to track mastery and custom milestones."
-			}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-				className: "grid grid-cols-1 md:grid-cols-2 gap-4",
-				children: data.skills.map((sk) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-					className: "arch-panel p-5 rounded-xl space-y-4",
-					children: [
-						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-							className: "flex justify-between items-start",
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-								className: "text-[10px] font-mono uppercase",
-								style: { color: "var(--ink-muted)" },
-								children: sk.category
-							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
-								className: "text-base font-semibold mt-0.5",
-								children: sk.name
-							})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-								className: "flex items-center gap-1.5",
-								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-									className: "px-2.5 py-0.5 rounded border font-mono text-xs tabular-nums",
-									children: [
-										"LVL ",
-										sk.level,
-										" / ",
-										sk.targetLevel
-									]
-								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-									type: "button",
-									onClick: () => setData((prev) => ({
-										...prev,
-										skills: prev.skills.map((s) => s.id === sk.id ? {
-											...s,
-											level: Math.min(5, s.level + 1),
-											progress: Math.min(100, s.progress + 20)
-										} : s)
-									})),
-									className: "arch-btn-ghost px-2 py-0.5 rounded font-mono text-xs",
-									title: "Increment Level",
-									children: "+LVL"
-								})]
-							})]
-						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-							className: "flex justify-between text-xs font-mono tabular-nums mb-1",
-							style: { color: "var(--ink-secondary)" },
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Mastery Progress" }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [sk.progress, "%"] })]
-						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-							className: "w-full h-1.5 rounded-full overflow-hidden",
-							style: { backgroundColor: "var(--bg-elevated)" },
-							children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-								className: "h-full",
-								style: {
-									width: `${sk.progress}%`,
-									backgroundColor: "var(--accent)"
-								}
-							})
-						})] }),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-							className: "space-y-2 pt-2 border-t",
-							children: [
-								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-									className: "text-[10px] font-mono uppercase",
-									style: { color: "var(--ink-muted)" },
-									children: "MILESTONES"
-								}),
-								(sk.milestones || []).map((m, idx) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
-									className: "flex items-center gap-2 text-xs cursor-pointer",
-									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-										type: "checkbox",
-										checked: m.done,
-										onChange: () => {
-											if (!m.done) awardXP(50, `Milestone: ${m.title}`);
-											setData((prev) => ({
-												...prev,
-												skills: prev.skills.map((s) => s.id !== sk.id ? s : {
-													...s,
-													progress: Math.min(100, Math.max(0, s.progress + (m.done ? -20 : 20))),
-													milestones: s.milestones.map((ms, i) => i === idx ? {
-														...ms,
-														done: !ms.done
-													} : ms)
-												})
-											}));
-										}
-									}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-										className: m.done ? "line-through opacity-50" : "",
-										children: m.title
-									})]
-								}, idx)),
-								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-									className: "flex gap-1.5 pt-1",
-									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-										value: milestoneText[sk.id] || "",
-										onChange: (e) => setMilestoneText((prev) => ({
-											...prev,
-											[sk.id]: e.target.value
-										})),
-										placeholder: "Add milestone...",
-										className: "flex-1 arch-input rounded px-2.5 py-1 text-xs"
-									}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-										type: "button",
-										onClick: () => addMilestone(sk.id),
-										className: "arch-btn-ghost px-2.5 py-1 rounded text-xs font-mono",
-										children: "Add"
-									})]
-								})
-							]
-						})
-					]
-				}, sk.id))
 			})
 		]
 	});
@@ -16463,6 +16329,10 @@ var CalendarView = () => {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "space-y-6",
 		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ExecutionHubSubNav, {
+				current: "calendar",
+				onSelect: setActiveTab
+			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 				className: "font-mono text-[11px] uppercase tracking-widest",
 				style: { color: "var(--ink-muted)" },
@@ -19375,7 +19245,7 @@ var SettingsView = () => {
 	});
 };
 var BioStateView = () => {
-	const { data, setData, notify, awardXP, isAudioPlaying: isPlaying, sleepTimerSec, nsdrRunning, nsdrSecLeft, breathTick, stopAudio, startAudio, toggleNsdr, setNsdrSecLeft, setSleepTimerSec } = (0, import_react.useContext)(NexoraContext);
+	const { data, setData, setActiveTab, notify, awardXP, isAudioPlaying: isPlaying, sleepTimerSec, nsdrRunning, nsdrSecLeft, breathTick, stopAudio, startAudio, toggleNsdr, setNsdrSecLeft, setSleepTimerSec } = (0, import_react.useContext)(NexoraContext);
 	const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 	const today = /* @__PURE__ */ new Date();
 	const todayKey = ymd(today);
@@ -19550,6 +19420,10 @@ var BioStateView = () => {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "space-y-6",
 		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(BioStateHubSubNav, {
+				current: "bio-state",
+				onSelect: setActiveTab
+			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 				className: "flex flex-wrap items-end justify-between gap-4",
 				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
@@ -22228,38 +22102,13 @@ var LearningEngineView = () => {
 		})]
 	});
 };
-var LifeMoneyView = () => {
-	const { data, setData, notify, awardXP } = (0, import_react.useContext)(NexoraContext);
-	const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-	const today = /* @__PURE__ */ new Date();
-	const todayKey = ymd(today);
-	const AREAS = [
-		"Health",
-		"Academics",
-		"Skills",
-		"Money",
-		"Friends",
-		"Family",
-		"Fun",
-		"Peace of mind"
-	];
-	const lifeWheel = data.lifeWheel || [];
+var MoneyAllocatorView = () => {
+	const { data, setData, setActiveTab, notify } = (0, import_react.useContext)(NexoraContext);
 	const lifeSettings = data.lifeSettings || {};
 	const savingsPots = data.savingsPots || [];
 	const payFirstPct = lifeSettings.payFirstPct !== void 0 ? Number(lifeSettings.payFirstPct) : 10;
-	const birthDate = lifeSettings.birthDate || "";
-	const targetAge = Math.max(20, Math.min(110, Number(lifeSettings.targetAge) || 80));
 	const [incomeInput, setIncomeInput] = (0, import_react.useState)("");
 	const [selectedPotId, setSelectedPotId] = (0, import_react.useState)(() => savingsPots[0]?.id || "");
-	const latestSnapshot = lifeWheel[0] || null;
-	const previousSnapshot = lifeWheel[1] || lifeWheel[0] || null;
-	const [scores, setScores] = (0, import_react.useState)(() => {
-		const base = {};
-		AREAS.forEach((a) => {
-			base[a] = latestSnapshot?.scores?.[a] ?? 6;
-		});
-		return base;
-	});
 	const updateSettings = (patch) => {
 		setData((prev) => ({
 			...prev,
@@ -22278,7 +22127,7 @@ var LifeMoneyView = () => {
 			return;
 		}
 		if (!activePotId) {
-			notify("Create a savings goal in Wallet first", "err");
+			notify("Create a savings goal in My Wallet first", "err");
 			return;
 		}
 		playTactileClick(data.profile.soundEnabled, 880, 12);
@@ -22293,58 +22142,25 @@ var LifeMoneyView = () => {
 		setIncomeInput("");
 		notify(`Moved ₹${saveAmount.toLocaleString("en-IN")} (${payFirstPct}%) to ${targetPot?.name || "Savings Pot"}`);
 	};
-	const minScore = (0, import_react.useMemo)(() => Math.min(...AREAS.map((a) => Number(scores[a]) || 1)), [scores]);
-	const saveWheelSnapshot = () => {
-		playTactileClick(data.profile.soundEnabled, 880, 12);
-		const alreadySavedToday = lifeWheel.some((s) => s.date === todayKey);
-		const entry = {
-			id: "lw-" + Date.now(),
-			date: todayKey,
-			scores: { ...scores }
-		};
-		setData((prev) => ({
-			...prev,
-			lifeWheel: [entry, ...prev.lifeWheel || []]
-		}));
-		if (!alreadySavedToday) awardXP(15, "Saved Life Wheel Snapshot");
-		else notify("Life Wheel snapshot saved");
-	};
-	const deleteSnapshot = (id) => {
-		playTactileClick(data.profile.soundEnabled, 880, 12);
-		setData((prev) => ({
-			...prev,
-			lifeWheel: (prev.lifeWheel || []).filter((s) => s.id !== id)
-		}));
-	};
-	const totalWeeks = targetAge * 52;
-	const livedWeeks = (0, import_react.useMemo)(() => {
-		if (!birthDate) return 0;
-		const bDate = /* @__PURE__ */ new Date(birthDate + "T00:00:00");
-		const diffMs = today - bDate;
-		if (isNaN(diffMs) || diffMs <= 0) return 0;
-		const wks = Math.floor(diffMs / 6048e5);
-		return Math.min(totalWeeks, Math.max(0, wks));
-	}, [
-		birthDate,
-		totalWeeks,
-		todayKey
-	]);
-	const remainingWeeks = Math.max(0, totalWeeks - livedWeeks);
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-		className: "space-y-5 pt-6 border-t",
+		className: "space-y-6",
 		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(WalletHubSubNav, {
+				current: "money-allocator",
+				onSelect: setActiveTab
+			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 				className: "font-mono text-[11px] uppercase tracking-widest",
 				style: { color: "var(--ink-muted)" },
-				children: "CAPITAL ALLOCATION, BALANCE AUDIT & MEMENTO MORI"
-			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
-				className: "text-lg font-semibold heading-tight mt-0.5",
-				children: "Pay Yourself First, Life Wheel & Life in Weeks"
+				children: "03B // CAPITAL ALLOCATION & AUTOMATED SAVINGS CUT"
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", {
+				className: "text-2xl font-semibold heading-tight mt-1",
+				children: "Pay Yourself First Allocator"
 			})] }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 				className: "grid grid-cols-1 lg:grid-cols-12 gap-5",
 				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-					className: "lg:col-span-5 arch-panel rounded-xl p-5 space-y-4",
+					className: "lg:col-span-6 arch-panel rounded-xl p-5 space-y-4",
 					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 						className: "flex items-center justify-between",
 						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
@@ -22438,135 +22254,288 @@ var LifeMoneyView = () => {
 						]
 					})]
 				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-					className: "lg:col-span-7 arch-panel rounded-xl p-5 space-y-4",
-					children: [
-						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-							className: "flex flex-wrap items-center justify-between gap-2",
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-								className: "font-mono text-[11px] uppercase tracking-wider block",
-								style: { color: "var(--ink-muted)" },
-								children: "02 // 8-AXIS LIFE WHEEL AUDIT"
-							}), previousSnapshot && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-								className: "font-mono text-[10px]",
-								style: { color: "var(--ink-muted)" },
-								children: ["Comparing against snapshot from ", previousSnapshot.date]
-							})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
-								type: "button",
-								onClick: saveWheelSnapshot,
-								className: "arch-btn-primary px-3.5 py-1.5 rounded-md text-xs font-mono inline-flex items-center gap-1.5",
-								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
-									name: "check",
-									size: 13
-								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Save snapshot" })]
-							})]
-						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-							className: "grid grid-cols-1 sm:grid-cols-2 gap-3",
-							children: AREAS.map((area) => {
-								const val = Number(scores[area]) || 1;
-								const prevVal = previousSnapshot?.scores?.[area];
-								const isLowest = val === minScore;
-								return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-									className: "p-3 rounded-lg border space-y-1.5",
-									style: {
-										backgroundColor: "var(--bg-canvas)",
-										borderColor: isLowest ? "var(--status-warn)" : "var(--border-hairline)"
-									},
-									children: [
-										/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-											className: "flex items-center justify-between text-xs",
-											children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-												className: "flex items-center gap-1.5",
-												children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-													className: "font-semibold",
-													children: area
-												}), isLowest && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-													className: "font-mono text-[9px] px-1.5 py-0.2 rounded border uppercase",
-													style: {
-														color: "var(--status-warn)",
-														borderColor: "var(--status-warn)"
-													},
-													children: "LOWEST"
-												})]
-											}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-												className: "font-mono text-[11px] tabular-nums",
-												children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [val, "/10"] }), prevVal !== void 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-													className: "ml-1.5 text-[10px]",
-													style: { color: "var(--ink-muted)" },
-													children: [
-														"(Prev: ",
-														prevVal,
-														")"
-													]
-												})]
-											})]
-										}),
-										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-											className: "w-full h-1.5 rounded-full overflow-hidden",
-											style: { backgroundColor: "var(--bg-elevated)" },
-											children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-												className: "h-full transition-all duration-200",
-												style: {
-													width: `${val * 10}%`,
-													backgroundColor: isLowest ? "var(--status-warn)" : "var(--status-ok)"
-												}
-											})
-										}),
-										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-											type: "range",
-											min: "1",
-											max: "10",
-											step: "1",
-											value: val,
-											onChange: (e) => setScores((prev) => ({
-												...prev,
-												[area]: Number(e.target.value)
-											})),
-											className: "w-full cursor-pointer"
-										})
-									]
-								}, area);
-							})
-						}),
-						lifeWheel.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyState, {
-							code: "LIFE.WHEEL // 0_SNAPSHOTS",
-							title: "No Life Wheel snapshots saved yet",
-							subtitle: "Adjust the 8 sliders above and click 'Save snapshot' to record a dated baseline for future comparison."
-						}) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-							className: "pt-2 border-t space-y-2 max-h-40 overflow-y-auto pr-1",
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-								className: "font-mono text-[10px] uppercase",
-								style: { color: "var(--ink-muted)" },
-								children: [
-									"SAVED SNAPSHOT HISTORY (",
-									lifeWheel.length,
-									")"
-								]
-							}), lifeWheel.map((snap) => {
-								const avg = (AREAS.map((a) => Number(snap.scores?.[a]) || 0).reduce((s, v) => s + v, 0) / AREAS.length).toFixed(1);
-								return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-									className: "py-1.5 px-2.5 rounded border flex items-center justify-between gap-2 text-xs font-mono",
-									style: { backgroundColor: "var(--bg-canvas)" },
-									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
-										snap.date,
-										" • AVG: ",
-										avg,
-										"/10"
-									] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-										type: "button",
-										onClick: () => deleteSnapshot(snap.id),
-										className: "arch-btn-ghost p-1 rounded",
-										title: "Delete snapshot",
-										children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
-											name: "trash",
-											size: 12
-										})
+					className: "lg:col-span-6 arch-panel rounded-xl p-5 space-y-4",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "flex items-center justify-between",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+							className: "font-mono text-[11px] uppercase tracking-wider",
+							style: { color: "var(--ink-muted)" },
+							children: [
+								"02 // ACTIVE SAVINGS POTS IN WALLET (",
+								savingsPots.length,
+								")"
+							]
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+							type: "button",
+							onClick: () => setActiveTab("bank"),
+							className: "arch-btn-ghost px-2.5 py-1 rounded text-[11px] font-mono",
+							children: "Manage Pots in Wallet →"
+						})]
+					}), savingsPots.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyState, {
+						code: "WALLET.POTS // 0_ACTIVE",
+						title: "No savings pots created yet",
+						subtitle: "Switch to 'My Wallet & Ledger' above to create a savings pot (e.g., Laptop or Trip) and allocate a percentage of every income automatically."
+					}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+						className: "space-y-3",
+						children: savingsPots.map((p) => {
+							const pct = Math.min(100, Math.round((Number(p.saved) || 0) / Math.max(1, Number(p.target) || 1) * 100));
+							return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "p-3 rounded-lg border space-y-2",
+								style: { backgroundColor: "var(--bg-canvas)" },
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "flex items-center justify-between text-xs",
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+										className: "font-semibold",
+										children: p.name
+									}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+										className: "font-mono tabular-nums",
+										children: [
+											"₹",
+											Number(p.saved || 0).toLocaleString("en-IN"),
+											" / ₹",
+											Number(p.target || 0).toLocaleString("en-IN"),
+											" (",
+											pct,
+											"%)"
+										]
 									})]
-								}, snap.id);
-							})]
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+									className: "w-full h-1.5 rounded-full overflow-hidden",
+									style: { backgroundColor: "var(--bg-elevated)" },
+									children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+										className: "h-full transition-all duration-300",
+										style: {
+											width: `${pct}%`,
+											backgroundColor: "var(--status-ok)"
+										}
+									})
+								})]
+							}, p.id);
 						})
-					]
+					})]
 				})]
+			})
+		]
+	});
+};
+var LifeAuditView = () => {
+	const { data, setData, setActiveTab, notify, awardXP } = (0, import_react.useContext)(NexoraContext);
+	const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+	const today = /* @__PURE__ */ new Date();
+	const todayKey = ymd(today);
+	const AREAS = [
+		"Health",
+		"Academics",
+		"Skills",
+		"Money",
+		"Friends",
+		"Family",
+		"Fun",
+		"Peace of mind"
+	];
+	const lifeWheel = data.lifeWheel || [];
+	const lifeSettings = data.lifeSettings || {};
+	const birthDate = lifeSettings.birthDate || "";
+	const targetAge = Math.max(20, Math.min(110, Number(lifeSettings.targetAge) || 80));
+	const latestSnapshot = lifeWheel[0] || null;
+	const previousSnapshot = lifeWheel[1] || lifeWheel[0] || null;
+	const [scores, setScores] = (0, import_react.useState)(() => {
+		const base = {};
+		AREAS.forEach((a) => {
+			base[a] = latestSnapshot?.scores?.[a] ?? 6;
+		});
+		return base;
+	});
+	const updateSettings = (patch) => {
+		setData((prev) => ({
+			...prev,
+			lifeSettings: {
+				...prev.lifeSettings || {},
+				...patch
+			}
+		}));
+	};
+	const minScore = (0, import_react.useMemo)(() => Math.min(...AREAS.map((a) => Number(scores[a]) || 1)), [scores]);
+	const saveWheelSnapshot = () => {
+		playTactileClick(data.profile.soundEnabled, 880, 12);
+		const alreadySavedToday = lifeWheel.some((s) => s.date === todayKey);
+		const entry = {
+			id: "lw-" + Date.now(),
+			date: todayKey,
+			scores: { ...scores }
+		};
+		setData((prev) => ({
+			...prev,
+			lifeWheel: [entry, ...prev.lifeWheel || []]
+		}));
+		if (!alreadySavedToday) awardXP(15, "Saved Life Wheel Snapshot");
+		else notify("Life Wheel snapshot saved");
+	};
+	const deleteSnapshot = (id) => {
+		playTactileClick(data.profile.soundEnabled, 880, 12);
+		setData((prev) => ({
+			...prev,
+			lifeWheel: (prev.lifeWheel || []).filter((s) => s.id !== id)
+		}));
+	};
+	const totalWeeks = targetAge * 52;
+	const livedWeeks = (0, import_react.useMemo)(() => {
+		if (!birthDate) return 0;
+		const bDate = /* @__PURE__ */ new Date(birthDate + "T00:00:00");
+		const diffMs = today - bDate;
+		if (isNaN(diffMs) || diffMs <= 0) return 0;
+		const wks = Math.floor(diffMs / 6048e5);
+		return Math.min(totalWeeks, Math.max(0, wks));
+	}, [
+		birthDate,
+		totalWeeks,
+		todayKey
+	]);
+	const remainingWeeks = Math.max(0, totalWeeks - livedWeeks);
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "space-y-6",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(BioStateHubSubNav, {
+				current: "life-audit",
+				onSelect: setActiveTab
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+				className: "font-mono text-[11px] uppercase tracking-widest",
+				style: { color: "var(--ink-muted)" },
+				children: "17B // BALANCE AUDIT & MEMENTO MORI CHRONOLOGY"
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", {
+				className: "text-2xl font-semibold heading-tight mt-1",
+				children: "Life Wheel & Life in Weeks"
+			})] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "arch-panel rounded-xl p-5 space-y-4",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "flex flex-wrap items-center justify-between gap-2",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+							className: "font-mono text-[11px] uppercase tracking-wider block",
+							style: { color: "var(--ink-muted)" },
+							children: "01 // 8-AXIS LIFE WHEEL AUDIT"
+						}), previousSnapshot && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+							className: "font-mono text-[10px]",
+							style: { color: "var(--ink-muted)" },
+							children: ["Comparing against snapshot from ", previousSnapshot.date]
+						})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+							type: "button",
+							onClick: saveWheelSnapshot,
+							className: "arch-btn-primary px-3.5 py-1.5 rounded-md text-xs font-mono inline-flex items-center gap-1.5",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
+								name: "check",
+								size: 13
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Save snapshot" })]
+						})]
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+						className: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3",
+						children: AREAS.map((area) => {
+							const val = Number(scores[area]) || 1;
+							const prevVal = previousSnapshot?.scores?.[area];
+							const isLowest = val === minScore;
+							return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "p-3 rounded-lg border space-y-1.5",
+								style: {
+									backgroundColor: "var(--bg-canvas)",
+									borderColor: isLowest ? "var(--status-warn)" : "var(--border-hairline)"
+								},
+								children: [
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "flex items-center justify-between text-xs",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+											className: "flex items-center gap-1.5",
+											children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+												className: "font-semibold",
+												children: area
+											}), isLowest && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+												className: "font-mono text-[9px] px-1.5 py-0.2 rounded border uppercase",
+												style: {
+													color: "var(--status-warn)",
+													borderColor: "var(--status-warn)"
+												},
+												children: "LOWEST"
+											})]
+										}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+											className: "font-mono text-[11px] tabular-nums",
+											children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [val, "/10"] }), prevVal !== void 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+												className: "ml-1.5 text-[10px]",
+												style: { color: "var(--ink-muted)" },
+												children: [
+													"(Prev: ",
+													prevVal,
+													")"
+												]
+											})]
+										})]
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+										className: "w-full h-1.5 rounded-full overflow-hidden",
+										style: { backgroundColor: "var(--bg-elevated)" },
+										children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+											className: "h-full transition-all duration-200",
+											style: {
+												width: `${val * 10}%`,
+												backgroundColor: isLowest ? "var(--status-warn)" : "var(--status-ok)"
+											}
+										})
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+										type: "range",
+										min: "1",
+										max: "10",
+										step: "1",
+										value: val,
+										onChange: (e) => setScores((prev) => ({
+											...prev,
+											[area]: Number(e.target.value)
+										})),
+										className: "w-full cursor-pointer"
+									})
+								]
+							}, area);
+						})
+					}),
+					lifeWheel.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyState, {
+						code: "LIFE.WHEEL // 0_SNAPSHOTS",
+						title: "No Life Wheel snapshots saved yet",
+						subtitle: "Adjust the 8 sliders above and click 'Save snapshot' to record a dated baseline for future comparison."
+					}) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "pt-2 border-t space-y-2 max-h-40 overflow-y-auto pr-1",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "font-mono text-[10px] uppercase",
+							style: { color: "var(--ink-muted)" },
+							children: [
+								"SAVED SNAPSHOT HISTORY (",
+								lifeWheel.length,
+								")"
+							]
+						}), lifeWheel.map((snap) => {
+							const avg = (AREAS.map((a) => Number(snap.scores?.[a]) || 0).reduce((s, v) => s + v, 0) / AREAS.length).toFixed(1);
+							return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "py-1.5 px-2.5 rounded border flex items-center justify-between gap-2 text-xs font-mono",
+								style: { backgroundColor: "var(--bg-canvas)" },
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+									snap.date,
+									" • AVG: ",
+									avg,
+									"/10"
+								] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+									type: "button",
+									onClick: () => deleteSnapshot(snap.id),
+									className: "arch-btn-ghost p-1 rounded",
+									title: "Delete snapshot",
+									children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
+										name: "trash",
+										size: 12
+									})
+								})]
+							}, snap.id);
+						})]
+					})
+				]
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 				className: "arch-panel rounded-xl p-5 space-y-4",
@@ -22575,7 +22544,7 @@ var LifeMoneyView = () => {
 					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 						className: "font-mono text-[11px] uppercase tracking-wider block",
 						style: { color: "var(--ink-muted)" },
-						children: "03 // LIFE IN WEEKS (52 WEEKS PER ROW)"
+						children: "02 // LIFE IN WEEKS (52 WEEKS PER ROW)"
 					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 						className: "font-mono text-xs tabular-nums mt-0.5",
 						children: [
@@ -23046,68 +23015,46 @@ var NexoraApp = () => {
 			keyHint: "3"
 		},
 		{
-			id: "skills",
-			label: "Skill Matrix",
-			icon: "skills",
-			badge: data.skills.length,
-			keyHint: "4"
-		},
-		{
 			id: "innovation",
 			label: "Innovation Canvas",
 			icon: "innovation",
 			badge: (data.ideas || []).length,
-			keyHint: "5"
-		},
-		{
-			id: "calendar",
-			label: "Unified Calendar",
-			icon: "calendar",
-			keyHint: "6"
+			keyHint: "4"
 		},
 		{
 			id: "habits",
 			label: "Habit Matrix",
 			icon: "habits",
 			badge: data.habits.length,
-			keyHint: "7"
+			keyHint: "5"
 		},
 		{
 			id: "focus-discipline",
 			label: "Focus Discipline",
 			icon: "clock",
 			badge: (data.distractionLog || []).length,
-			keyHint: "8"
+			keyHint: "6"
 		},
 		{
 			id: "learning-engine",
 			label: "Learning Engine",
 			icon: "memory",
 			badge: (data.feynmanNotes || []).length + (data.recallQs || []).length,
-			keyHint: "9"
-		},
-		{
-			id: "life-money",
-			label: "Life & Money",
-			icon: "bank",
-			badge: (data.lifeWheel || []).length
-		},
-		{
-			id: "arcade",
-			label: "Simulation Deck",
-			icon: "arcade"
+			keyHint: "7"
 		},
 		{
 			id: "habit-design",
 			label: "Habit Design",
 			icon: "habits",
-			badge: (data.habitDesigns || []).length
+			badge: (data.habitDesigns || []).length,
+			keyHint: "8"
 		},
 		{
 			id: "study-vault",
 			label: "Study Vault",
 			icon: "memory",
-			badge: (data.revisionTopics || []).length
+			badge: (data.revisionTopics || []).length,
+			keyHint: "9"
 		},
 		{
 			id: "bio-state",
@@ -23125,6 +23072,11 @@ var NexoraApp = () => {
 			label: "Trajectory",
 			icon: "skills",
 			badge: (data.roadmaps || []).length
+		},
+		{
+			id: "arcade",
+			label: "Simulation Deck",
+			icon: "arcade"
 		},
 		{
 			id: "settings",
@@ -23302,19 +23254,19 @@ var NexoraApp = () => {
 			case "dashboard": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DashboardView, {});
 			case "academy": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AcademyView, {});
 			case "bank": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BankView, {});
+			case "money-allocator": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyAllocatorView, {});
 			case "missions": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MissionsView, {});
-			case "skills": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SkillsView, {});
 			case "projects": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProjectsView, {});
 			case "innovation": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(InnovationCanvasView, {});
 			case "calendar": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CalendarView, {});
 			case "habits": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HabitsView, {});
 			case "focus-discipline": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FocusDisciplineView, {});
 			case "learning-engine": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LearningEngineView, {});
-			case "life-money": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LifeMoneyView, {});
 			case "arcade": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ArcadeView, {});
 			case "habit-design": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HabitDesignView, {});
 			case "study-vault": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(StudyVaultView, {});
 			case "bio-state": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BioStateView, {});
+			case "life-audit": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LifeAuditView, {});
 			case "executive": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ExecutiveView, {});
 			case "trajectory": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TrajectoryView, {});
 			case "secret-vault": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SecretVaultView, {});
