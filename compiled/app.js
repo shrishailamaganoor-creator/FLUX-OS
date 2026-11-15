@@ -19336,14 +19336,14 @@ var SettingsView = () => {
 	const [deferredPrompt, setDeferredPrompt] = (0, import_react.useState)(() => typeof window !== "undefined" ? window.__fluxInstallPrompt || null : null);
 	const [isInstalled, setIsInstalled] = (0, import_react.useState)(() => {
 		if (typeof window === "undefined") return false;
-		return window.matchMedia("(display-mode: standalone)").matches || window.matchMedia("(display-mode: fullscreen)").matches || window.matchMedia("(display-mode: minimal-ui)").matches || window.navigator.standalone === true;
+		return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
 	});
 	const [showInstallGuide, setShowInstallGuide] = (0, import_react.useState)(false);
 	const isIOSDevice = typeof window !== "undefined" && /iphone|ipad|ipod/i.test(window.navigator.userAgent || "");
 	(0, import_react.useEffect)(() => {
 		if (typeof window === "undefined") return void 0;
 		const checkStandalone = () => {
-			const standalone = window.matchMedia("(display-mode: standalone)").matches || window.matchMedia("(display-mode: fullscreen)").matches || window.matchMedia("(display-mode: minimal-ui)").matches || window.navigator.standalone === true;
+			const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
 			setIsInstalled(standalone);
 		};
 		const onBeforeInstall = (e) => {
@@ -19388,21 +19388,35 @@ var SettingsView = () => {
 				setShowInstallGuide(false);
 			}
 		} catch (err) {
-			setShowInstallGuide((prev) => !prev);
+			setShowInstallGuide(true);
 		}
-		else setShowInstallGuide((prev) => !prev);
+		else {
+			setShowInstallGuide(true);
+			notify("Follow the browser install steps shown in System Core");
+		}
 	};
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "space-y-6 max-w-4xl",
 		children: [
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-				className: "font-mono text-[11px] uppercase tracking-widest",
-				style: { color: "var(--ink-muted)" },
-				children: "14 // SYSTEM CONFIGURATION & STORAGE"
-			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", {
-				className: "text-2xl font-semibold heading-tight mt-1",
-				children: "System Core"
-			})] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "flex flex-wrap items-center justify-between gap-3",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+					className: "font-mono text-[11px] uppercase tracking-widest",
+					style: { color: "var(--ink-muted)" },
+					children: "14 // SYSTEM CONFIGURATION & STORAGE"
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", {
+					className: "text-2xl font-semibold heading-tight mt-1",
+					children: "System Core"
+				})] }), !isInstalled && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+					type: "button",
+					onClick: handleInstallApp,
+					className: "arch-btn-primary px-4 py-2 rounded-md text-xs font-mono inline-flex items-center gap-2",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
+						name: "download",
+						size: 14
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Install FLUX App" })]
+				})]
+			}),
 			!isInstalled && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 				className: "arch-panel p-5 rounded-xl space-y-3",
 				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -19642,9 +19656,9 @@ var SettingsView = () => {
 							})] })
 						]
 					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 						className: "flex flex-wrap gap-2.5 pt-2",
-						children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
 							type: "button",
 							onClick: () => setData((prev) => ({
 								...prev,
@@ -19658,7 +19672,15 @@ var SettingsView = () => {
 								name: data.profile.soundEnabled ? "volume" : "mute",
 								size: 14
 							}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: ["Tactile Audio: ", data.profile.soundEnabled ? "ACTIVE" : "MUTED"] })]
-						})
+						}), !isInstalled && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+							type: "button",
+							onClick: handleInstallApp,
+							className: "arch-btn-primary px-3.5 py-1.5 rounded-md text-xs font-mono inline-flex items-center gap-1.5",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
+								name: "download",
+								size: 14
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Install FLUX App on Device" })]
+						})]
 					})
 				]
 			}),
@@ -19671,6 +19693,15 @@ var SettingsView = () => {
 				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 					className: "flex flex-wrap gap-2.5",
 					children: [
+						!isInstalled && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+							type: "button",
+							onClick: handleInstallApp,
+							className: "arch-btn-primary px-4 py-2 rounded-md text-xs font-mono inline-flex items-center gap-1.5",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
+								name: "download",
+								size: 14
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Install FLUX App" })]
+						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
 							type: "button",
 							onClick: exportJSON,

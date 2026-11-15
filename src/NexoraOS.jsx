@@ -6170,8 +6170,6 @@ const NexoraContext = createContext(null);
           if (typeof window === 'undefined') return false;
           return (
             window.matchMedia('(display-mode: standalone)').matches ||
-            window.matchMedia('(display-mode: fullscreen)').matches ||
-            window.matchMedia('(display-mode: minimal-ui)').matches ||
             window.navigator.standalone === true
           );
         });
@@ -6185,8 +6183,6 @@ const NexoraContext = createContext(null);
           const checkStandalone = () => {
             const standalone =
               window.matchMedia('(display-mode: standalone)').matches ||
-              window.matchMedia('(display-mode: fullscreen)').matches ||
-              window.matchMedia('(display-mode: minimal-ui)').matches ||
               window.navigator.standalone === true;
             setIsInstalled(standalone);
           };
@@ -6234,20 +6230,33 @@ const NexoraContext = createContext(null);
                 setShowInstallGuide(false);
               }
             } catch (err) {
-              setShowInstallGuide((prev) => !prev);
+              setShowInstallGuide(true);
             }
           } else {
-            setShowInstallGuide((prev) => !prev);
+            setShowInstallGuide(true);
+            notify('Follow the browser install steps shown in System Core');
           }
         };
 
         return (
           <div className="space-y-6 max-w-4xl">
-            <div>
-              <div className="font-mono text-[11px] uppercase tracking-widest" style={{ color: 'var(--ink-muted)' }}>
-                14 // SYSTEM CONFIGURATION & STORAGE
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="font-mono text-[11px] uppercase tracking-widest" style={{ color: 'var(--ink-muted)' }}>
+                  14 // SYSTEM CONFIGURATION & STORAGE
+                </div>
+                <h1 className="text-2xl font-semibold heading-tight mt-1">System Core</h1>
               </div>
-              <h1 className="text-2xl font-semibold heading-tight mt-1">System Core</h1>
+              {!isInstalled && (
+                <button
+                  type="button"
+                  onClick={handleInstallApp}
+                  className="arch-btn-primary px-4 py-2 rounded-md text-xs font-mono inline-flex items-center gap-2"
+                >
+                  <Icon name="download" size={14} />
+                  <span>Install FLUX App</span>
+                </button>
+              )}
             </div>
 
             {!isInstalled && (
@@ -6432,6 +6441,16 @@ const NexoraContext = createContext(null);
                   <Icon name={data.profile.soundEnabled ? 'volume' : 'mute'} size={14} />
                   <span>Tactile Audio: {data.profile.soundEnabled ? 'ACTIVE' : 'MUTED'}</span>
                 </button>
+                {!isInstalled && (
+                  <button
+                    type="button"
+                    onClick={handleInstallApp}
+                    className="arch-btn-primary px-3.5 py-1.5 rounded-md text-xs font-mono inline-flex items-center gap-1.5"
+                  >
+                    <Icon name="download" size={14} />
+                    <span>Install FLUX App on Device</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -6440,6 +6459,16 @@ const NexoraContext = createContext(null);
                 LOCAL STORAGE VAULT
               </div>
               <div className="flex flex-wrap gap-2.5">
+                {!isInstalled && (
+                  <button
+                    type="button"
+                    onClick={handleInstallApp}
+                    className="arch-btn-primary px-4 py-2 rounded-md text-xs font-mono inline-flex items-center gap-1.5"
+                  >
+                    <Icon name="download" size={14} />
+                    <span>Install FLUX App</span>
+                  </button>
+                )}
                 <button type="button" onClick={exportJSON} className="arch-btn-primary px-4 py-2 rounded-md text-xs font-mono inline-flex items-center gap-1.5">
                   <Icon name="download" size={14} />
                   <span>Export JSON Snapshot</span>
