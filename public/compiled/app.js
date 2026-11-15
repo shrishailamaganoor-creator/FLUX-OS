@@ -24417,16 +24417,6 @@ var NexoraApp = () => {
 							})
 						]
 					})
-				}),
-				toast && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-					className: "fixed bottom-5 right-5 z-50 px-4 py-2.5 rounded-lg text-xs font-mono shadow-lg border",
-					style: {
-						position: "fixed",
-						backgroundColor: "var(--bg-surface)",
-						borderColor: toast.status === "err" ? "var(--status-err)" : "var(--status-ok)",
-						color: toast.status === "err" ? "var(--status-err)" : "var(--ink-primary)"
-					},
-					children: toast.msg
 				})
 			]
 		})

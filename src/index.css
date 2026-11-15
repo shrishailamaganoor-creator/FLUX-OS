@@ -107,8 +107,11 @@ body {
 }
 
 /* Telemetry Cards with Top-Edge Specular Highlight & Mouse Spotlight */
-.arch-panel {
+.arch-panel:not(.fixed):not(.absolute) {
   position: relative;
+}
+
+.arch-panel {
   background-color: var(--bg-surface);
   border: 1px solid var(--border-hairline);
   box-shadow: inset 0 1px 0 0 var(--specular-top), 0 4px 16px -6px rgba(0, 0, 0, 0.18);
