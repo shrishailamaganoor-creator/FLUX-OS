@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  DEFAULT_SHOWCASE_MISSIONS,
   EMPTY_STATE,
   calculateAttendanceProjection,
   ensureWritableFetch,
@@ -9,8 +8,6 @@ import {
   isPlainObject,
   mergeValidatedState,
   normalizeImportedState,
-  stepShowcaseMissionXp,
-  toggleShowcaseMissionStatus,
   validateImportedMedia,
 } from './nexoraState';
 
@@ -76,15 +73,6 @@ test('ensureWritableFetch allows assigning to a previously getter-only fetch pro
   const replacementFetch = async () => 'intercepted';
   mockWin.fetch = replacementFetch;
   assert.equal(mockWin.fetch, replacementFetch);
-});
-
-test('toggleShowcaseMissionStatus and stepShowcaseMissionXp update mission records deterministically', () => {
-  const next = toggleShowcaseMissionStatus(DEFAULT_SHOWCASE_MISSIONS, 'm-raft');
-  assert.equal(next[0].status, 'done');
-  const next2 = toggleShowcaseMissionStatus(next, 'm-raft');
-  assert.equal(next2[0].status, 'queued');
-  const stepped = stepShowcaseMissionXp(DEFAULT_SHOWCASE_MISSIONS, 'm-raft', 30);
-  assert.equal(stepped[0].xp, 150);
 });
 
 test('calculateAttendanceProjection computes safe buffer and recovery sessions', () => {

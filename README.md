@@ -162,7 +162,6 @@ Scoped via `[data-theme="obsidian | paper | industrial"]` on `<html>`:
 ### Procedural Web Audio Engine & PWA Offline Architecture
 - **Web Audio API Synthesizer:** Zero external MP3/WAV dependencies. Generates tactile UI micro-clicks (`playTactileClick(enabled, freq, durationMs)`), white/pink/brown filtered noise buffers, and stereo-panned `200 Hz` / `240 Hz` oscillators for `40 Hz` gamma binaural beats.
 - **Progressive Web App (PWA):** Includes `/manifest.webmanifest`, custom SVG/PNG icons, and a **Network-First Service Worker (`/sw.js`, cache `xor-bit-v2.1.0`)** that serves fresh builds when online and falls back seamlessly to cached assets when offline.
-- **Standalone Awwwards Showcase (`/showcase.html`):** A separate single-file interactive architecture showcase (`XOR Bit // OS v4.2 Showcase`) available at `/showcase.html` without cluttering the daily workspace.
 
 ---
 
