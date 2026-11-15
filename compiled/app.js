@@ -19333,6 +19333,65 @@ var SettingsView = () => {
 		};
 		reader.readAsText(file);
 	};
+	const [deferredPrompt, setDeferredPrompt] = (0, import_react.useState)(() => typeof window !== "undefined" ? window.__fluxInstallPrompt || null : null);
+	const [isInstalled, setIsInstalled] = (0, import_react.useState)(() => {
+		if (typeof window === "undefined") return false;
+		return window.matchMedia("(display-mode: standalone)").matches || window.matchMedia("(display-mode: fullscreen)").matches || window.matchMedia("(display-mode: minimal-ui)").matches || window.navigator.standalone === true;
+	});
+	const [showInstallGuide, setShowInstallGuide] = (0, import_react.useState)(false);
+	const isIOSDevice = typeof window !== "undefined" && /iphone|ipad|ipod/i.test(window.navigator.userAgent || "");
+	(0, import_react.useEffect)(() => {
+		if (typeof window === "undefined") return void 0;
+		const checkStandalone = () => {
+			const standalone = window.matchMedia("(display-mode: standalone)").matches || window.matchMedia("(display-mode: fullscreen)").matches || window.matchMedia("(display-mode: minimal-ui)").matches || window.navigator.standalone === true;
+			setIsInstalled(standalone);
+		};
+		const onBeforeInstall = (e) => {
+			e.preventDefault();
+			window.__fluxInstallPrompt = e;
+			setDeferredPrompt(e);
+		};
+		const onInstallReady = () => {
+			setDeferredPrompt(window.__fluxInstallPrompt || null);
+		};
+		const onAppInstalled = () => {
+			window.__fluxInstallPrompt = null;
+			setDeferredPrompt(null);
+			setIsInstalled(true);
+			setShowInstallGuide(false);
+			notify("FLUX installed on your device");
+		};
+		const mq = window.matchMedia("(display-mode: standalone)");
+		checkStandalone();
+		window.addEventListener("beforeinstallprompt", onBeforeInstall);
+		window.addEventListener("flux-install-ready", onInstallReady);
+		window.addEventListener("appinstalled", onAppInstalled);
+		window.addEventListener("flux-app-installed", onAppInstalled);
+		if (mq.addEventListener) mq.addEventListener("change", checkStandalone);
+		return () => {
+			window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+			window.removeEventListener("flux-install-ready", onInstallReady);
+			window.removeEventListener("appinstalled", onAppInstalled);
+			window.removeEventListener("flux-app-installed", onAppInstalled);
+			if (mq.removeEventListener) mq.removeEventListener("change", checkStandalone);
+		};
+	}, [notify]);
+	const handleInstallApp = async () => {
+		const promptEvent = deferredPrompt || (typeof window !== "undefined" ? window.__fluxInstallPrompt : null);
+		if (promptEvent && typeof promptEvent.prompt === "function") try {
+			await promptEvent.prompt();
+			const choice = await promptEvent.userChoice;
+			if (choice && choice.outcome === "accepted") {
+				window.__fluxInstallPrompt = null;
+				setDeferredPrompt(null);
+				setIsInstalled(true);
+				setShowInstallGuide(false);
+			}
+		} catch (err) {
+			setShowInstallGuide((prev) => !prev);
+		}
+		else setShowInstallGuide((prev) => !prev);
+	};
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "space-y-6 max-w-4xl",
 		children: [
@@ -19344,6 +19403,91 @@ var SettingsView = () => {
 				className: "text-2xl font-semibold heading-tight mt-1",
 				children: "System Core"
 			})] }),
+			!isInstalled && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "arch-panel p-5 rounded-xl space-y-3",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "flex flex-wrap items-center justify-between gap-4",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "flex items-center gap-3 min-w-0",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
+							src: "./icon-192.png?v=2.4.0",
+							alt: "FLUX",
+							className: "w-10 h-10 rounded-xl object-cover shrink-0 border",
+							style: { borderColor: "var(--border-elevated)" }
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "min-w-0",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+								className: "font-mono text-xs uppercase",
+								style: { color: "var(--ink-muted)" },
+								children: "DEVICE INSTALLATION // BROWSER SESSION DETECTED"
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+								className: "text-xs mt-0.5",
+								style: { color: "var(--ink-secondary)" },
+								children: "Install FLUX on your device for instant offline launch, dedicated window mode, and home screen access."
+							})]
+						})]
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+						type: "button",
+						onClick: handleInstallApp,
+						className: "arch-btn-primary px-4 py-2 rounded-md text-xs font-mono inline-flex items-center gap-2 shrink-0",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, {
+							name: "download",
+							size: 14
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Install FLUX App" })]
+					})]
+				}), showInstallGuide && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "rounded-lg border p-3.5 text-xs space-y-2",
+					style: {
+						backgroundColor: "var(--bg-canvas)",
+						borderColor: "var(--border-hairline)"
+					},
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "flex items-center justify-between gap-2",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+							className: "font-mono text-[11px] uppercase font-semibold",
+							style: { color: "var(--ink-primary)" },
+							children: isIOSDevice ? "Install on iPhone / iPad (Safari)" : "Install from Browser Menu"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+							type: "button",
+							onClick: () => setShowInstallGuide(false),
+							className: "arch-btn-ghost px-2 py-0.5 rounded text-[10px] font-mono",
+							children: "CLOSE"
+						})]
+					}), isIOSDevice ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("ol", {
+						className: "list-decimal list-inside space-y-1 text-[11px]",
+						style: { color: "var(--ink-secondary)" },
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+							"Tap the ",
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Share" }),
+							" icon in the Safari toolbar."
+						] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+							"Scroll down and tap ",
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Add to Home Screen" }),
+							", then tap ",
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Add" }),
+							"."
+						] })]
+					}) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("ol", {
+						className: "list-decimal list-inside space-y-1 text-[11px]",
+						style: { color: "var(--ink-secondary)" },
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+							"Click the ",
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Install FLUX" }),
+							" icon on the right side of your browser address bar, or open the browser menu (",
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "⋮" }),
+							")."
+						] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+							"Select ",
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Install app" }),
+							" / ",
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Add to Home screen" }),
+							" (or ",
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Cast, save, and share → Install page as app" }),
+							" on desktop Chrome/Edge)."
+						] })]
+					})]
+				})]
+			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 				className: "arch-panel p-5 rounded-xl space-y-4",
 				children: [

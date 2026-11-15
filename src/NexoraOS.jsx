@@ -6163,6 +6163,84 @@ const NexoraContext = createContext(null);
           reader.readAsText(file);
         };
 
+        const [deferredPrompt, setDeferredPrompt] = useState(() =>
+          typeof window !== 'undefined' ? window.__fluxInstallPrompt || null : null
+        );
+        const [isInstalled, setIsInstalled] = useState(() => {
+          if (typeof window === 'undefined') return false;
+          return (
+            window.matchMedia('(display-mode: standalone)').matches ||
+            window.matchMedia('(display-mode: fullscreen)').matches ||
+            window.matchMedia('(display-mode: minimal-ui)').matches ||
+            window.navigator.standalone === true
+          );
+        });
+        const [showInstallGuide, setShowInstallGuide] = useState(false);
+        const isIOSDevice =
+          typeof window !== 'undefined' &&
+          /iphone|ipad|ipod/i.test(window.navigator.userAgent || '');
+
+        useEffect(() => {
+          if (typeof window === 'undefined') return undefined;
+          const checkStandalone = () => {
+            const standalone =
+              window.matchMedia('(display-mode: standalone)').matches ||
+              window.matchMedia('(display-mode: fullscreen)').matches ||
+              window.matchMedia('(display-mode: minimal-ui)').matches ||
+              window.navigator.standalone === true;
+            setIsInstalled(standalone);
+          };
+          const onBeforeInstall = (e) => {
+            e.preventDefault();
+            window.__fluxInstallPrompt = e;
+            setDeferredPrompt(e);
+          };
+          const onInstallReady = () => {
+            setDeferredPrompt(window.__fluxInstallPrompt || null);
+          };
+          const onAppInstalled = () => {
+            window.__fluxInstallPrompt = null;
+            setDeferredPrompt(null);
+            setIsInstalled(true);
+            setShowInstallGuide(false);
+            notify('FLUX installed on your device');
+          };
+          const mq = window.matchMedia('(display-mode: standalone)');
+          checkStandalone();
+          window.addEventListener('beforeinstallprompt', onBeforeInstall);
+          window.addEventListener('flux-install-ready', onInstallReady);
+          window.addEventListener('appinstalled', onAppInstalled);
+          window.addEventListener('flux-app-installed', onAppInstalled);
+          if (mq.addEventListener) mq.addEventListener('change', checkStandalone);
+          return () => {
+            window.removeEventListener('beforeinstallprompt', onBeforeInstall);
+            window.removeEventListener('flux-install-ready', onInstallReady);
+            window.removeEventListener('appinstalled', onAppInstalled);
+            window.removeEventListener('flux-app-installed', onAppInstalled);
+            if (mq.removeEventListener) mq.removeEventListener('change', checkStandalone);
+          };
+        }, [notify]);
+
+        const handleInstallApp = async () => {
+          const promptEvent = deferredPrompt || (typeof window !== 'undefined' ? window.__fluxInstallPrompt : null);
+          if (promptEvent && typeof promptEvent.prompt === 'function') {
+            try {
+              await promptEvent.prompt();
+              const choice = await promptEvent.userChoice;
+              if (choice && choice.outcome === 'accepted') {
+                window.__fluxInstallPrompt = null;
+                setDeferredPrompt(null);
+                setIsInstalled(true);
+                setShowInstallGuide(false);
+              }
+            } catch (err) {
+              setShowInstallGuide((prev) => !prev);
+            }
+          } else {
+            setShowInstallGuide((prev) => !prev);
+          }
+        };
+
         return (
           <div className="space-y-6 max-w-4xl">
             <div>
@@ -6171,6 +6249,68 @@ const NexoraContext = createContext(null);
               </div>
               <h1 className="text-2xl font-semibold heading-tight mt-1">System Core</h1>
             </div>
+
+            {!isInstalled && (
+              <div className="arch-panel p-5 rounded-xl space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <img
+                      src="./icon-192.png?v=2.4.0"
+                      alt="FLUX"
+                      className="w-10 h-10 rounded-xl object-cover shrink-0 border"
+                      style={{ borderColor: 'var(--border-elevated)' }}
+                    />
+                    <div className="min-w-0">
+                      <div className="font-mono text-xs uppercase" style={{ color: 'var(--ink-muted)' }}>
+                        DEVICE INSTALLATION // BROWSER SESSION DETECTED
+                      </div>
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--ink-secondary)' }}>
+                        Install FLUX on your device for instant offline launch, dedicated window mode, and home screen access.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleInstallApp}
+                    className="arch-btn-primary px-4 py-2 rounded-md text-xs font-mono inline-flex items-center gap-2 shrink-0"
+                  >
+                    <Icon name="download" size={14} />
+                    <span>Install FLUX App</span>
+                  </button>
+                </div>
+
+                {showInstallGuide && (
+                  <div
+                    className="rounded-lg border p-3.5 text-xs space-y-2"
+                    style={{ backgroundColor: 'var(--bg-canvas)', borderColor: 'var(--border-hairline)' }}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono text-[11px] uppercase font-semibold" style={{ color: 'var(--ink-primary)' }}>
+                        {isIOSDevice ? 'Install on iPhone / iPad (Safari)' : 'Install from Browser Menu'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowInstallGuide(false)}
+                        className="arch-btn-ghost px-2 py-0.5 rounded text-[10px] font-mono"
+                      >
+                        CLOSE
+                      </button>
+                    </div>
+                    {isIOSDevice ? (
+                      <ol className="list-decimal list-inside space-y-1 text-[11px]" style={{ color: 'var(--ink-secondary)' }}>
+                        <li>Tap the <strong>Share</strong> icon in the Safari toolbar.</li>
+                        <li>Scroll down and tap <strong>Add to Home Screen</strong>, then tap <strong>Add</strong>.</li>
+                      </ol>
+                    ) : (
+                      <ol className="list-decimal list-inside space-y-1 text-[11px]" style={{ color: 'var(--ink-secondary)' }}>
+                        <li>Click the <strong>Install FLUX</strong> icon on the right side of your browser address bar, or open the browser menu (<strong>⋮</strong>).</li>
+                        <li>Select <strong>Install app</strong> / <strong>Add to Home screen</strong> (or <strong>Cast, save, and share → Install page as app</strong> on desktop Chrome/Edge).</li>
+                      </ol>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="arch-panel p-5 rounded-xl space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">

@@ -80,6 +80,16 @@
               })
               .catch(function () {});
           }
+          window.__fluxInstallPrompt = window.__fluxInstallPrompt || null;
+          window.addEventListener('beforeinstallprompt', function (e) {
+            e.preventDefault();
+            window.__fluxInstallPrompt = e;
+            window.dispatchEvent(new Event('flux-install-ready'));
+          });
+          window.addEventListener('appinstalled', function () {
+            window.__fluxInstallPrompt = null;
+            window.dispatchEvent(new Event('flux-app-installed'));
+          });
         } catch (e) {}
       })();
     </script>
