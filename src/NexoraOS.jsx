@@ -299,6 +299,7 @@ const NexoraContext = createContext(null);
       const canvasRef = useRef(null);
       const keysRef = useRef({});
       const [collectedCount, setCollectedCount] = useState(0);
+      const collectedCountRef = useRef(0);
       const [parkedPortal, setParkedPortal] = useState(null);
       const [gear, setGear] = useState(2); // 1 = Crawl (Parking), 2 = Normal Cruise, 3 = Sport
       const [speedReadout, setSpeedReadout] = useState('0.0');
@@ -436,11 +437,10 @@ const NexoraContext = createContext(null);
             if (n.active && Math.hypot(st.x - n.x, st.y - n.y) < 20) {
               n.active = false;
               playTactileClick(soundRef.current, 980, 18);
-              setCollectedCount((prev) => {
-                const next = prev + 1;
-                if (onUpdateNodesRef.current) onUpdateNodesRef.current(next);
-                return next;
-              });
+              const next = collectedCountRef.current + 1;
+              collectedCountRef.current = next;
+              setCollectedCount(next);
+              if (onUpdateNodesRef.current) onUpdateNodesRef.current(next);
               const respawnTimer = setTimeout(() => {
                 nodeRespawnTimersRef.current.delete(respawnTimer);
                 n.x = 70 + Math.random() * (canvas.width - 140);
@@ -750,7 +750,8 @@ const NexoraContext = createContext(null);
         snake: [{ x: 8, y: 6 }, { x: 7, y: 6 }, { x: 6, y: 6 }],
         dir: { x: 1, y: 0 },
         nextDir: { x: 1, y: 0 },
-        food: { x: 12, y: 6 }
+        food: { x: 12, y: 6 },
+        score: 0
       });
 
       useEffect(() => {
@@ -857,11 +858,10 @@ const NexoraContext = createContext(null);
           const nextSnake = [head, ...st.snake];
           if (head.x === st.food.x && head.y === st.food.y) {
             playTactileClick(soundEnabled, 940, 15);
-            setScore((s) => {
-              const ns = s + 10;
-              if (ns > bestScore) onNewBest(ns);
-              return ns;
-            });
+            const ns = (st.score || 0) + 10;
+            st.score = ns;
+            setScore(ns);
+            if (ns > bestScore) onNewBest(ns);
             let fx = Math.floor(Math.random() * 16);
             let fy = Math.floor(Math.random() * 12);
             st.food = { x: fx, y: fy };
@@ -883,7 +883,8 @@ const NexoraContext = createContext(null);
           snake: [{ x: 8, y: 6 }, { x: 7, y: 6 }, { x: 6, y: 6 }],
           dir: { x: 1, y: 0 },
           nextDir: { x: 1, y: 0 },
-          food: { x: 12, y: 6 }
+          food: { x: 12, y: 6 },
+          score: 0
         };
         setScore(0);
         setGameOver(false);
@@ -4656,17 +4657,21 @@ const NexoraContext = createContext(null);
 
         const toggleShieldDate = (dateKey) => {
           playTactileClick(data.profile.soundEnabled, 700, 14);
+          const wasActive = !!(data.habitShields && data.habitShields[dateKey]);
           setData((prev) => {
             const nextShields = { ...(prev.habitShields || {}) };
             if (nextShields[dateKey]) {
               delete nextShields[dateKey];
-              notify(`Removed Rest Day Shield on ${dateKey}`);
             } else {
               nextShields[dateKey] = true;
-              notify(`Activated Rest Day Shield on ${dateKey} (Streak Protected)`);
             }
             return { ...prev, habitShields: nextShields };
           });
+          if (wasActive) {
+            notify(`Removed Rest Day Shield on ${dateKey}`);
+          } else {
+            notify(`Activated Rest Day Shield on ${dateKey} (Streak Protected)`);
+          }
         };
 
         const addHabit = (e) => {
@@ -8557,31 +8562,30 @@ const NexoraContext = createContext(null);
 
         useEffect(() => {
           if (!urgeRunning) return;
-          const interval = setInterval(() => {
-            setUrgeSecLeft((prev) => {
-              if (prev <= 1) {
-                setUrgeRunning(false);
-                playTactileClick(data.profile.soundEnabled, 880, 12);
-                const todayRec = (data.shutdownDays || {})[todayKey] || {};
-                if (!todayRec.urgeXpAwarded) {
-                  setData((d) => ({
-                    ...d,
-                    shutdownDays: {
-                      ...(d.shutdownDays || {}),
-                      [todayKey]: { ...((d.shutdownDays || {})[todayKey] || {}), urgeXpAwarded: true }
-                    }
-                  }));
-                  awardXP(10, 'Completed 10-minute Urge Delay');
-                } else {
-                  notify('10-minute urge delay complete');
+          if (urgeSecLeft <= 0) {
+            setUrgeRunning(false);
+            setUrgeSecLeft(600);
+            playTactileClick(data.profile.soundEnabled, 880, 12);
+            const todayRec = (data.shutdownDays || {})[todayKey] || {};
+            if (!todayRec.urgeXpAwarded) {
+              setData((d) => ({
+                ...d,
+                shutdownDays: {
+                  ...(d.shutdownDays || {}),
+                  [todayKey]: { ...((d.shutdownDays || {})[todayKey] || {}), urgeXpAwarded: true }
                 }
-                return 600;
-              }
-              return prev - 1;
-            });
+              }));
+              awardXP(10, 'Completed 10-minute Urge Delay');
+            } else {
+              notify('10-minute urge delay complete');
+            }
+            return;
+          }
+          const timerId = setTimeout(() => {
+            setUrgeSecLeft((prev) => prev - 1);
           }, 1000);
-          return () => clearInterval(interval);
-        }, [urgeRunning, todayKey, data.profile.soundEnabled, data.shutdownDays, awardXP, notify, setData]);
+          return () => clearTimeout(timerId);
+        }, [urgeRunning, urgeSecLeft, todayKey, data.profile.soundEnabled, data.shutdownDays, awardXP, notify, setData]);
 
         const SHUTDOWN_STEPS = [
           { id: 'rev', label: 'Review tasks' },
@@ -10265,29 +10269,28 @@ const NexoraContext = createContext(null);
 
       useEffect(() => {
         if (!timerRunning) return;
-        const interval = setInterval(() => {
-          setSecondsLeft((prev) => {
-            if (prev <= 1) {
-              setTimerRunning(false);
-              playTactileClick(data.profile.soundEnabled, 1040, 35);
-              const sessionRecord = {
-                id: 'fs-' + Date.now(),
-                label: focusLabel.trim() || 'Deep Work Block',
-                minutes: focusMinutes,
-                date: new Date().toISOString().split('T')[0]
-              };
-              setData((d) => ({
-                ...d,
-                focusSessions: [sessionRecord, ...(d.focusSessions || [])]
-              }));
-              awardXP(50, `Completed ${focusMinutes}m Focus Block`);
-              return focusMinutes * 60;
-            }
-            return prev - 1;
-          });
+        if (secondsLeft <= 0) {
+          setTimerRunning(false);
+          setSecondsLeft(focusMinutes * 60);
+          playTactileClick(data.profile.soundEnabled, 1040, 35);
+          const sessionRecord = {
+            id: 'fs-' + Date.now(),
+            label: focusLabel.trim() || 'Deep Work Block',
+            minutes: focusMinutes,
+            date: new Date().toISOString().split('T')[0]
+          };
+          setData((d) => ({
+            ...d,
+            focusSessions: [sessionRecord, ...(d.focusSessions || [])]
+          }));
+          awardXP(50, `Completed ${focusMinutes}m Focus Block`);
+          return;
+        }
+        const timerId = setTimeout(() => {
+          setSecondsLeft((prev) => prev - 1);
         }, 1000);
-        return () => clearInterval(interval);
-      }, [timerRunning, focusMinutes, focusLabel, data.profile.soundEnabled, awardXP]);
+        return () => clearTimeout(timerId);
+      }, [timerRunning, secondsLeft, focusMinutes, focusLabel, data.profile.soundEnabled, awardXP]);
 
       // Navigation definitions with Focus Discipline, Learning Engine, and Life & Money integrated
       const navItems = useMemo(() => [

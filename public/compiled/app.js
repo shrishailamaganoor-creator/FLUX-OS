@@ -12278,6 +12278,7 @@ var RoverSimulationCanvas = ({ bestNodes, soundEnabled, onUpdateNodes, onJumpMod
 	const canvasRef = (0, import_react.useRef)(null);
 	const keysRef = (0, import_react.useRef)({});
 	const [collectedCount, setCollectedCount] = (0, import_react.useState)(0);
+	const collectedCountRef = (0, import_react.useRef)(0);
 	const [parkedPortal, setParkedPortal] = (0, import_react.useState)(null);
 	const [gear, setGear] = (0, import_react.useState)(2);
 	const [speedReadout, setSpeedReadout] = (0, import_react.useState)("0.0");
@@ -12487,11 +12488,10 @@ var RoverSimulationCanvas = ({ bestNodes, soundEnabled, onUpdateNodes, onJumpMod
 				if (n.active && Math.hypot(st.x - n.x, st.y - n.y) < 20) {
 					n.active = false;
 					playTactileClick(soundRef.current, 980, 18);
-					setCollectedCount((prev) => {
-						const next = prev + 1;
-						if (onUpdateNodesRef.current) onUpdateNodesRef.current(next);
-						return next;
-					});
+					const next = collectedCountRef.current + 1;
+					collectedCountRef.current = next;
+					setCollectedCount(next);
+					if (onUpdateNodesRef.current) onUpdateNodesRef.current(next);
 					const respawnTimer = setTimeout(() => {
 						nodeRespawnTimersRef.current.delete(respawnTimer);
 						n.x = 70 + Math.random() * (canvas.width - 140);
@@ -12825,7 +12825,8 @@ var VectorSnakeGame = ({ bestScore, onNewBest, soundEnabled, onUnlockVault }) =>
 		food: {
 			x: 12,
 			y: 6
-		}
+		},
+		score: 0
 	});
 	(0, import_react.useEffect)(() => {
 		const handleSecretKey = (e) => {
@@ -12942,11 +12943,10 @@ var VectorSnakeGame = ({ bestScore, onNewBest, soundEnabled, onUnlockVault }) =>
 			const nextSnake = [head, ...st.snake];
 			if (head.x === st.food.x && head.y === st.food.y) {
 				playTactileClick(soundEnabled, 940, 15);
-				setScore((s) => {
-					const ns = s + 10;
-					if (ns > bestScore) onNewBest(ns);
-					return ns;
-				});
+				const ns = (st.score || 0) + 10;
+				st.score = ns;
+				setScore(ns);
+				if (ns > bestScore) onNewBest(ns);
 				st.food = {
 					x: Math.floor(Math.random() * 16),
 					y: Math.floor(Math.random() * 12)
@@ -12994,7 +12994,8 @@ var VectorSnakeGame = ({ bestScore, onNewBest, soundEnabled, onUnlockVault }) =>
 			food: {
 				x: 12,
 				y: 6
-			}
+			},
+			score: 0
 		};
 		setScore(0);
 		setGameOver(false);
@@ -17519,20 +17520,18 @@ var HabitsView = () => {
 	};
 	const toggleShieldDate = (dateKey) => {
 		playTactileClick(data.profile.soundEnabled, 700, 14);
+		const wasActive = !!(data.habitShields && data.habitShields[dateKey]);
 		setData((prev) => {
 			const nextShields = { ...prev.habitShields || {} };
-			if (nextShields[dateKey]) {
-				delete nextShields[dateKey];
-				notify(`Removed Rest Day Shield on ${dateKey}`);
-			} else {
-				nextShields[dateKey] = true;
-				notify(`Activated Rest Day Shield on ${dateKey} (Streak Protected)`);
-			}
+			if (nextShields[dateKey]) delete nextShields[dateKey];
+			else nextShields[dateKey] = true;
 			return {
 				...prev,
 				habitShields: nextShields
 			};
 		});
+		if (wasActive) notify(`Removed Rest Day Shield on ${dateKey}`);
+		else notify(`Activated Rest Day Shield on ${dateKey} (Streak Protected)`);
 	};
 	const addHabit = (e) => {
 		e.preventDefault();
@@ -22007,32 +22006,32 @@ var FocusDisciplineView = () => {
 	]);
 	(0, import_react.useEffect)(() => {
 		if (!urgeRunning) return;
-		const interval = setInterval(() => {
-			setUrgeSecLeft((prev) => {
-				if (prev <= 1) {
-					setUrgeRunning(false);
-					playTactileClick(data.profile.soundEnabled, 880, 12);
-					if (!((data.shutdownDays || {})[todayKey] || {}).urgeXpAwarded) {
-						setData((d) => ({
-							...d,
-							shutdownDays: {
-								...d.shutdownDays || {},
-								[todayKey]: {
-									...(d.shutdownDays || {})[todayKey] || {},
-									urgeXpAwarded: true
-								}
-							}
-						}));
-						awardXP(10, "Completed 10-minute Urge Delay");
-					} else notify("10-minute urge delay complete");
-					return 600;
-				}
-				return prev - 1;
-			});
+		if (urgeSecLeft <= 0) {
+			setUrgeRunning(false);
+			setUrgeSecLeft(600);
+			playTactileClick(data.profile.soundEnabled, 880, 12);
+			if (!((data.shutdownDays || {})[todayKey] || {}).urgeXpAwarded) {
+				setData((d) => ({
+					...d,
+					shutdownDays: {
+						...d.shutdownDays || {},
+						[todayKey]: {
+							...(d.shutdownDays || {})[todayKey] || {},
+							urgeXpAwarded: true
+						}
+					}
+				}));
+				awardXP(10, "Completed 10-minute Urge Delay");
+			} else notify("10-minute urge delay complete");
+			return;
+		}
+		const timerId = setTimeout(() => {
+			setUrgeSecLeft((prev) => prev - 1);
 		}, 1e3);
-		return () => clearInterval(interval);
+		return () => clearTimeout(timerId);
 	}, [
 		urgeRunning,
+		urgeSecLeft,
 		todayKey,
 		data.profile.soundEnabled,
 		data.shutdownDays,
@@ -23936,30 +23935,30 @@ var NexoraApp = () => {
 	]);
 	(0, import_react.useEffect)(() => {
 		if (!timerRunning) return;
-		const interval = setInterval(() => {
-			setSecondsLeft((prev) => {
-				if (prev <= 1) {
-					setTimerRunning(false);
-					playTactileClick(data.profile.soundEnabled, 1040, 35);
-					const sessionRecord = {
-						id: "fs-" + Date.now(),
-						label: focusLabel.trim() || "Deep Work Block",
-						minutes: focusMinutes,
-						date: (/* @__PURE__ */ new Date()).toISOString().split("T")[0]
-					};
-					setData((d) => ({
-						...d,
-						focusSessions: [sessionRecord, ...d.focusSessions || []]
-					}));
-					awardXP(50, `Completed ${focusMinutes}m Focus Block`);
-					return focusMinutes * 60;
-				}
-				return prev - 1;
-			});
+		if (secondsLeft <= 0) {
+			setTimerRunning(false);
+			setSecondsLeft(focusMinutes * 60);
+			playTactileClick(data.profile.soundEnabled, 1040, 35);
+			const sessionRecord = {
+				id: "fs-" + Date.now(),
+				label: focusLabel.trim() || "Deep Work Block",
+				minutes: focusMinutes,
+				date: (/* @__PURE__ */ new Date()).toISOString().split("T")[0]
+			};
+			setData((d) => ({
+				...d,
+				focusSessions: [sessionRecord, ...d.focusSessions || []]
+			}));
+			awardXP(50, `Completed ${focusMinutes}m Focus Block`);
+			return;
+		}
+		const timerId = setTimeout(() => {
+			setSecondsLeft((prev) => prev - 1);
 		}, 1e3);
-		return () => clearInterval(interval);
+		return () => clearTimeout(timerId);
 	}, [
 		timerRunning,
+		secondsLeft,
 		focusMinutes,
 		focusLabel,
 		data.profile.soundEnabled,
