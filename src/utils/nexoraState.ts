@@ -22,6 +22,8 @@ export const EMPTY_STATE = {
   audioPrefs: { track: 'pink', volume: 0.4, timerMin: 15, nsdrDuration: 10 },
   morningRoutine: [] as any[],
   morningLog: {} as Record<string, any>,
+  nightRoutine: [] as any[],
+  nightLog: {} as Record<string, any>,
   decisions: [] as any[],
   growthMetrics: [] as any[],
   roadmaps: [] as any[],

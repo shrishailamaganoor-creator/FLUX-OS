@@ -7272,24 +7272,14 @@ const NexoraContext = createContext(null);
         const today = new Date();
         const todayKey = ymd(today);
         const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        const todayWeekday = weekdays[today.getDay()];
 
         const bioLog = data.bioLog || { days: {}, templates: {} };
         const daysMap = bioLog.days || {};
-        const templatesMap = bioLog.templates || {};
         const audioPrefs = data.audioPrefs || { track: 'pink', volume: 0.4, timerMin: 15, nsdrDuration: 10 };
 
         const [selectedDate, setSelectedDate] = useState(todayKey);
         const [customWater, setCustomWater] = useState('');
         const [sleepInput, setSleepInput] = useState('');
-
-        const [blockTitle, setBlockTitle] = useState('');
-        const [blockStart, setBlockStart] = useState('08:00');
-        const [blockEnd, setBlockEnd] = useState('09:30');
-        const [blockCat, setBlockCat] = useState('Deep Work');
-        const [templateDay, setTemplateDay] = useState(todayWeekday);
-
-
 
         const currentDayData = daysMap[selectedDate] || { waterMl: 0, sleepHrs: 0, schedule: [] };
 
@@ -7366,70 +7356,57 @@ const NexoraContext = createContext(null);
           return +(56 - total).toFixed(1);
         }, [last7Days]);
 
-        const addScheduleBlock = (e) => {
-          e.preventDefault();
-          if (!blockTitle.trim()) return;
-          const newBlock = {
-            id: 'blk-' + Date.now(),
-            title: blockTitle.trim(),
-            start: blockStart,
-            end: blockEnd,
-            category: blockCat
-          };
-          const nextSchedule = [...(currentDayData.schedule || []), newBlock].sort((a, b) =>
-            (a.start || '').localeCompare(b.start || '')
-          );
-          updateDayData(selectedDate, { schedule: nextSchedule });
-          setBlockTitle('');
-          notify('Time block added to timeline');
-        };
-
-        const deleteScheduleBlock = (id) => {
-          const nextSchedule = (currentDayData.schedule || []).filter((b) => b.id !== id);
-          updateDayData(selectedDate, { schedule: nextSchedule });
-        };
-
-        const saveWeekdayTemplate = () => {
-          setData((prev) => {
-            const prevBio = prev.bioLog || { days: {}, templates: {} };
-            return {
-              ...prev,
-              bioLog: {
-                ...prevBio,
-                templates: {
-                  ...(prevBio.templates || {}),
-                  [templateDay]: currentDayData.schedule || []
-                }
-              }
-            };
-          });
-          notify(`Saved schedule as ${templateDay} template`);
-        };
-
-        const copyTemplateToToday = () => {
-          const tpl = templatesMap[templateDay] || [];
-          if (tpl.length === 0) {
-            notify(`No saved blocks in ${templateDay} template`, 'err');
-            return;
-          }
-          const cloned = tpl.map((b, i) => ({ ...b, id: 'blk-' + Date.now() + '-' + i }));
-          updateDayData(selectedDate, { schedule: cloned });
-          notify(`Copied ${templateDay} template to ${selectedDate}`);
-        };
-
         const breathPhase = breathTick < 4 ? 'INHALE (4S)' : breathTick < 8 ? 'HOLD (4S)' : 'EXHALE (6S)';
         const totalNsdrSec = (audioPrefs.nsdrDuration || 10) * 60;
-        const nsdrProgress = 1 - nsdrSecLeft / Math.max(1, totalNsdrSec);
-        const nsdrStage =
+        const nsdrProgress = Math.min(1, Math.max(0, 1 - nsdrSecLeft / Math.max(1, totalNsdrSec)));
+        const nsdrPct = Math.round(nsdrProgress * 100);
+        const nsdrStageIndex =
           nsdrProgress < 0.2
-            ? 'STAGE 1 // SETTLE IN & DOWN-REGULATE'
+            ? 0
             : nsdrProgress < 0.55
-            ? 'STAGE 2 // SOMATIC BODY SCAN'
+            ? 1
             : nsdrProgress < 0.85
-            ? 'STAGE 3 // RELEASE AUTONOMIC TENSION'
-            : 'STAGE 4 // GENTLE RETURN TO BASELINE';
+            ? 2
+            : 3;
+
+        const NSDR_STAGES = [
+          {
+            code: 'STAGE 01',
+            title: 'Settle In & Down-Regulate',
+            range: '0% – 20%',
+            desc: 'Close eyes, unclench jaw, drop shoulders, and lengthen exhalations to activate vagal tone.'
+          },
+          {
+            code: 'STAGE 02',
+            title: 'Somatic Body Scan',
+            range: '20% – 55%',
+            desc: 'Sweep attention from forehead to toes, observing sensation without judgment or effort.'
+          },
+          {
+            code: 'STAGE 03',
+            title: 'Release Autonomic Tension',
+            range: '55% – 85%',
+            desc: 'Sink deeper into stillness with 4s inhale, 4s hold, 6s exhale parasympathetic cadence.'
+          },
+          {
+            code: 'STAGE 04',
+            title: 'Gentle Return to Baseline',
+            range: '85% – 100%',
+            desc: 'Replenish striatal dopamine reserves and gradually re-engage motor awareness.'
+          }
+        ];
+
+        const nsdrStage = `${NSDR_STAGES[nsdrStageIndex].code} // ${NSDR_STAGES[nsdrStageIndex].title.toUpperCase()}`;
 
         const waterPct = Math.min(100, Math.round(((currentDayData.waterMl || 0) / 3000) * 100));
+
+        const AUDIO_TRACKS = [
+          { id: 'pink', label: 'Pink Noise', sub: 'Balanced 1/f spectrum • Deep focus' },
+          { id: 'brown', label: 'Brown Noise', sub: 'Low-frequency warmth • Calm mind' },
+          { id: 'white', label: 'White Noise', sub: 'Uniform masking • Block distractions' },
+          { id: 'binaural', label: '40Hz Binaural', sub: 'Gamma entrainment • Cognitive lock' },
+          { id: 'nsdr', label: 'NSDR Guided', sub: 'Autonomic reset • Somatic recovery' }
+        ];
 
         return (
           <div className="space-y-6">
@@ -7602,231 +7579,74 @@ const NexoraContext = createContext(null);
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-              <div className="lg:col-span-6 arch-panel rounded-xl p-5 space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-mono text-[11px] uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
-                    03 // DAY TIMELINE (05:00 – 23:00)
+            <div className="arch-panel rounded-xl p-5 space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <span className="font-mono text-[11px] uppercase tracking-wider block" style={{ color: 'var(--ink-muted)' }}>
+                    03 // NSDR SOMATIC RECOVERY &amp; SYNTHESIZED FOCUS AUDIO CONSOLE
                   </span>
-                  <div className="flex items-center gap-1.5">
-                    <select
-                      value={templateDay}
-                      onChange={(e) => setTemplateDay(e.target.value)}
-                      className="arch-input rounded px-2 py-1 text-[11px] font-mono"
-                    >
-                      {weekdays.map((w) => (
-                        <option key={w} value={w}>{w} Template</option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={saveWeekdayTemplate}
-                      className="arch-btn-ghost px-2 py-1 rounded text-[10px] font-mono"
-                    >
-                      Save Template
-                    </button>
-                    <button
-                      type="button"
-                      onClick={copyTemplateToToday}
-                      className="arch-btn-primary px-2.5 py-1 rounded text-[10px] font-mono"
-                    >
-                      Copy Template to Today
-                    </button>
-                  </div>
+                  <span className="text-xs" style={{ color: 'var(--ink-secondary)' }}>
+                    Zero-latency Web Audio synthesis paired with guided 4-4-6 parasympathetic NSDR breathing and stage progression.
+                  </span>
                 </div>
-
-                <form onSubmit={addScheduleBlock} className="grid grid-cols-1 sm:grid-cols-12 gap-2">
-                  <input
-                    value={blockTitle}
-                    onChange={(e) => setBlockTitle(e.target.value)}
-                    placeholder="Block title (e.g., Lecture, Gym)..."
-                    className="sm:col-span-4 arch-input rounded-md px-2.5 py-1.5 text-xs"
-                  />
-                  <input
-                    type="time"
-                    min="05:00"
-                    max="23:00"
-                    value={blockStart}
-                    onChange={(e) => setBlockStart(e.target.value)}
-                    className="sm:col-span-2 arch-input rounded-md px-2 py-1.5 text-xs font-mono"
-                  />
-                  <input
-                    type="time"
-                    min="05:00"
-                    max="23:00"
-                    value={blockEnd}
-                    onChange={(e) => setBlockEnd(e.target.value)}
-                    className="sm:col-span-2 arch-input rounded-md px-2 py-1.5 text-xs font-mono"
-                  />
-                  <select
-                    value={blockCat}
-                    onChange={(e) => setBlockCat(e.target.value)}
-                    className="sm:col-span-2 arch-input rounded-md px-2 py-1.5 text-xs font-mono"
-                  >
-                    <option>Deep Work</option>
-                    <option>Classes</option>
-                    <option>Training</option>
-                    <option>Recovery</option>
-                  </select>
-                  <button type="submit" className="sm:col-span-2 arch-btn-primary rounded-md py-1.5 text-xs font-mono">
-                    + Block
-                  </button>
-                </form>
-
-                {(currentDayData.schedule || []).length === 0 ? (
-                  <EmptyState
-                    code="TIMELINE.05_23 // 0_BLOCKS"
-                    title="No time blocks scheduled for this date"
-                    subtitle="Add time blocks between 05:00 and 23:00 or copy a saved weekday template."
-                  />
-                ) : (
-                  <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                    {(currentDayData.schedule || []).map((b) => (
-                      <div
-                        key={b.id}
-                        className="p-2.5 rounded-md border flex items-center justify-between gap-3"
-                        style={{ backgroundColor: 'var(--bg-canvas)' }}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="font-mono text-xs font-semibold tabular-nums px-2 py-0.5 rounded border">
-                            {b.start} – {b.end}
-                          </span>
-                          <div>
-                            <div className="text-xs font-semibold">{b.title}</div>
-                            <div className="font-mono text-[10px]" style={{ color: 'var(--ink-muted)' }}>{b.category}</div>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => deleteScheduleBlock(b.id)}
-                          className="arch-btn-ghost p-1 rounded"
-                        >
-                          <Icon name="trash" size={12} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="lg:col-span-6 arch-panel rounded-xl p-5 space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-[11px] uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
-                    04 // NSDR &amp; SYNTHESIZED FOCUS AUDIO
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-[11px] uppercase px-2.5 py-1 rounded border" style={{ color: (isPlaying || nsdrRunning) ? 'var(--status-ok)' : 'var(--ink-muted)' }}>
+                    {nsdrRunning ? 'NSDR SESSION ACTIVE' : isPlaying ? `PLAYING: ${audioPrefs.track.toUpperCase()}` : 'GENERATOR STANDBY'}
                   </span>
                   <div className="flex items-end gap-1 h-4">
-                    {[45, 90, 60, 100, 50, 80].map((h, i) => (
+                    {[45, 90, 60, 100, 50, 80, 65, 95].map((h, i) => (
                       <span
                         key={i}
-                        className={`w-1 rounded-sm transition-all ${isPlaying ? 'animate-pulse' : ''}`}
+                        className={`w-1 rounded-sm transition-all ${(isPlaying || nsdrRunning) ? 'animate-pulse' : ''}`}
                         style={{
-                          height: isPlaying ? `${h}%` : '20%',
-                          backgroundColor: isPlaying ? 'var(--status-ok)' : 'var(--ink-muted)'
+                          height: (isPlaying || nsdrRunning) ? `${h}%` : '20%',
+                          backgroundColor: (isPlaying || nsdrRunning) ? 'var(--status-ok)' : 'var(--ink-muted)'
                         }}
                       />
                     ))}
                   </div>
                 </div>
+              </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                  {[
-                    { id: 'pink', label: 'Pink Noise' },
-                    { id: 'brown', label: 'Brown Noise' },
-                    { id: 'white', label: 'White Noise' },
-                    { id: 'binaural', label: '40Hz Binaural' },
-                    { id: 'nsdr', label: 'NSDR Guided' }
-                  ].map((t) => {
-                    const active = audioPrefs.track === t.id;
-                    return (
-                      <button
-                        key={t.id}
-                        type="button"
-                        onClick={() => {
-                          updateAudioPrefs({ track: t.id });
-                          if (isPlaying) startAudio(t.id);
-                        }}
-                        className={`p-2.5 rounded-lg border text-xs font-mono text-center transition ${
-                          active ? 'arch-btn-primary' : 'arch-btn-ghost'
-                        }`}
-                      >
-                        {t.label}
-                      </button>
-                    );
-                  })}
-                </div>
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                <div className="lg:col-span-6 p-4 rounded-xl border space-y-4 flex flex-col justify-between" style={{ backgroundColor: 'var(--bg-canvas)' }}>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[10px] uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
+                        ACOUSTIC WAVEFORM &amp; ENTRAINMENT CHANNELS
+                      </span>
+                      <span className="font-mono text-[10px]" style={{ color: 'var(--ink-secondary)' }}>
+                        WEB AUDIO ENGINE
+                      </span>
+                    </div>
 
-                {audioPrefs.track === 'nsdr' ? (
-                  <div className="p-4 rounded-lg border text-center space-y-4" style={{ backgroundColor: 'var(--bg-canvas)' }}>
-                    <div className="flex items-center justify-between font-mono text-xs">
-                      <span style={{ color: 'var(--ink-muted)' }}>{nsdrStage}</span>
-                      <div className="flex gap-1">
-                        {[10, 20].map((m) => (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {AUDIO_TRACKS.map((t) => {
+                        const active = audioPrefs.track === t.id;
+                        return (
                           <button
-                            key={m}
+                            key={t.id}
                             type="button"
                             onClick={() => {
-                              stopAudio();
-                              updateAudioPrefs({ nsdrDuration: m });
-                              setNsdrSecLeft(m * 60);
+                              updateAudioPrefs({ track: t.id });
+                              if (isPlaying) startAudio(t.id);
                             }}
-                            className={`px-2 py-0.5 rounded text-[10px] font-mono ${
-                              audioPrefs.nsdrDuration === m ? 'arch-btn-primary' : 'arch-btn-ghost'
+                            className={`p-3 rounded-lg border text-left transition flex flex-col justify-between gap-1 ${
+                              active ? 'arch-btn-primary' : 'arch-btn-ghost'
                             }`}
                           >
-                            {m}M
+                            <div className="flex items-center justify-between w-full">
+                              <span className="font-mono text-xs font-semibold">{t.label}</span>
+                              {active && <span className="font-mono text-[9px] uppercase px-1.5 py-0.5 rounded border">ACTIVE</span>}
+                            </div>
+                            <span className="text-[11px] opacity-80">{t.sub}</span>
                           </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="py-4 flex flex-col items-center justify-center">
-                      <div
-                        className="w-28 h-28 rounded-full border-2 flex flex-col items-center justify-center transition-all duration-1000"
-                        style={{
-                          borderColor: 'var(--status-ok)',
-                          transform:
-                            !nsdrRunning
-                              ? 'scale(1)'
-                              : breathTick < 4
-                              ? 'scale(1.18)'
-                              : breathTick < 8
-                              ? 'scale(1.18)'
-                              : 'scale(0.88)'
-                        }}
-                      >
-                        <div className="font-mono text-lg font-semibold tabular-nums">
-                          {String(Math.floor(nsdrSecLeft / 60)).padStart(2, '0')}:{String(nsdrSecLeft % 60).padStart(2, '0')}
-                        </div>
-                        <div className="font-mono text-[10px] mt-0.5" style={{ color: 'var(--status-ok)' }}>
-                          {nsdrRunning ? breathPhase : 'READY'}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex justify-center gap-2">
-                      <button
-                        type="button"
-                        onClick={toggleNsdr}
-
-                        className="arch-btn-primary px-4 py-1.5 rounded-md text-xs font-mono inline-flex items-center gap-1.5"
-                      >
-                        <Icon name={nsdrRunning ? 'pause' : 'play'} size={13} />
-                        <span>{nsdrRunning ? 'Pause NSDR' : 'Start NSDR Session'}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          stopAudio();
-                          setNsdrSecLeft((audioPrefs.nsdrDuration || 10) * 60);
-                        }}
-                        className="arch-btn-ghost px-3 py-1.5 rounded-md text-xs font-mono"
-                      >
-                        Reset
-                      </button>
+                        );
+                      })}
                     </div>
                   </div>
-                ) : (
-                  <div className="p-4 rounded-lg border space-y-4" style={{ backgroundColor: 'var(--bg-canvas)' }}>
+
+                  <div className="space-y-4 pt-3 border-t">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <button
                         type="button"
@@ -7834,12 +7654,12 @@ const NexoraContext = createContext(null);
                         className="arch-btn-primary px-4 py-2 rounded-md text-xs font-mono inline-flex items-center gap-2"
                       >
                         <Icon name={isPlaying ? 'pause' : 'play'} size={14} />
-                        <span>{isPlaying ? 'STOP GENERATOR' : 'PLAY AUDIO'}</span>
+                        <span>{isPlaying ? 'STOP GENERATOR' : 'PLAY AUDIO CHANNEL'}</span>
                       </button>
 
-                      <div className="flex items-center gap-1.5 font-mono text-xs">
+                      <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
                         <span style={{ color: 'var(--ink-muted)' }}>SLEEP TIMER:</span>
-                        {[15, 30, 60].map((m) => (
+                        {[15, 30, 45, 60, 90].map((m) => (
                           <button
                             key={m}
                             type="button"
@@ -7857,7 +7677,7 @@ const NexoraContext = createContext(null);
                       </div>
                     </div>
 
-                    <div className="space-y-1">
+                    <div className="space-y-1.5">
                       <div className="flex justify-between font-mono text-[11px]">
                         <span style={{ color: 'var(--ink-muted)' }}>OUTPUT GAIN</span>
                         <span>
@@ -7876,7 +7696,135 @@ const NexoraContext = createContext(null);
                       />
                     </div>
                   </div>
-                )}
+                </div>
+
+                <div className="lg:col-span-6 p-4 rounded-xl border space-y-4 flex flex-col justify-between" style={{ backgroundColor: 'var(--bg-canvas)' }}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <span className="font-mono text-[10px] uppercase tracking-wider block" style={{ color: 'var(--ink-muted)' }}>
+                        GUIDED NSDR PROTOCOL (NON-SLEEP DEEP REST)
+                      </span>
+                      <span className="font-mono text-xs font-semibold" style={{ color: 'var(--status-ok)' }}>
+                        {nsdrStage}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {[5, 10, 15, 20, 30].map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => {
+                            stopAudio();
+                            updateAudioPrefs({ nsdrDuration: m, track: 'nsdr' });
+                            setNsdrSecLeft(m * 60);
+                          }}
+                          className={`px-2 py-1 rounded text-[10px] font-mono ${
+                            (audioPrefs.nsdrDuration || 10) === m ? 'arch-btn-primary' : 'arch-btn-ghost'
+                          }`}
+                        >
+                          {m}M
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center py-2">
+                    <div className="sm:col-span-5 flex flex-col items-center justify-center py-2">
+                      <div
+                        className="w-32 h-32 rounded-full border-2 flex flex-col items-center justify-center transition-all duration-1000"
+                        style={{
+                          borderColor: 'var(--status-ok)',
+                          boxShadow: nsdrRunning ? '0 0 24px rgba(16, 185, 129, 0.2)' : 'none',
+                          transform:
+                            !nsdrRunning
+                              ? 'scale(1)'
+                              : breathTick < 4
+                              ? 'scale(1.14)'
+                              : breathTick < 8
+                              ? 'scale(1.14)'
+                              : 'scale(0.9)'
+                        }}
+                      >
+                        <div className="font-mono text-xl font-semibold tabular-nums">
+                          {String(Math.floor(nsdrSecLeft / 60)).padStart(2, '0')}:{String(nsdrSecLeft % 60).padStart(2, '0')}
+                        </div>
+                        <div className="font-mono text-[10px] mt-0.5" style={{ color: 'var(--status-ok)' }}>
+                          {nsdrRunning ? breathPhase : 'READY (4-4-6)'}
+                        </div>
+                        <div className="font-mono text-[9px] mt-0.5" style={{ color: 'var(--ink-muted)' }}>
+                          {nsdrPct}% COMPLETE
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="sm:col-span-7 space-y-2">
+                      {NSDR_STAGES.map((stg, idx) => {
+                        const isCurrent = idx === nsdrStageIndex;
+                        const isDone = idx < nsdrStageIndex;
+                        return (
+                          <div
+                            key={stg.code}
+                            className="p-2.5 rounded-lg border transition-all"
+                            style={{
+                              borderColor: isCurrent ? 'var(--status-ok)' : 'var(--border-subtle)',
+                              backgroundColor: isCurrent ? 'var(--bg-elevated)' : 'transparent',
+                              opacity: isDone ? 0.65 : 1
+                            }}
+                          >
+                            <div className="flex items-center justify-between font-mono text-[10px]">
+                              <span style={{ color: isCurrent ? 'var(--status-ok)' : 'var(--ink-muted)' }}>
+                                {stg.code} // {stg.title.toUpperCase()}
+                              </span>
+                              <span style={{ color: 'var(--ink-muted)' }}>{stg.range}</span>
+                            </div>
+                            <p className="text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--ink-secondary)' }}>
+                              {stg.desc}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 pt-2 border-t">
+                    <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-elevated)' }}>
+                      <div
+                        className="h-full transition-all duration-500"
+                        style={{ width: `${nsdrPct}%`, backgroundColor: 'var(--status-ok)' }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono text-[10px]" style={{ color: 'var(--ink-muted)' }}>
+                        CADENCE: 4S INHALE • 4S HOLD • 6S EXHALE
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (audioPrefs.track !== 'nsdr') {
+                              updateAudioPrefs({ track: 'nsdr' });
+                            }
+                            toggleNsdr();
+                          }}
+                          className="arch-btn-primary px-4 py-1.5 rounded-md text-xs font-mono inline-flex items-center gap-1.5"
+                        >
+                          <Icon name={nsdrRunning ? 'pause' : 'play'} size={13} />
+                          <span>{nsdrRunning ? 'Pause NSDR' : 'Start NSDR Session'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            stopAudio();
+                            setNsdrSecLeft((audioPrefs.nsdrDuration || 10) * 60);
+                          }}
+                          className="arch-btn-ghost px-3 py-1.5 rounded-md text-xs font-mono"
+                        >
+                          Reset
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -7892,24 +7840,81 @@ const NexoraContext = createContext(null);
         const todayKey = ymd(today);
 
         const DEFAULT_MORNING = [
-          { id: 'mr-1', title: 'Meds', time: '06:30' },
-          { id: 'mr-2', title: 'Wake without phone', time: '06:35' },
-          { id: 'mr-3', title: 'Water', time: '06:40' },
-          { id: 'mr-4', title: 'Dress', time: '07:00' },
-          { id: 'mr-5', title: 'Pack bag', time: '07:15' },
-          { id: 'mr-6', title: 'ID/wallet/charger', time: '07:20' },
-          { id: 'mr-7', title: 'Bus time check', time: '07:25' }
+          {
+            id: 'mr-rule-2',
+            title: 'Zero-Screen First 30m',
+            desc: 'No phone or notifications for the first 30 minutes after waking to protect dopamine baseline.',
+            time: '06:30'
+          },
+          {
+            id: 'mr-rule-3',
+            title: 'Sunlight & Hydration First',
+            desc: 'Drink water and view natural outdoor light immediately to anchor circadian cortisol.',
+            time: '06:40'
+          },
+          {
+            id: 'mr-rule-4',
+            title: 'Hardest Task First',
+            desc: 'Attack your highest-leverage engineering or study problem before checking messages.',
+            time: '07:00'
+          },
+          {
+            id: 'mr-1',
+            title: 'Meds & Morning Fuel',
+            desc: 'Take scheduled supplements/meds and baseline nutrition.',
+            time: '07:30'
+          },
+          {
+            id: 'mr-4',
+            title: 'Dress & Ready to Launch',
+            desc: 'Step into pre-staged outfit with zero morning friction.',
+            time: '07:45'
+          }
         ];
 
-        const morningRoutine =
-          data.morningRoutine && data.morningRoutine.length > 0 ? data.morningRoutine : DEFAULT_MORNING;
+        const DEFAULT_NIGHT = [
+          {
+            id: 'nr-rule-1',
+            title: 'Night-Before Launchpad',
+            desc: 'Prepare bag, outfit, and ID tray the night before so mornings require zero decisions.',
+            time: '21:30'
+          },
+          {
+            id: 'nr-2',
+            title: 'Lock Tomorrow’s #1 Hardest Problem',
+            desc: 'Write down the exact engineering or study task to attack first thing in the morning.',
+            time: '21:45'
+          },
+          {
+            id: 'nr-3',
+            title: 'Device Charge & Zero-Screen Wind-Down',
+            desc: 'Dock phone outside reach and dim lights to protect melatonin onset.',
+            time: '22:15'
+          }
+        ];
+
+        const rawMorning = data.morningRoutine && data.morningRoutine.length > 0 ? data.morningRoutine : DEFAULT_MORNING;
+        const isLegacyDefaultMorning =
+          rawMorning.some((i) => i.title === 'Bus time check' || i.title === 'ID/wallet/charger') &&
+          !rawMorning.some((i) => i.title === 'Zero-Screen First 30m');
+        const morningRoutine = isLegacyDefaultMorning ? DEFAULT_MORNING : rawMorning;
+
+        const nightRoutine =
+          data.nightRoutine && data.nightRoutine.length > 0 ? data.nightRoutine : DEFAULT_NIGHT;
+
         const morningLog = data.morningLog || {};
         const todayChecked = morningLog[todayKey] || {};
+
+        const nightLog = data.nightLog || {};
+        const todayNightChecked = nightLog[todayKey] || {};
+
         const decisions = data.decisions || [];
 
         const [newItemTitle, setNewItemTitle] = useState('');
         const [newItemTime, setNewItemTime] = useState('');
-        const [showTips, setShowTips] = useState(true);
+
+        const [newNightTitle, setNewNightTitle] = useState('');
+        const [newNightTime, setNewNightTime] = useState('');
 
         const [decText, setDecText] = useState('');
         const [decQuad, setDecQuad] = useState('q1');
@@ -7922,7 +7927,7 @@ const NexoraContext = createContext(null);
 
           setData((prev) => ({
             ...prev,
-            morningRoutine: prev.morningRoutine && prev.morningRoutine.length > 0 ? prev.morningRoutine : DEFAULT_MORNING,
+            morningRoutine,
             morningLog: {
               ...(prev.morningLog || {}),
               [todayKey]: nextTodayMap
@@ -7959,6 +7964,51 @@ const NexoraContext = createContext(null);
           }));
         };
 
+        const toggleNightItem = (itemId) => {
+          playTactileClick(data.profile.soundEnabled, 740, 12);
+          const nextState = !todayNightChecked[itemId];
+          const nextTodayMap = { ...todayNightChecked, [itemId]: nextState };
+          if (!nextState) delete nextTodayMap[itemId];
+
+          setData((prev) => ({
+            ...prev,
+            nightRoutine,
+            nightLog: {
+              ...(prev.nightLog || {}),
+              [todayKey]: nextTodayMap
+            }
+          }));
+
+          const completedCount = Object.keys(nextTodayMap).length;
+          if (nextState && completedCount === nightRoutine.length) {
+            awardXP(25, 'Completed Full Night Protocol');
+          }
+        };
+
+        const addNightItem = (e) => {
+          e.preventDefault();
+          if (!newNightTitle.trim()) return;
+          const item = {
+            id: 'nr-' + Date.now(),
+            title: newNightTitle.trim(),
+            time: newNightTime.trim()
+          };
+          setData((prev) => ({
+            ...prev,
+            nightRoutine: [...nightRoutine, item]
+          }));
+          setNewNightTitle('');
+          setNewNightTime('');
+          notify('Added step to Night Protocol');
+        };
+
+        const deleteNightItem = (id) => {
+          setData((prev) => ({
+            ...prev,
+            nightRoutine: nightRoutine.filter((i) => i.id !== id)
+          }));
+        };
+
         const morningStreak = useMemo(() => {
           let s = 0;
           const cur = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -7970,6 +8020,18 @@ const NexoraContext = createContext(null);
           }
           return s;
         }, [morningLog, todayKey]);
+
+        const nightStreak = useMemo(() => {
+          let s = 0;
+          const cur = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+          const hasAny = (k) => Object.keys(nightLog[k] || {}).length > 0;
+          if (!hasAny(ymd(cur))) cur.setDate(cur.getDate() - 1);
+          while (hasAny(ymd(cur))) {
+            s++;
+            cur.setDate(cur.getDate() - 1);
+          }
+          return s;
+        }, [nightLog, todayKey]);
 
         const addDecision = (e) => {
           e.preventDefault();
@@ -8005,15 +8067,6 @@ const NexoraContext = createContext(null);
             decisions: (prev.decisions || []).filter((d) => d.id !== id)
           }));
         };
-
-        const STATIC_TIPS = [
-          { title: 'Night-Before Launchpad', desc: 'Prepare bag, outfit, and ID tray the night before so mornings require zero decisions.' },
-          { title: 'Zero-Screen First 30m', desc: 'No phone or notifications for the first 30 minutes after waking to protect dopamine baseline.' },
-          { title: 'Sunlight & Hydration First', desc: 'Drink water and view natural outdoor light immediately to anchor circadian cortisol.' },
-          { title: 'Hardest Task First', desc: 'Attack your highest-leverage engineering or study problem before checking messages.' },
-          { title: 'One Fixed Bus Time', desc: 'Commit to one non-negotiable departure time rather than recalculating every morning.' },
-          { title: 'Single Pocket Audit', desc: 'Verify ID card, wallet, keys, and charger at the door threshold before stepping out.' }
-        ];
 
         const QUADRANTS = [
           {
@@ -8052,61 +8105,70 @@ const NexoraContext = createContext(null);
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-              <div className="lg:col-span-5 arch-panel rounded-xl p-5 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="font-mono text-[11px] uppercase tracking-wider block" style={{ color: 'var(--ink-muted)' }}>
-                      01 // MORNING PROTOCOL ({todayKey})
-                    </span>
-                    <span className="font-mono text-[10px]" style={{ color: 'var(--ink-secondary)' }}>
-                      Auto-resets daily by date
+              <div className="lg:col-span-6 arch-panel rounded-xl p-5 space-y-4 flex flex-col justify-between">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="font-mono text-[11px] uppercase tracking-wider block" style={{ color: 'var(--ink-muted)' }}>
+                        01 // MORNING PROTOCOL ({todayKey})
+                      </span>
+                      <span className="font-mono text-[10px]" style={{ color: 'var(--ink-secondary)' }}>
+                        Zero-screen, sunlight &amp; hydration, and hardest task first
+                      </span>
+                    </div>
+                    <span className="font-mono text-xs px-2.5 py-1 rounded border tabular-nums" style={{ color: 'var(--status-ok)' }}>
+                      STREAK: {morningStreak}D
                     </span>
                   </div>
-                  <span className="font-mono text-xs px-2.5 py-1 rounded border tabular-nums" style={{ color: 'var(--status-ok)' }}>
-                    STREAK: {morningStreak}D
-                  </span>
-                </div>
 
-                <div className="divide-y">
-                  {morningRoutine.map((item) => {
-                    const checked = !!todayChecked[item.id];
-                    return (
-                      <div key={item.id} className="py-2.5 flex items-center justify-between gap-2">
-                        <label className="flex items-center gap-2.5 cursor-pointer flex-1">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleMorningItem(item.id)}
-                            className="w-4 h-4 cursor-pointer"
-                          />
-                          <span className={`text-xs font-medium ${checked ? 'line-through opacity-50' : ''}`}>
-                            {item.title}
-                          </span>
-                        </label>
-                        <div className="flex items-center gap-2">
-                          {item.time && (
-                            <span className="font-mono text-[11px] tabular-nums" style={{ color: 'var(--ink-muted)' }}>
-                              {item.time}
-                            </span>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => deleteMorningItem(item.id)}
-                            className="arch-btn-ghost p-1 rounded"
-                          >
-                            <Icon name="trash" size={12} />
-                          </button>
+                  <div className="divide-y">
+                    {morningRoutine.map((item) => {
+                      const checked = !!todayChecked[item.id];
+                      return (
+                        <div key={item.id} className="py-2.5 flex items-start justify-between gap-2">
+                          <label className="flex items-start gap-2.5 cursor-pointer flex-1">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleMorningItem(item.id)}
+                              className="w-4 h-4 mt-0.5 cursor-pointer"
+                            />
+                            <div className="space-y-0.5">
+                              <span className={`text-xs font-semibold block ${checked ? 'line-through opacity-50' : ''}`}>
+                                {item.title}
+                              </span>
+                              {item.desc && (
+                                <span className={`text-[11px] block leading-snug ${checked ? 'opacity-40' : ''}`} style={{ color: 'var(--ink-secondary)' }}>
+                                  {item.desc}
+                                </span>
+                              )}
+                            </div>
+                          </label>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {item.time && (
+                              <span className="font-mono text-[11px] tabular-nums" style={{ color: 'var(--ink-muted)' }}>
+                                {item.time}
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => deleteMorningItem(item.id)}
+                              className="arch-btn-ghost p-1 rounded"
+                            >
+                              <Icon name="trash" size={12} />
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
 
-                <form onSubmit={addMorningItem} className="flex gap-2 pt-2 border-t">
+                <form onSubmit={addMorningItem} className="flex gap-2 pt-3 border-t">
                   <input
                     value={newItemTitle}
                     onChange={(e) => setNewItemTitle(e.target.value)}
-                    placeholder="Add checklist item..."
+                    placeholder="Add morning protocol step..."
                     className="flex-1 arch-input rounded-md px-2.5 py-1.5 text-xs"
                   />
                   <input
@@ -8121,117 +8183,164 @@ const NexoraContext = createContext(null);
                 </form>
               </div>
 
-              <div className="lg:col-span-7 arch-panel rounded-xl p-5 space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-[11px] uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
-                    02 // 2x2 EXECUTIVE DECISION MATRIX (IMPORTANT VS REVERSIBLE)
-                  </span>
+              <div className="lg:col-span-6 arch-panel rounded-xl p-5 space-y-4 flex flex-col justify-between">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="font-mono text-[11px] uppercase tracking-wider block" style={{ color: 'var(--ink-muted)' }}>
+                        02 // NIGHT PROTOCOL ({todayKey})
+                      </span>
+                      <span className="font-mono text-[10px]" style={{ color: 'var(--ink-secondary)' }}>
+                        Night-Before Launchpad &amp; zero-decision morning staging
+                      </span>
+                    </div>
+                    <span className="font-mono text-xs px-2.5 py-1 rounded border tabular-nums" style={{ color: 'var(--status-ok)' }}>
+                      STREAK: {nightStreak}D
+                    </span>
+                  </div>
+
+                  <div className="divide-y">
+                    {nightRoutine.map((item) => {
+                      const checked = !!todayNightChecked[item.id];
+                      return (
+                        <div key={item.id} className="py-2.5 flex items-start justify-between gap-2">
+                          <label className="flex items-start gap-2.5 cursor-pointer flex-1">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleNightItem(item.id)}
+                              className="w-4 h-4 mt-0.5 cursor-pointer"
+                            />
+                            <div className="space-y-0.5">
+                              <span className={`text-xs font-semibold block ${checked ? 'line-through opacity-50' : ''}`}>
+                                {item.title}
+                              </span>
+                              {item.desc && (
+                                <span className={`text-[11px] block leading-snug ${checked ? 'opacity-40' : ''}`} style={{ color: 'var(--ink-secondary)' }}>
+                                  {item.desc}
+                                </span>
+                              )}
+                            </div>
+                          </label>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {item.time && (
+                              <span className="font-mono text-[11px] tabular-nums" style={{ color: 'var(--ink-muted)' }}>
+                                {item.time}
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => deleteNightItem(item.id)}
+                              className="arch-btn-ghost p-1 rounded"
+                            >
+                              <Icon name="trash" size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
 
-                <form onSubmit={addDecision} className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                <form onSubmit={addNightItem} className="flex gap-2 pt-3 border-t">
                   <input
-                    value={decText}
-                    onChange={(e) => setDecText(e.target.value)}
-                    placeholder="Decision to evaluate..."
-                    className="sm:col-span-6 arch-input rounded-md px-3 py-1.5 text-xs"
+                    value={newNightTitle}
+                    onChange={(e) => setNewNightTitle(e.target.value)}
+                    placeholder="Add night protocol step..."
+                    className="flex-1 arch-input rounded-md px-2.5 py-1.5 text-xs"
                   />
-                  <select
-                    value={decQuad}
-                    onChange={(e) => setDecQuad(e.target.value)}
-                    className="sm:col-span-4 arch-input rounded-md px-2 py-1.5 text-xs font-mono"
-                  >
-                    <option value="q1">Important + Irreversible</option>
-                    <option value="q2">Important + Reversible</option>
-                    <option value="q3">Not Important + Irreversible</option>
-                    <option value="q4">Not Important + Reversible</option>
-                  </select>
-                  <button type="submit" className="sm:col-span-2 arch-btn-primary rounded-md py-1.5 text-xs font-mono">
-                    + Place
+                  <input
+                    type="time"
+                    value={newNightTime}
+                    onChange={(e) => setNewNightTime(e.target.value)}
+                    className="arch-input rounded-md px-2 py-1.5 text-xs font-mono"
+                  />
+                  <button type="submit" className="arch-btn-primary px-3 py-1.5 rounded-md text-xs font-mono">
+                    + Add
                   </button>
                 </form>
-
-                <div className="hairline-grid grid grid-cols-1 md:grid-cols-2 rounded-xl overflow-hidden">
-                  {QUADRANTS.map((q) => {
-                    const items = decisions.filter((d) => d.quadrant === q.id);
-                    return (
-                      <div key={q.id} className="hairline-cell p-4 min-h-[175px] flex flex-col justify-between space-y-3">
-                        <div>
-                          <div className="font-mono text-[10px] uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
-                            {q.axis}
-                          </div>
-                          <h3 className="text-sm font-semibold mt-0.5">{q.title}</h3>
-                          <p className="text-[11px]" style={{ color: 'var(--ink-secondary)' }}>{q.sub}</p>
-                        </div>
-
-                        <div className="space-y-1.5">
-                          {items.length === 0 ? (
-                            <div className="font-mono text-[10px] py-2" style={{ color: 'var(--ink-muted)' }}>
-                              [EMPTY QUADRANT]
-                            </div>
-                          ) : (
-                            items.map((d) => (
-                              <div
-                                key={d.id}
-                                className="px-2.5 py-1.5 rounded border flex items-center justify-between gap-2 text-xs"
-                                style={{ backgroundColor: 'var(--bg-canvas)' }}
-                              >
-                                <span className={d.resolved ? 'line-through opacity-50' : ''}>{d.title}</span>
-                                <div className="flex items-center gap-1 shrink-0">
-                                  <button
-                                    type="button"
-                                    onClick={() => resolveDecision(d.id)}
-                                    className="arch-btn-ghost px-1.5 py-0.5 rounded font-mono text-[10px]"
-                                  >
-                                    {d.resolved ? 'Undo' : 'Resolve'}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => deleteDecision(d.id)}
-                                    className="arch-btn-ghost p-0.5 rounded"
-                                  >
-                                    <Icon name="trash" size={11} />
-                                  </button>
-                                </div>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
               </div>
             </div>
 
             <div className="arch-panel rounded-xl p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <span className="font-mono text-[11px] uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
-                  03 // EXECUTIVE OPERATING RECOMMENDATIONS
+                  03 // 2x2 EXECUTIVE DECISION MATRIX (IMPORTANT VS REVERSIBLE)
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setShowTips(!showTips)}
-                  className="arch-btn-ghost px-2.5 py-1 rounded text-xs font-mono"
-                >
-                  {showTips ? 'COLLAPSE [-]' : 'EXPAND [+]'}
-                </button>
               </div>
 
-              {showTips && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {STATIC_TIPS.map((tip, i) => (
-                    <div key={i} className="p-3.5 rounded-lg border space-y-1" style={{ backgroundColor: 'var(--bg-canvas)' }}>
-                      <div className="font-mono text-[10px] uppercase" style={{ color: 'var(--status-ok)' }}>
-                        RULE 0{i + 1}
+              <form onSubmit={addDecision} className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                <input
+                  value={decText}
+                  onChange={(e) => setDecText(e.target.value)}
+                  placeholder="Decision to evaluate..."
+                  className="sm:col-span-6 arch-input rounded-md px-3 py-1.5 text-xs"
+                />
+                <select
+                  value={decQuad}
+                  onChange={(e) => setDecQuad(e.target.value)}
+                  className="sm:col-span-4 arch-input rounded-md px-2 py-1.5 text-xs font-mono"
+                >
+                  <option value="q1">Important + Irreversible</option>
+                  <option value="q2">Important + Reversible</option>
+                  <option value="q3">Not Important + Irreversible</option>
+                  <option value="q4">Not Important + Reversible</option>
+                </select>
+                <button type="submit" className="sm:col-span-2 arch-btn-primary rounded-md py-1.5 text-xs font-mono">
+                  + Place
+                </button>
+              </form>
+
+              <div className="hairline-grid grid grid-cols-1 md:grid-cols-2 rounded-xl overflow-hidden">
+                {QUADRANTS.map((q) => {
+                  const items = decisions.filter((d) => d.quadrant === q.id);
+                  return (
+                    <div key={q.id} className="hairline-cell p-4 min-h-[175px] flex flex-col justify-between space-y-3">
+                      <div>
+                        <div className="font-mono text-[10px] uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
+                          {q.axis}
+                        </div>
+                        <h3 className="text-sm font-semibold mt-0.5">{q.title}</h3>
+                        <p className="text-[11px]" style={{ color: 'var(--ink-secondary)' }}>{q.sub}</p>
                       </div>
-                      <div className="text-xs font-semibold">{tip.title}</div>
-                      <p className="text-xs leading-relaxed" style={{ color: 'var(--ink-secondary)' }}>
-                        {tip.desc}
-                      </p>
+
+                      <div className="space-y-1.5">
+                        {items.length === 0 ? (
+                          <div className="font-mono text-[10px] py-2" style={{ color: 'var(--ink-muted)' }}>
+                            [EMPTY QUADRANT]
+                          </div>
+                        ) : (
+                          items.map((d) => (
+                            <div
+                              key={d.id}
+                              className="px-2.5 py-1.5 rounded border flex items-center justify-between gap-2 text-xs"
+                              style={{ backgroundColor: 'var(--bg-canvas)' }}
+                            >
+                              <span className={d.resolved ? 'line-through opacity-50' : ''}>{d.title}</span>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => resolveDecision(d.id)}
+                                  className="arch-btn-ghost px-1.5 py-0.5 rounded font-mono text-[10px]"
+                                >
+                                  {d.resolved ? 'Undo' : 'Resolve'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => deleteDecision(d.id)}
+                                  className="arch-btn-ghost p-0.5 rounded"
+                                >
+                                  <Icon name="trash" size={11} />
+                                </button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                  );
+                })}
+              </div>
             </div>
           </div>
         );

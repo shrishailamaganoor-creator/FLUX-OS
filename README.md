@@ -6,7 +6,7 @@
 - **Repository:** [https://github.com/shrishailamaganoor-creator/FLUX-OS](https://github.com/shrishailamaganoor-creator/FLUX-OS)
 - **Architecture:** React 19 + TypeScript + Vite + Tailwind CSS v4 (plus precompiled static bundle in `./compiled/`)
 - **Persistence:** 100% Local-First (`localStorage` + `IndexedDB`) · Zero Backend · Zero Cloud Database · `$0` Operating Cost
-- **Offline & Installable:** Progressive Web App (`manifest.webmanifest`, clean installed app title **`FLUX`**, Network-First Service Worker `sw.js` `flux-v3.2.0`, and smart single-button device installer in **System Core**)
+- **Offline & Installable:** Progressive Web App (`manifest.webmanifest`, clean installed app title **`FLUX`**, Network-First Service Worker `sw.js` `flux-v3.4.0`, and smart single-button device installer in **System Core**)
 - **Design System:** 2 Calibrated Engineering Themes (`Direction A: Obsidian Precision`, `Direction B: Editorial Paper`)
 
 ---
@@ -30,9 +30,9 @@ Most student productivity tools are passive containers—blank note pages or gen
 | ***Deep Work* & Cognitive Containment** | Cal Newport | **Today (`04 // Deep Work Focus Engine`)** & **Focus Discipline (`20 // Focus Discipline`)** | **Circular SVG Cycle Dial** (`15m / 25m / 50m / 90m` protocols), **Calibrated 7-Day Vertical Gauge Matrix** with direct `+25m / +50m / +90m` session logging, **10-Minute Impulse & Urge Delay Timer** (+10 XP for waiting out a distraction urge), **4-Step Daily Shutdown Ritual**, and **Root-Cause Distraction Telemetry**. |
 | **Forgetting Curve Spaced Repetition** | Hermann Ebbinghaus | **Study Vault (`16 // Study Vault`)** | **1-3-7 Spaced Revision Matrix** auto-schedules reviews at `+1`, `+3`, and `+7` days on creation, paired with a recursive **Problem Vault** notebook for DSA, system design, and course notes. |
 | ***The Psychology of Money* & Mental Accounting** | Morgan Housel & Richard Thaler | **Wallet Hub (`03 // My Wallet & Ledger` + `03B // Pay Yourself First`)** | **Wallet Hub Switcher** combining daily campus survival telemetry with the **"Pay Yourself First" Allocator** (auto-calculates savings cut % and transfers to target Savings Pots), **Safe-to-Spend-Today Ceiling**, **Survival Runway**, and the **Hostel Maggi Waste Index**. |
-| **Type 1 vs. Type 2 Decisions (Reversible vs. Irreversible)** | Jeff Bezos | **Executive Lab (`18 // Executive Function & Decision Matrix`)** | **2×2 Executive Decision Matrix** crossing *Important vs. Not Important* with *Irreversible vs. Reversible*, paired with an auto-resetting **Morning Launch Protocol**. |
+| **Type 1 vs. Type 2 Decisions & Circadian Launchpad** | Jeff Bezos & Andrew Huberman | **Executive Lab (`18 // Executive Function & Decision Matrix`)** | **01 // Morning Protocol** (*Zero-Screen First 30m*, *Sunlight & Hydration First*, *Hardest Task First*) + **02 // Night Protocol** (*Night-Before Launchpad*, *Lock Tomorrow's #1 Hardest Problem*, *Device Charge & Wind-Down*) + **03 // 2×2 Executive Decision Matrix** crossing *Important vs. Not Important* with *Irreversible vs. Reversible*. |
 | ***Four Thousand Weeks* & Stoic *Memento Mori*** | Oliver Burkeman & Seneca | **Bio-State Hub (`17B // Life Wheel & Life in Weeks`)** | Integrated directly into **Bio-State Lab's Hub Switcher**: **Life in Weeks Grid** (`52 weeks × Target Age`) rendering every lived week vs. remaining week from your birth date, alongside an **8-Axis Life Wheel Audit**. |
-| **Autonomic Neuro-Modulation & NSDR** | Andrew Huberman | **Bio-State Hub (`17 // Bio-State & NSDR Lab`)** | Zero-dependency **Web Audio API Synthesizer** generating real-time **Pink Noise**, **Brown Noise**, **White Noise**, and **40 Hz Gamma Binaural Beats**, plus a **4-Stage Guided NSDR Timer**, **3,000 mL Hydration Telemetry**, and **7-Day Sleep Debt**. |
+| **Autonomic Neuro-Modulation & NSDR** | Andrew Huberman | **Bio-State Hub (`17 // Bio-State & NSDR Lab`)** | Full-width **NSDR Somatic Recovery & Synthesized Focus Audio Console** pairing zero-dependency **Web Audio API** synthesis (**Pink Noise**, **Brown Noise**, **White Noise**, **40 Hz Gamma Binaural Beats**, **NSDR Guided**) with a **4-Stage Guided NSDR Somatic Breathing Console** (`5M / 10M / 15M / 20M / 30M` durations, `4s Inhale – 4s Hold – 6s Exhale` cadence), **3,000 mL Hydration Telemetry**, and **7-Day Sleep Debt**. |
 | **First-Principles Engineering & `.plan` Logs** | Elon Musk & John Carmack | **Academy Execution Hub**, **Innovation Canvas**, **Trajectory** & **System Core** | **Execution Hub** linking Courses, Missions (`₹` bounties), and Shipped Builds; **Universal File Vault + Interactive HTML5 Wireframe Sketch Pad**; **SVG Baseline-to-Now Delta Charts**; and **100% Local-First Sovereignty**. |
 
 ---
@@ -69,7 +69,9 @@ Most student productivity tools are passive containers—blank note pages or gen
 9. **Study Vault (`16 // Spaced Repetition & Hierarchical Knowledge Tree` — `StudyVaultView`)**
 10. **Bio-State & Life Hub (`17 // Physiological Telemetry, Acoustic Neuro-Modulation & Life Audit` — `BioStateView`, `LifeAuditView`)**
     - Houses the **BIO-STATE HUB** switcher bar (`Bio-State & NSDR Lab` · `Life Wheel & Life in Weeks`).
+    - Includes `01 // Hydration Telemetry (3000 mL Target)`, `02 // Sleep Architecture (8.0h Target)`, and the full-width `03 // NSDR Somatic Recovery & Synthesized Focus Audio Console`.
 11. **Executive Lab (`18 // Autonomic Launch Checklist & Strategic Triage` — `ExecutiveView`)**
+    - Houses side-by-side **01 // Morning Protocol** (*Zero-Screen First 30m*, *Sunlight & Hydration First*, *Hardest Task First*, *Meds & Morning Fuel*, *Dress & Ready to Launch*), **02 // Night Protocol** (*Night-Before Launchpad*, *Lock Tomorrow's #1 Hardest Problem*, *Device Charge & Zero-Screen Wind-Down*), and **03 // 2×2 Executive Decision Matrix**.
 12. **Trajectory (`19 // Baseline Delta Charts & Milestone Chronology` — `TrajectoryView`)**
 
 ### III. System Core & Classified Vault Trapdoor
