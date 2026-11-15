@@ -1,10 +1,10 @@
-# ⚡ XOR Bit (`NEXORA // Personal Life & Engineering OS`)
+# FLUX — Personal Life & Engineering OS
 
 > **An opinionated, local-first, zero-cost Personal Operating System engineered for B.Tech students and builders—turning proven behavioral science, cognitive psychology, and book frameworks into executable daily software protocols.**
 
-- **Architecture:** React 19 + TypeScript + Vite + Tailwind CSS v4 (plus precompiled static bundle in `./compiled/` and standalone single-file `XOR.html`)
+- **Architecture:** React 19 + TypeScript + Vite + Tailwind CSS v4 (plus precompiled static bundle in `./compiled/`)
 - **Persistence:** 100% Local-First (`localStorage` + `IndexedDB`) · Zero Backend · Zero Cloud Database · `$0` Operating Cost
-- **Offline & Installable:** Progressive Web App (`manifest.webmanifest` + Network-First Service Worker `sw.js` `xor-bit-v2.1.0`)
+- **Offline & Installable:** Progressive Web App (`manifest.webmanifest` + Network-First Service Worker `sw.js` `flux-v2.3.0`)
 - **Design System:** 3 Calibrated Engineering Themes (`Direction A: Obsidian Precision`, `Direction B: Editorial Paper`, `Direction C: Swiss Industrial`)
 
 ---
@@ -13,13 +13,13 @@
 
 Most student productivity tools are passive containers—blank note pages or generic to-do lists that decay within a week because they lack **behavioral scaffolding**.
 
-**XOR Bit (`NEXORA`)** is built on a different premise: **every module translates a battle-tested mental model, cognitive psychology principle, or book framework into an interactive, deterministic software protocol.** Instead of asking you to remember habits, study schedules, or spending rules, the OS encodes those rules directly into the interface—complete with live math, tactile Web Audio feedback, XP/level telemetry (`1200 × L^1.65`), and zero-latency local storage.
+**FLUX** is built on a different premise: **every module translates a battle-tested mental model, cognitive psychology principle, or book framework into an interactive, deterministic software protocol.** Instead of asking you to remember habits, study schedules, or spending rules, the OS encodes those rules directly into the interface—complete with live math, tactile Web Audio feedback, XP/level telemetry (`1200 × L^1.65`), and zero-latency local storage.
 
 ---
 
 ## 2. Core Philosophy: From Book Principles to Working Protocols
 
-| Book / Mental Model | Author / Thinker | Target Module in XOR Bit | Executable Software Protocol & Mechanism |
+| Book / Mental Model | Author / Thinker | Target Module in FLUX | Executable Software Protocol & Mechanism |
 | :--- | :--- | :--- | :--- |
 | ***Getting Things Done (GTD)*** & **The Zeigarnik Effect** | David Allen & Bluma Zeigarnik | **Today (`01 // Telemetry Workbench`)** & **Global Command Palette (`⌘K`)** | *"Your mind is for having ideas, not holding them."* **02 // Instant Telemetry Capture** omnibox logs Missions, Expenses (`₹`), Income (`₹`), or Courses in one keystroke. **Top 3 Daily Priorities** (`0/3 LOCKED`) and the **Priority Mission Queue** (`SLOT.01–03 // IDLE`) close open cognitive loops. |
 | ***Atomic Habits*** | James Clear | **Habit Design (`15 // Habit Design & Identity Lab`)** & **Habit Matrix (`11 // Habit Matrix`)** | **100-Vote Identity Bars** (*"I am someone who..."*, `0–100 VOTES`), **Habit Stacking Builder** (*"After I [ANCHOR], I will [NEW HABIT], in [PLACE]"*), **2-Minute Gateway Rule**, **Daily Habit Scorecard** (`+` / `=` / `-`), **"Never Miss Twice" Alert** when yesterday was missed, and **Purple Rest Shield** (`#A855F7`) to protect streaks on exam or recovery days. |
@@ -151,7 +151,7 @@ All modules are accessible from the fixed `240px` collapsible left sidebar, the 
 | `localStorage` | `NEXORA_ARCHITECTURAL_OS_V1` | JSON (`EMPTY_STATE` schema) | Primary store for all 21 modules: profile, courses, transactions, savings pots, missions, skills, projects, habits, habit shields, focus sessions, distraction logs, Feynman notes, recall questions, 1-3-7 revisions, problem pages, bio-logs, morning logs, decisions, roadmaps, and life wheel snapshots. |
 | `localStorage` | `NEXORA_SIDEBAR_HIDDEN_V1` | JSON (`string[]`) | Persists hidden sidebar module IDs configured in **System Core**. |
 | `IndexedDB` | `NexoraStyleVaultDB` | Store: `garmentMedia` | Stores high-resolution base64 data URLs for **Style Lab** garment photos (`wardrobe-<id>`) and **Innovation Canvas** wireframe sketches / pasted images (`idea-<id>`), bypassing the ~5 MB `localStorage` ceiling. |
-| **JSON Snapshot** | `xor-bit-backup-YYYY-MM-DD.json` | `{ format: "NEXORA_BACKUP_V1", exportedAt, data, media }` | Full-fidelity portable backup combining `localStorage` state + `IndexedDB` media, verified on import via `normalizeImportedState()` and `validateImportedMedia()`. |
+| **JSON Snapshot** | `flux-backup-YYYY-MM-DD.json` | `{ format: "FLUX_BACKUP_V1", exportedAt, data, media }` | Full-fidelity portable backup combining `localStorage` state + `IndexedDB` media, verified on import via `normalizeImportedState()` and `validateImportedMedia()`. |
 
 ### 3-Direction Engineering Theme System (`src/index.css`)
 Scoped via `[data-theme="obsidian | paper | industrial"]` on `<html>`:
@@ -161,7 +161,7 @@ Scoped via `[data-theme="obsidian | paper | industrial"]` on `<html>`:
 
 ### Procedural Web Audio Engine & PWA Offline Architecture
 - **Web Audio API Synthesizer:** Zero external MP3/WAV dependencies. Generates tactile UI micro-clicks (`playTactileClick(enabled, freq, durationMs)`), white/pink/brown filtered noise buffers, and stereo-panned `200 Hz` / `240 Hz` oscillators for `40 Hz` gamma binaural beats.
-- **Progressive Web App (PWA):** Includes `/manifest.webmanifest`, custom SVG/PNG icons, and a **Network-First Service Worker (`/sw.js`, cache `xor-bit-v2.1.0`)** that serves fresh builds when online and falls back seamlessly to cached assets when offline.
+- **Progressive Web App (PWA):** Includes `/manifest.webmanifest`, custom SVG/PNG *Life in Orbit* icons, and a **Network-First Service Worker (`/sw.js`, cache `flux-v2.3.0`)** that serves fresh builds when online and falls back seamlessly to cached assets when offline.
 
 ---
 
@@ -183,8 +183,7 @@ npm run build
 ```
 
 ### Running on GitHub Pages / Static Hosting (Zero Build Step Needed on Host)
-- **`index.html` Dual-Mode Loader:** In local development, Vite serves `/src/main.tsx`. When hosted on GitHub Pages (`*.github.io`), `index.html` automatically loads the precompiled static bundle from `./compiled/app.js?v=2.1.0` and `./compiled/app.css?v=2.1.0`.
-- **Single-File Portable Fallback (`XOR.html`):** You can also open `XOR.html` directly in any modern browser as a self-contained single-file build.
+- **`index.html` Dual-Mode Loader:** In local development, Vite serves `/src/main.tsx`. When hosted on GitHub Pages (`*.github.io`), `index.html` automatically loads the precompiled static bundle from `./compiled/app.js?v=2.3.0` and `./compiled/app.css?v=2.3.0`.
 
 ### Complete Keyboard Shortcut Reference
 

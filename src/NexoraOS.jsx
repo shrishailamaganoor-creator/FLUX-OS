@@ -6112,7 +6112,7 @@ const NexoraContext = createContext(null);
           try {
             const storedMedia = await loadAllMediaFromIDB();
             const backup = {
-              format: 'NEXORA_BACKUP_V1',
+              format: 'FLUX_BACKUP_V1',
               exportedAt: new Date().toISOString(),
               data,
               media: { ...storedMedia, ...mediaMap }
@@ -6121,10 +6121,10 @@ const NexoraContext = createContext(null);
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `xor-bit-backup-${new Date().toISOString().split('T')[0]}.json`;
+            a.download = `flux-backup-${new Date().toISOString().split('T')[0]}.json`;
             a.click();
             window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-            notify('Exported XOR Bit backup with media');
+            notify('Exported FLUX backup with media');
           } catch (err) {
             notify('Could not create backup', 'err');
           }
@@ -6139,7 +6139,7 @@ const NexoraContext = createContext(null);
             try {
               const parsed = JSON.parse(reader.result);
               if (!isPlainObject(parsed)) throw new Error('Backup must be an object');
-              if (parsed.format && parsed.format !== 'NEXORA_BACKUP_V1') {
+              if (parsed.format && parsed.format !== 'FLUX_BACKUP_V1' && parsed.format !== 'NEXORA_BACKUP_V1') {
                 throw new Error('Unsupported backup format');
               }
               const hasEnvelope = Object.prototype.hasOwnProperty.call(parsed, 'data');
@@ -9809,14 +9809,14 @@ const NexoraContext = createContext(null);
                 <div className="flex items-center justify-between gap-2 px-1">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <img
-                      src="./icon-192.png?v=2.2.0"
-                      alt="XOR Bit"
+                      src="./icon-192.png?v=2.3.0"
+                      alt="FLUX"
                       className="w-7 h-7 rounded-lg object-cover shrink-0 shadow-sm"
                     />
                     {!sidebarCollapsed && (
                       <div className="truncate">
                         <div className="font-sans text-xs font-semibold tracking-tight" style={{ color: 'var(--ink-primary)' }}>
-                          XOR Bit | OS
+                          FLUX | OS
                         </div>
                         <div className="font-mono text-[10px] truncate" style={{ color: 'var(--ink-muted)' }}>
                           {data.profile.name}
@@ -9953,7 +9953,7 @@ const NexoraContext = createContext(null);
               >
                 <div className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: 'var(--accent)' }} />
-                  <span>XOR Bit | Personal Life &amp; Engineering OS</span>
+                  <span>FLUX | Personal Life &amp; Engineering OS</span>
                 </div>
                 <div className="tracking-wider uppercase" style={{ color: 'var(--ink-primary)' }}>
                   DESIGNED &amp; DEVELOPED BY <span className="font-semibold">SHRISHAILA M</span>
@@ -10102,7 +10102,7 @@ const NexoraContext = createContext(null);
                     CONFIRM FULL FACTORY WIPE
                   </div>
                   <p className="text-xs leading-relaxed" style={{ color: 'var(--ink-secondary)' }}>
-                    This will permanently clear all local XOR Bit telemetry and media from this browser.
+                    This will permanently clear all local FLUX telemetry and media from this browser.
                   </p>
                   <div className="flex justify-end gap-2">
                     <button
@@ -10215,13 +10215,13 @@ export const SignInScreen = ({ onAuth }) => {
       <div className="relative z-10 w-full max-w-sm space-y-8">
         <div className="text-center space-y-3">
           <img
-            src="./icon-512.png?v=2.2.0"
-            alt="XOR Bit"
+            src="./icon-512.png?v=2.3.0"
+            alt="FLUX"
             className="w-16 h-16 rounded-2xl object-cover mx-auto shadow-2xl"
           />
           <div>
             <div className="font-mono text-sm font-bold tracking-widest uppercase" style={{ color: "var(--ink-primary)" }}>
-              XOR Bit
+              FLUX
             </div>
             <div className="font-mono text-[11px] mt-0.5" style={{ color: "var(--ink-muted)" }}>
               PERSONAL LIFE & ENGINEERING OS
@@ -10238,7 +10238,7 @@ export const SignInScreen = ({ onAuth }) => {
               {isSetup ? "Create your secure PIN" : ("Welcome back, " + (auth ? auth.username : "Operator"))}
             </div>
             <div className="text-xs" style={{ color: "var(--ink-secondary)" }}>
-              {isSetup ? "PIN is stored locally on this device only." : "Enter your PIN to unlock XOR Bit."}
+              {isSetup ? "PIN is stored locally on this device only." : "Enter your PIN to unlock FLUX."}
             </div>
           </div>
 

@@ -19283,7 +19283,7 @@ var SettingsView = () => {
 		try {
 			const storedMedia = await loadAllMediaFromIDB();
 			const backup = {
-				format: "NEXORA_BACKUP_V1",
+				format: "FLUX_BACKUP_V1",
 				exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
 				data,
 				media: {
@@ -19295,10 +19295,10 @@ var SettingsView = () => {
 			const url = URL.createObjectURL(blob);
 			const a = document.createElement("a");
 			a.href = url;
-			a.download = `xor-bit-backup-${(/* @__PURE__ */ new Date()).toISOString().split("T")[0]}.json`;
+			a.download = `flux-backup-${(/* @__PURE__ */ new Date()).toISOString().split("T")[0]}.json`;
 			a.click();
 			window.setTimeout(() => URL.revokeObjectURL(url), 1e3);
-			notify("Exported XOR Bit backup with media");
+			notify("Exported FLUX backup with media");
 		} catch (err) {
 			notify("Could not create backup", "err");
 		}
@@ -19312,7 +19312,7 @@ var SettingsView = () => {
 			try {
 				const parsed = JSON.parse(reader.result);
 				if (!isPlainObject(parsed)) throw new Error("Backup must be an object");
-				if (parsed.format && parsed.format !== "NEXORA_BACKUP_V1") throw new Error("Unsupported backup format");
+				if (parsed.format && parsed.format !== "FLUX_BACKUP_V1" && parsed.format !== "NEXORA_BACKUP_V1") throw new Error("Unsupported backup format");
 				const hasEnvelope = Object.prototype.hasOwnProperty.call(parsed, "data");
 				const restoredData = normalizeImportedState(hasEnvelope ? parsed.data : parsed);
 				const hasMedia = hasEnvelope && Object.prototype.hasOwnProperty.call(parsed, "media");
@@ -23566,15 +23566,15 @@ var NexoraApp = () => {
 								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 									className: "flex items-center gap-2.5 min-w-0",
 									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
-										src: "./icon-192.png?v=2.2.0",
-										alt: "XOR Bit",
+										src: "./icon-192.png?v=2.3.0",
+										alt: "FLUX",
 										className: "w-7 h-7 rounded-lg object-cover shrink-0 shadow-sm"
 									}), !sidebarCollapsed && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 										className: "truncate",
 										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 											className: "font-sans text-xs font-semibold tracking-tight",
 											style: { color: "var(--ink-primary)" },
-											children: "XOR Bit | OS"
+											children: "FLUX | OS"
 										}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 											className: "font-mono text-[10px] truncate",
 											style: { color: "var(--ink-muted)" },
@@ -23717,7 +23717,7 @@ var NexoraApp = () => {
 							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 								className: "w-1.5 h-1.5 rounded-full",
 								style: { backgroundColor: "var(--accent)" }
-							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "XOR Bit | Personal Life & Engineering OS" })]
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "FLUX | Personal Life & Engineering OS" })]
 						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 							className: "tracking-wider uppercase",
 							style: { color: "var(--ink-primary)" },
@@ -23883,7 +23883,7 @@ var NexoraApp = () => {
 							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 								className: "text-xs leading-relaxed",
 								style: { color: "var(--ink-secondary)" },
-								children: "This will permanently clear all local XOR Bit telemetry and media from this browser."
+								children: "This will permanently clear all local FLUX telemetry and media from this browser."
 							}),
 							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 								className: "flex justify-end gap-2",
@@ -24013,13 +24013,13 @@ var SignInScreen = ({ onAuth }) => {
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 					className: "text-center space-y-3",
 					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
-						src: "./icon-512.png?v=2.2.0",
-						alt: "XOR Bit",
+						src: "./icon-512.png?v=2.3.0",
+						alt: "FLUX",
 						className: "w-16 h-16 rounded-2xl object-cover mx-auto shadow-2xl"
 					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 						className: "font-mono text-sm font-bold tracking-widest uppercase",
 						style: { color: "var(--ink-primary)" },
-						children: "XOR Bit"
+						children: "FLUX"
 					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 						className: "font-mono text-[11px] mt-0.5",
 						style: { color: "var(--ink-muted)" },
@@ -24049,7 +24049,7 @@ var SignInScreen = ({ onAuth }) => {
 								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 									className: "text-xs",
 									style: { color: "var(--ink-secondary)" },
-									children: isSetup ? "PIN is stored locally on this device only." : "Enter your PIN to unlock XOR Bit."
+									children: isSetup ? "PIN is stored locally on this device only." : "Enter your PIN to unlock FLUX."
 								})
 							]
 						}),
