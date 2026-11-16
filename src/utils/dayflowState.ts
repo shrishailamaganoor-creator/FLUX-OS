@@ -125,6 +125,50 @@ export interface DayflowInboxItem {
   createdAt: string;
 }
 
+export type SubmissionKind = 'assignment' | 'exam' | 'lab' | 'project' | 'quiz';
+
+export interface SubmissionKindMeta {
+  id: SubmissionKind;
+  label: string;
+  shortBadge: string;
+  color: string;
+  defaultCategory: DayflowCategory;
+}
+
+export const SUBMISSION_KINDS: SubmissionKindMeta[] = [
+  { id: 'assignment', label: 'Assignment Submission', shortBadge: 'ASSIGNMENT', color: '#F59E0B', defaultCategory: 'assignment' },
+  { id: 'exam', label: 'Exam / Mid-Sem / End-Sem', shortBadge: 'EXAM', color: '#F43F5E', defaultCategory: 'assignment' },
+  { id: 'lab', label: 'Lab Record / Viva', shortBadge: 'LAB / VIVA', color: '#A855F7', defaultCategory: 'lab' },
+  { id: 'project', label: 'Project Milestone', shortBadge: 'PROJECT', color: '#10B981', defaultCategory: 'deepwork' },
+  { id: 'quiz', label: 'Test / Quiz', shortBadge: 'QUIZ', color: '#3B82F6', defaultCategory: 'lecture' }
+];
+
+export interface DayflowSubmissionItem {
+  id: string;
+  title: string;
+  subject?: string;
+  kind: SubmissionKind;
+  givenDate: string; // "YYYY-MM-DD" — when the assignment/exam was given
+  dueDate: string;   // "YYYY-MM-DD" — deadline or exam date
+  dueTime: string;   // "HH:MM" — deadline or exam time
+  durationMin: number;
+  completed: boolean;
+  autoSchedule: boolean;
+  scheduledTaskId?: string;
+  note?: string;
+}
+
+export interface SubmissionWindowTelemetry {
+  daysRemaining: number;
+  hoursRemaining: number;
+  totalWindowDays: number;
+  elapsedWindowPct: number;
+  urgencyTier: 'overdue' | 'today' | 'critical_48h' | 'this_week' | 'upcoming' | 'completed';
+  windowBadge: string;
+  color: string;
+  kindMeta: SubmissionKindMeta;
+}
+
 export interface DayflowConfig {
   wakeStartHour: number; // e.g., 6 (06:00)
   wakeEndHour: number; // e.g., 23 (23:00)
@@ -135,6 +179,7 @@ export interface DayflowState {
   recurringClasses: DayflowRecurringClass[];
   tasks: DayflowTask[];
   inbox: DayflowInboxItem[];
+  submissions: DayflowSubmissionItem[];
   dayOverrides: Record<string, DayStatusType>; // "YYYY-MM-DD" -> 'free' | 'holiday' | 'focus'
 }
 
@@ -146,6 +191,7 @@ export const DEFAULT_DAYFLOW_STATE: DayflowState = {
   recurringClasses: [],
   tasks: [],
   inbox: [],
+  submissions: [],
   dayOverrides: {}
 };
 
@@ -228,6 +274,10 @@ export function getCategoryMeta(catId?: string): DayflowCategoryMeta {
   return DAYFLOW_CATEGORIES.find((c) => c.id === catId) || DAYFLOW_CATEGORIES[0];
 }
 
+export function getSubmissionKindMeta(kind?: string): SubmissionKindMeta {
+  return SUBMISSION_KINDS.find((k) => k.id === kind) || SUBMISSION_KINDS[0];
+}
+
 export function getDayStatusMeta(status?: DayStatusType): DayStatusMeta | null {
   if (!status) return null;
   return DAY_STATUS_OPTIONS.find((s) => s.id === status) || null;
@@ -270,6 +320,7 @@ export function normalizeDayflowState(candidate: any): DayflowState {
     recurringClasses: Array.isArray(candidate.recurringClasses) ? candidate.recurringClasses : [],
     tasks: Array.isArray(candidate.tasks) ? candidate.tasks : [],
     inbox: Array.isArray(candidate.inbox) ? candidate.inbox : [],
+    submissions: Array.isArray(candidate.submissions) ? candidate.submissions : [],
     dayOverrides:
       candidate.dayOverrides && typeof candidate.dayOverrides === 'object' && !Array.isArray(candidate.dayOverrides)
         ? candidate.dayOverrides
@@ -277,7 +328,7 @@ export function normalizeDayflowState(candidate: any): DayflowState {
   };
 }
 
-function mergeDayflowCollection<T extends { id?: string; title?: string; startTime?: string; date?: string }>(
+function mergeDayflowCollection<T extends { id?: string; title?: string; startTime?: string; date?: string; dueDate?: string }>(
   existing: T[],
   incoming: T[],
   prefix: string
@@ -289,13 +340,13 @@ function mergeDayflowCollection<T extends { id?: string; title?: string; startTi
     if (!inc || typeof inc !== 'object') return;
     const incTitle = String(inc.title || '').trim().toLowerCase();
     const incStart = String(inc.startTime || '').trim();
-    const incDate = String(inc.date || '').trim();
+    const incDate = String(inc.date || inc.dueDate || '').trim();
 
     // Check if an identical item already exists by content
     const contentMatchIdx = result.findIndex((ex) => {
       const exTitle = String(ex.title || '').trim().toLowerCase();
       const exStart = String(ex.startTime || '').trim();
-      const exDate = String(ex.date || '').trim();
+      const exDate = String(ex.date || ex.dueDate || '').trim();
       return exTitle === incTitle && exStart === incStart && exDate === incDate && exTitle.length > 0;
     });
 
@@ -335,10 +386,296 @@ export function mergeDayflowStates(baseCandidate: any, incomingCandidate: any): 
     recurringClasses: mergeDayflowCollection(base.recurringClasses, inc.recurringClasses, 'cls'),
     tasks: mergeDayflowCollection(base.tasks, inc.tasks, 'dft'),
     inbox: mergeDayflowCollection(base.inbox, inc.inbox, 'dfi'),
+    submissions: mergeDayflowCollection(base.submissions, inc.submissions, 'subm'),
     dayOverrides: {
       ...(base.dayOverrides || {}),
       ...(inc.dayOverrides || {})
     }
+  };
+}
+
+export function getSubmissionWindowTelemetry(
+  item: DayflowSubmissionItem,
+  referenceDateKey?: string,
+  nowMinutes?: number
+): SubmissionWindowTelemetry {
+  const now = new Date();
+  const refKey = referenceDateKey || formatYMDLocal(now);
+  const currentMins = nowMinutes !== undefined ? nowMinutes : now.getHours() * 60 + now.getMinutes();
+
+  const refDate = parseYMDLocal(refKey);
+  const dueDate = parseYMDLocal(item.dueDate || refKey);
+  const givenDate = parseYMDLocal(item.givenDate || refKey);
+
+  const dueMins = timeToMinutes(item.dueTime || '17:00');
+  const daysDiff = Math.round((dueDate.getTime() - refDate.getTime()) / 86400000);
+  const totalMinutesDiff = daysDiff * 1440 + (dueMins - currentMins);
+  const hoursRemaining = Math.round(totalMinutesDiff / 60);
+
+  const totalWindowMs = Math.max(86400000, dueDate.getTime() - givenDate.getTime());
+  const elapsedWindowMs = Math.max(0, refDate.getTime() - givenDate.getTime());
+  const elapsedWindowPct = item.completed
+    ? 100
+    : Math.min(100, Math.max(8, Math.round((elapsedWindowMs / totalWindowMs) * 100)));
+  const totalWindowDays = Math.max(1, Math.round(totalWindowMs / 86400000));
+
+  const kindMeta = getSubmissionKindMeta(item.kind);
+
+  if (item.completed) {
+    return {
+      daysRemaining: daysDiff,
+      hoursRemaining,
+      totalWindowDays,
+      elapsedWindowPct: 100,
+      urgencyTier: 'completed',
+      windowBadge: 'SUBMITTED / DONE',
+      color: '#10B981',
+      kindMeta
+    };
+  }
+
+  if (daysDiff < 0 || (daysDiff === 0 && totalMinutesDiff < 0)) {
+    const overdueDays = Math.abs(daysDiff);
+    return {
+      daysRemaining: daysDiff,
+      hoursRemaining,
+      totalWindowDays,
+      elapsedWindowPct: 100,
+      urgencyTier: 'overdue',
+      windowBadge: overdueDays === 0 ? 'PAST DUE TODAY' : `OVERDUE BY ${overdueDays}D`,
+      color: '#F43F5E',
+      kindMeta
+    };
+  }
+
+  if (daysDiff === 0) {
+    const hrsLeft = Math.max(1, Math.ceil(totalMinutesDiff / 60));
+    return {
+      daysRemaining: 0,
+      hoursRemaining,
+      totalWindowDays,
+      elapsedWindowPct: 95,
+      urgencyTier: 'today',
+      windowBadge: `DUE TODAY • ${hrsLeft}H LEFT`,
+      color: '#F43F5E',
+      kindMeta
+    };
+  }
+
+  if (daysDiff === 1) {
+    return {
+      daysRemaining: 1,
+      hoursRemaining,
+      totalWindowDays,
+      elapsedWindowPct,
+      urgencyTier: 'critical_48h',
+      windowBadge: `TOMORROW • ${item.dueTime || '17:00'}`,
+      color: '#F59E0B',
+      kindMeta
+    };
+  }
+
+  if (daysDiff === 2) {
+    return {
+      daysRemaining: 2,
+      hoursRemaining,
+      totalWindowDays,
+      elapsedWindowPct,
+      urgencyTier: 'critical_48h',
+      windowBadge: `IN 2 DAYS • ${item.dueTime || '17:00'}`,
+      color: '#F59E0B',
+      kindMeta
+    };
+  }
+
+  if (daysDiff <= 7) {
+    return {
+      daysRemaining: daysDiff,
+      hoursRemaining,
+      totalWindowDays,
+      elapsedWindowPct,
+      urgencyTier: 'this_week',
+      windowBadge: `IN ${daysDiff} DAYS`,
+      color: '#3B82F6',
+      kindMeta
+    };
+  }
+
+  return {
+    daysRemaining: daysDiff,
+    hoursRemaining,
+    totalWindowDays,
+    elapsedWindowPct,
+    urgencyTier: 'upcoming',
+    windowBadge: `IN ${daysDiff} DAYS`,
+    color: '#06B6D4',
+    kindMeta
+  };
+}
+
+export function getSortedSubmissionsByClosestWindow(
+  submissions: DayflowSubmissionItem[],
+  referenceDateKey?: string,
+  nowMinutes?: number
+): DayflowSubmissionItem[] {
+  const list = Array.isArray(submissions) ? [...submissions] : [];
+  return list.sort((a, b) => {
+    if (Boolean(a.completed) !== Boolean(b.completed)) {
+      return a.completed ? 1 : -1;
+    }
+    const aDue = `${a.dueDate || '9999-12-31'}T${a.dueTime || '23:59'}`;
+    const bDue = `${b.dueDate || '9999-12-31'}T${b.dueTime || '23:59'}`;
+    if (aDue !== bDue) return aDue.localeCompare(bDue);
+    return (a.givenDate || '').localeCompare(b.givenDate || '');
+  });
+}
+
+export function upsertDayflowSubmission(
+  state: DayflowState,
+  draft: Omit<DayflowSubmissionItem, 'id'> & { id?: string }
+): DayflowState {
+  const normalized = normalizeDayflowState(state);
+  const isEditing = Boolean(draft.id && normalized.submissions.some((s) => s.id === draft.id));
+  const subId = draft.id || `subm-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const linkedTaskId = draft.scheduledTaskId || `subm-task-${subId}`;
+  const kindMeta = getSubmissionKindMeta(draft.kind);
+
+  const nextSub: DayflowSubmissionItem = {
+    id: subId,
+    title: draft.title.trim(),
+    subject: (draft.subject || '').trim() || undefined,
+    kind: draft.kind || 'assignment',
+    givenDate: draft.givenDate || formatYMDLocal(new Date()),
+    dueDate: draft.dueDate || formatYMDLocal(new Date()),
+    dueTime: draft.dueTime || '17:00',
+    durationMin: Math.max(15, Number(draft.durationMin) || 60),
+    completed: Boolean(draft.completed),
+    autoSchedule: draft.autoSchedule !== undefined ? Boolean(draft.autoSchedule) : true,
+    scheduledTaskId: linkedTaskId,
+    note: (draft.note || '').trim() || undefined
+  };
+
+  const nextSubmissions = isEditing
+    ? normalized.submissions.map((s) => (s.id === subId ? nextSub : s))
+    : [nextSub, ...normalized.submissions];
+
+  let nextTasks = [...normalized.tasks];
+  const taskTitlePrefix = `[${kindMeta.shortBadge}] `;
+  const fullTaskTitle = nextSub.subject
+    ? `${taskTitlePrefix}${nextSub.title} (${nextSub.subject})`
+    : `${taskTitlePrefix}${nextSub.title}`;
+
+  if (nextSub.autoSchedule) {
+    const taskPayload: DayflowTask = {
+      id: linkedTaskId,
+      title: fullTaskTitle,
+      category: kindMeta.defaultCategory,
+      date: nextSub.dueDate,
+      startTime: nextSub.dueTime,
+      durationMin: nextSub.durationMin,
+      completed: nextSub.completed,
+      note: `Given: ${nextSub.givenDate} • Deadline: ${nextSub.dueDate} ${nextSub.dueTime}${nextSub.note ? ` • ${nextSub.note}` : ''}`
+    };
+    const existingTaskIdx = nextTasks.findIndex((t) => t.id === linkedTaskId);
+    if (existingTaskIdx !== -1) {
+      nextTasks[existingTaskIdx] = taskPayload;
+    } else {
+      nextTasks = [...nextTasks, taskPayload];
+    }
+  } else {
+    nextTasks = nextTasks.filter((t) => t.id !== linkedTaskId);
+  }
+
+  return {
+    ...normalized,
+    submissions: nextSubmissions,
+    tasks: nextTasks
+  };
+}
+
+export function deleteDayflowSubmission(state: DayflowState, submissionId: string): DayflowState {
+  const normalized = normalizeDayflowState(state);
+  const target = normalized.submissions.find((s) => s.id === submissionId);
+  const linkedTaskId = target?.scheduledTaskId || `subm-task-${submissionId}`;
+  return {
+    ...normalized,
+    submissions: normalized.submissions.filter((s) => s.id !== submissionId),
+    tasks: normalized.tasks.filter((t) => t.id !== linkedTaskId)
+  };
+}
+
+export function toggleDayflowSubmissionComplete(state: DayflowState, submissionId: string): {
+  nextState: DayflowState;
+  nowCompleted: boolean;
+} {
+  const normalized = normalizeDayflowState(state);
+  let nowCompleted = false;
+  let linkedTaskId = `subm-task-${submissionId}`;
+
+  const nextSubmissions = normalized.submissions.map((s) => {
+    if (s.id !== submissionId) return s;
+    nowCompleted = !s.completed;
+    if (s.scheduledTaskId) linkedTaskId = s.scheduledTaskId;
+    return { ...s, completed: nowCompleted };
+  });
+
+  const nextTasks = normalized.tasks.map((t) =>
+    t.id === linkedTaskId ? { ...t, completed: nowCompleted } : t
+  );
+
+  return {
+    nextState: {
+      ...normalized,
+      submissions: nextSubmissions,
+      tasks: nextTasks
+    },
+    nowCompleted
+  };
+}
+
+/**
+ * Automatically finds an open free-time gap on `targetDateKey` and slots a prep/work session for `submissionId` into Dayflow
+ */
+export function slotSubmissionPrepIntoFreeGap(
+  state: DayflowState,
+  submissionId: string,
+  targetDateKey: string
+): { nextState: DayflowState; slottedTask: DayflowTask | null } {
+  const normalized = normalizeDayflowState(state);
+  const sub = normalized.submissions.find((s) => s.id === submissionId);
+  if (!sub) return { nextState: normalized, slottedTask: null };
+
+  const blocks = getBlocksForDate(normalized, targetDateKey);
+  const gaps = calculateFreeTimeGaps(
+    blocks,
+    normalized.config.wakeStartHour,
+    normalized.config.wakeEndHour,
+    15
+  );
+
+  const desiredMin = Math.max(30, Math.min(120, sub.durationMin || 60));
+  const bestGap = gaps.find((g) => g.durationMin >= desiredMin) || gaps[0];
+  const startTime = bestGap ? bestGap.startTime : '18:00';
+  const durationMin = bestGap ? Math.min(desiredMin, bestGap.durationMin) : desiredMin;
+  const kindMeta = getSubmissionKindMeta(sub.kind);
+
+  const prepTask: DayflowTask = {
+    id: `prep-${sub.id}-${targetDateKey}-${Date.now()}`,
+    title: `Prep / Submit: ${sub.title}${sub.subject ? ` (${sub.subject})` : ''}`,
+    category: kindMeta.defaultCategory,
+    date: targetDateKey,
+    startTime,
+    durationMin,
+    completed: false,
+    note: `Given: ${sub.givenDate} → Due: ${sub.dueDate} ${sub.dueTime}`
+  };
+
+  return {
+    nextState: {
+      ...normalized,
+      tasks: [...normalized.tasks, prepTask]
+    },
+    slottedTask: prepTask
   };
 }
 

@@ -4,7 +4,9 @@ import {
   DEFAULT_VOICE_HUD_SETTINGS,
   DEFAULT_VOICE_HUD_HOTKEY,
   VOICE_HUD_STORAGE_KEY,
+  DEFAULT_PHONE_VOICE_SETTINGS,
   sanitizeVoiceHudSettings,
+  sanitizePhoneVoiceSettings,
   loadVoiceHudSettings,
   matchesVoiceHudChord,
   validateCapturedShortcut,
@@ -139,3 +141,24 @@ test('stepAnalyticSpring clamps dt to 50ms and converges cleanly to target width
   assert.equal(state.pos, 224);
   assert.equal(state.vel, 0);
 });
+
+test('sanitizePhoneVoiceSettings validates resettable phone gesture and button coordinates', () => {
+  assert.deepEqual(sanitizePhoneVoiceSettings(null), DEFAULT_PHONE_VOICE_SETTINGS);
+
+  const custom = sanitizePhoneVoiceSettings({
+    showFloatingMic: false,
+    gesture: 'triple-tap',
+    floatingPos: { x: 48, y: 96 },
+  });
+  assert.equal(custom.showFloatingMic, false);
+  assert.equal(custom.gesture, 'triple-tap');
+  assert.deepEqual(custom.floatingPos, { x: 48, y: 96 });
+
+  const invalidGesture = sanitizePhoneVoiceSettings({
+    gesture: 'unknown-gesture',
+    floatingPos: { x: 'invalid', y: 10 },
+  });
+  assert.equal(invalidGesture.gesture, 'two-finger-tap');
+  assert.equal(invalidGesture.floatingPos, null);
+});
+

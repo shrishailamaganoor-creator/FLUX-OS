@@ -2,14 +2,18 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   DAYFLOW_CATEGORIES,
   DAY_STATUS_OPTIONS,
+  SUBMISSION_KINDS,
   DayflowCategory,
   DayflowInboxItem,
   DayflowRecurringClass,
   DayflowState,
+  DayflowSubmissionItem,
   DayflowTask,
   DayStatusType,
   FreeTimeGap,
+  SubmissionKind,
   TimelineBlock,
+  deleteDayflowSubmission,
   formatDurationCompact,
   formatTime12h,
   formatYMDLocal,
@@ -18,11 +22,16 @@ import {
   getDayStatusMeta,
   getIsoWeekday,
   getMondayToSundayWeek,
+  getSortedSubmissionsByClosestWindow,
+  getSubmissionWindowTelemetry,
   loadDayflowState,
   minutesToTime,
   parseYMDLocal,
   saveDayflowState,
+  slotSubmissionPrepIntoFreeGap,
   timeToMinutes,
+  toggleDayflowSubmissionComplete,
+  upsertDayflowSubmission,
 } from '../utils/dayflowState';
 
 interface DayflowViewProps {
@@ -81,25 +90,39 @@ export const DayflowView: React.FC<DayflowViewProps> = ({
     return () => clearInterval(interval);
   }, []);
 
-  // Persist to localStorage under 'flux_os_dayflow'
+  // Persist to localStorage under 'flux_os_dayflow' and notify Today module
   useEffect(() => {
-    saveDayflowState(state);
+    saveDayflowState(state, true);
   }, [state]);
 
-  // Reload state immediately when a JSON backup is imported or merged in System Core
+  // Reload state immediately when a JSON backup is imported or updated from Today module
   useEffect(() => {
     const onExternalUpdate = () => {
-      setState(loadDayflowState());
+      const fresh = loadDayflowState();
+      setState((prev) => (JSON.stringify(prev) === JSON.stringify(fresh) ? prev : fresh));
     };
     window.addEventListener('flux-dayflow-updated', onExternalUpdate);
     return () => window.removeEventListener('flux-dayflow-updated', onExternalUpdate);
   }, []);
 
-  // Collapsible Inbox Tray state
+  // Collapsible Right Slide Bar (Exams & Submissions + Inbox Tray) state
   const [inboxOpen, setInboxOpen] = useState<boolean>(true);
+  const [rightSlideTab, setRightSlideTab] = useState<'submissions' | 'inbox'>('submissions');
   const [inboxTitle, setInboxTitle] = useState<string>('');
   const [inboxCategory, setInboxCategory] = useState<DayflowCategory>('deepwork');
   const [inboxDuration, setInboxDuration] = useState<number>(45);
+
+  // Exams & Assignment Submissions state (Add / Modify with Given Date & Deadline)
+  const [editingSubmId, setEditingSubmId] = useState<string | null>(null);
+  const [submTitle, setSubmTitle] = useState<string>('');
+  const [submSubject, setSubmSubject] = useState<string>('');
+  const [submKind, setSubmKind] = useState<SubmissionKind>('assignment');
+  const [submGivenDate, setSubmGivenDate] = useState<string>(todayKey);
+  const [submDueDate, setSubmDueDate] = useState<string>(todayKey);
+  const [submDueTime, setSubmDueTime] = useState<string>('17:00');
+  const [submDuration, setSubmDuration] = useState<number>(60);
+  const [submAutoSchedule, setSubmAutoSchedule] = useState<boolean>(true);
+  const [submNote, setSubmNote] = useState<string>('');
 
   // Configure Timetable / Waking Hours Modal
   const [configModalOpen, setConfigModalOpen] = useState<boolean>(false);
@@ -439,6 +462,104 @@ export const DayflowView: React.FC<DayflowViewProps> = ({
     }));
   };
 
+  // Submissions & Exams handlers
+  const sortedSubmissions = useMemo(
+    () => getSortedSubmissionsByClosestWindow(state.submissions || [], todayKey, nowMinutes),
+    [state.submissions, todayKey, nowMinutes]
+  );
+
+  const pendingSubmissionsCount = useMemo(
+    () => (state.submissions || []).filter((s) => !s.completed).length,
+    [state.submissions]
+  );
+
+  const resetSubmissionForm = () => {
+    setEditingSubmId(null);
+    setSubmTitle('');
+    setSubmSubject('');
+    setSubmKind('assignment');
+    setSubmGivenDate(todayKey);
+    setSubmDueDate(selectedDateKey || todayKey);
+    setSubmDueTime('17:00');
+    setSubmDuration(60);
+    setSubmAutoSchedule(true);
+    setSubmNote('');
+  };
+
+  const handleSaveSubmission = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!submTitle.trim()) return;
+    clickSound(920, 14);
+    const wasEditing = Boolean(editingSubmId);
+    setState((prev) =>
+      upsertDayflowSubmission(prev, {
+        id: editingSubmId || undefined,
+        title: submTitle.trim(),
+        subject: submSubject.trim() || undefined,
+        kind: submKind,
+        givenDate: submGivenDate || todayKey,
+        dueDate: submDueDate || todayKey,
+        dueTime: submDueTime || '17:00',
+        durationMin: Math.max(15, Number(submDuration) || 60),
+        completed: wasEditing
+          ? Boolean(prev.submissions.find((s) => s.id === editingSubmId)?.completed)
+          : false,
+        autoSchedule: submAutoSchedule,
+        note: submNote.trim() || undefined,
+      })
+    );
+    onNotify?.(
+      wasEditing
+        ? `Modified "${submTitle.trim()}" (Given: ${submGivenDate} → Due: ${submDueDate} ${submDueTime})`
+        : `Added "${submTitle.trim()}" to Schedule & Today Priority Queue`
+    );
+    resetSubmissionForm();
+  };
+
+  const handleEditSubmission = (item: DayflowSubmissionItem) => {
+    clickSound(820, 12);
+    setInboxOpen(true);
+    setRightSlideTab('submissions');
+    setEditingSubmId(item.id);
+    setSubmTitle(item.title);
+    setSubmSubject(item.subject || '');
+    setSubmKind(item.kind || 'assignment');
+    setSubmGivenDate(item.givenDate || todayKey);
+    setSubmDueDate(item.dueDate || todayKey);
+    setSubmDueTime(item.dueTime || '17:00');
+    setSubmDuration(item.durationMin || 60);
+    setSubmAutoSchedule(item.autoSchedule !== false);
+    setSubmNote(item.note || '');
+  };
+
+  const handleToggleSubmissionDone = (id: string) => {
+    const res = toggleDayflowSubmissionComplete(state, id);
+    clickSound(res.nowCompleted ? 980 : 620, 14);
+    setState(res.nextState);
+    if (res.nowCompleted) {
+      onAwardXP?.(25, 'Completed Exam / Assignment Submission');
+      onNotify?.('Marked submission complete (+25 XP)');
+    }
+  };
+
+  const handleDeleteSubmission = (id: string) => {
+    clickSound(520, 12);
+    setState((prev) => deleteDayflowSubmission(prev, id));
+    if (editingSubmId === id) resetSubmissionForm();
+    onNotify?.('Removed submission & linked schedule block');
+  };
+
+  const handleSlotSubmissionPrep = (id: string) => {
+    clickSound(880, 12);
+    const { nextState, slottedTask } = slotSubmissionPrepIntoFreeGap(state, id, selectedDateKey);
+    if (slottedTask) {
+      setState(nextState);
+      onNotify?.(
+        `Slotted "${slottedTask.title}" into free gap at ${formatTime12h(slottedTask.startTime)} on ${selectedDateKey}`
+      );
+    }
+  };
+
   const saveWakingHoursConfig = (e: React.FormEvent) => {
     e.preventDefault();
     const s = Math.max(0, Math.min(22, Number(draftWakeStart) || 6));
@@ -629,12 +750,53 @@ export const DayflowView: React.FC<DayflowViewProps> = ({
               </button>
             </div>
 
+            {/* Submissions & Exams Slide Bar Toggle */}
+            <button
+              type="button"
+              data-testid="dayflow-submissions-toggle"
+              onClick={() => {
+                if (inboxOpen && rightSlideTab === 'submissions') {
+                  setInboxOpen(false);
+                } else {
+                  setRightSlideTab('submissions');
+                  setInboxOpen(true);
+                }
+              }}
+              className={`px-3 py-1.5 rounded-md font-mono text-xs inline-flex items-center gap-1.5 border transition ${
+                inboxOpen && rightSlideTab === 'submissions' ? 'arch-btn-primary' : 'arch-btn-ghost'
+              }`}
+              title="Toggle Exams & Assignment Submissions Slide Bar"
+            >
+              <span>Exams &amp; Submissions</span>
+              <span
+                className="px-1.5 py-0.2 rounded text-[10px] border tabular-nums"
+                style={{
+                  borderColor: pendingSubmissionsCount > 0 ? '#F59E0B' : 'currentColor',
+                  color:
+                    inboxOpen && rightSlideTab === 'submissions'
+                      ? 'currentColor'
+                      : pendingSubmissionsCount > 0
+                      ? '#F59E0B'
+                      : 'currentColor',
+                }}
+              >
+                {pendingSubmissionsCount}
+              </span>
+            </button>
+
             {/* Inbox Drawer Toggle */}
             <button
               type="button"
-              onClick={() => setInboxOpen((o) => !o)}
+              onClick={() => {
+                if (inboxOpen && rightSlideTab === 'inbox') {
+                  setInboxOpen(false);
+                } else {
+                  setRightSlideTab('inbox');
+                  setInboxOpen(true);
+                }
+              }}
               className={`px-3 py-1.5 rounded-md font-mono text-xs inline-flex items-center gap-1.5 border transition ${
-                inboxOpen ? 'arch-btn-primary' : 'arch-btn-ghost'
+                inboxOpen && rightSlideTab === 'inbox' ? 'arch-btn-primary' : 'arch-btn-ghost'
               }`}
               title="Toggle Unscheduled Inbox Tray"
             >
@@ -957,7 +1119,9 @@ export const DayflowView: React.FC<DayflowViewProps> = ({
                         style={{
                           minHeight: `${minHeightPx}px`,
                           backgroundColor: isClass ? cat.bgSoft : 'var(--bg-canvas)',
-                          borderColor: isNowInsideBlock ? cat.color : isClass ? cat.borderSoft : 'var(--border-hairline)',
+                          borderTopColor: isNowInsideBlock ? cat.color : isClass ? cat.borderSoft : 'var(--border-hairline)',
+                          borderRightColor: isNowInsideBlock ? cat.color : isClass ? cat.borderSoft : 'var(--border-hairline)',
+                          borderBottomColor: isNowInsideBlock ? cat.color : isClass ? cat.borderSoft : 'var(--border-hairline)',
                           borderLeftWidth: '4px',
                           borderLeftColor: cat.color,
                           opacity: isDone ? 0.68 : 1,
@@ -1189,7 +1353,9 @@ export const DayflowView: React.FC<DayflowViewProps> = ({
                                 className="w-full text-left p-2 rounded-md border text-[11px] space-y-0.5 transition hover:opacity-90"
                                 style={{
                                   backgroundColor: b.kind === 'class' ? cat.bgSoft : 'var(--bg-surface)',
-                                  borderColor: cat.borderSoft,
+                                  borderTopColor: cat.borderSoft,
+                                  borderRightColor: cat.borderSoft,
+                                  borderBottomColor: cat.borderSoft,
                                   borderLeftWidth: '3px',
                                   borderLeftColor: cat.color,
                                 }}
@@ -1417,124 +1583,482 @@ export const DayflowView: React.FC<DayflowViewProps> = ({
           )}
         </div>
 
-        {/* 4. COLLAPSIBLE INBOX TRAY (RIGHT SIDEBAR / MOBILE DRAWER) */}
+        {/* 4. RIGHT SLIDE BAR: EXAMS & ASSIGNMENT SUBMISSIONS + COLLAPSIBLE INBOX TRAY */}
+        {!inboxOpen && (
+          <button
+            type="button"
+            data-testid="dayflow-slide-handle"
+            onClick={() => {
+              setRightSlideTab('submissions');
+              setInboxOpen(true);
+            }}
+            className="fixed right-0 top-1/2 -translate-y-1/2 z-40 px-2.5 py-4 rounded-l-xl border border-r-0 font-mono text-[10px] uppercase tracking-widest shadow-2xl flex flex-col items-center gap-2 transition hover:pr-3.5"
+            style={{
+              backgroundColor: 'var(--bg-elevated)',
+              borderColor: pendingSubmissionsCount > 0 ? '#F59E0B' : 'var(--border-strong)',
+              color: 'var(--ink-primary)',
+            }}
+            title="Slide open Exams & Assignment Submissions bar"
+          >
+            <span style={{ color: '#F59E0B' }}>&larr;</span>
+            <span style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}>
+              SUBMISSIONS ({pendingSubmissionsCount})
+            </span>
+          </button>
+        )}
+
         {inboxOpen && (
-          <div className="lg:col-span-4 xl:col-span-3 arch-panel rounded-xl p-4 sm:p-5 space-y-4">
-            <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--border-hairline)' }}>
-              <div>
-                <span className="font-mono text-[10px] uppercase tracking-widest block" style={{ color: 'var(--ink-muted)' }}>
-                  UNSCHEDULED BACKLOG
+          <div
+            className="lg:col-span-4 xl:col-span-3 arch-panel rounded-xl p-4 sm:p-5 space-y-4"
+            data-testid="dayflow-right-slidebar"
+          >
+            {/* Segmented Slide-Bar Switcher: Exams & Submissions vs. Inbox */}
+            <div className="space-y-2.5 border-b pb-3" style={{ borderColor: 'var(--border-hairline)' }}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-mono text-[10px] uppercase tracking-widest" style={{ color: 'var(--ink-muted)' }}>
+                  {rightSlideTab === 'submissions'
+                    ? 'CLOSEST WINDOW // EXAMS & SUBMISSIONS'
+                    : 'UNSCHEDULED BACKLOG // INBOX'}
                 </span>
-                <h2 className="text-sm font-mono font-semibold mt-0.5">
-                  Dayflow Inbox ({state.inbox.length})
-                </h2>
+                <button
+                  type="button"
+                  onClick={() => setInboxOpen(false)}
+                  className="arch-btn-ghost px-2 py-0.5 rounded text-[10px] font-mono"
+                >
+                  Slide Out &rarr;
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setInboxOpen(false)}
-                className="arch-btn-ghost px-2 py-0.5 rounded text-[10px] font-mono"
+
+              <div
+                className="grid grid-cols-2 gap-1 rounded-lg border p-0.5 font-mono text-[11px]"
+                style={{ backgroundColor: 'var(--bg-canvas)', borderColor: 'var(--border-hairline)' }}
               >
-                Hide
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setRightSlideTab('submissions')}
+                  className={`py-1.5 px-2 rounded-md transition font-medium flex items-center justify-center gap-1.5 ${
+                    rightSlideTab === 'submissions' ? 'arch-btn-primary' : 'arch-btn-ghost border-transparent'
+                  }`}
+                >
+                  <span>Submissions</span>
+                  <span className="px-1 rounded text-[9px] border tabular-nums">
+                    {pendingSubmissionsCount}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRightSlideTab('inbox')}
+                  className={`py-1.5 px-2 rounded-md transition font-medium flex items-center justify-center gap-1.5 ${
+                    rightSlideTab === 'inbox' ? 'arch-btn-primary' : 'arch-btn-ghost border-transparent'
+                  }`}
+                >
+                  <span>Inbox</span>
+                  <span className="px-1 rounded text-[9px] border tabular-nums">
+                    {state.inbox.length}
+                  </span>
+                </button>
+              </div>
             </div>
 
-            <form onSubmit={handleAddInboxItem} className="space-y-2.5">
-              <input
-                type="text"
-                value={inboxTitle}
-                onChange={(e) => setInboxTitle(e.target.value)}
-                placeholder="Dump unscheduled task..."
-                className="w-full arch-input rounded-md px-3 py-2 text-xs font-mono"
-              />
-              <div className="grid grid-cols-2 gap-2">
-                <select
-                  value={inboxCategory}
-                  onChange={(e) => setInboxCategory(e.target.value as DayflowCategory)}
-                  aria-label="Inbox task category"
-                  className="arch-input rounded-md px-2 py-1.5 text-[11px] font-mono"
+            {rightSlideTab === 'submissions' ? (
+              <div className="space-y-4">
+                {/* Add / Modify Exam or Assignment Submission Form */}
+                <form
+                  onSubmit={handleSaveSubmission}
+                  className="space-y-2.5 p-3 rounded-lg border"
+                  style={{ backgroundColor: 'var(--bg-canvas)', borderColor: 'var(--border-hairline)' }}
+                  data-testid="dayflow-submission-form"
                 >
-                  {DAYFLOW_CATEGORIES.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.label}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={inboxDuration}
-                  onChange={(e) => setInboxDuration(Number(e.target.value))}
-                  aria-label="Inbox task duration"
-                  className="arch-input rounded-md px-2 py-1.5 text-[11px] font-mono tabular-nums"
-                >
-                  {DURATION_PRESETS.map((p) => (
-                    <option key={p.min} value={p.min}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <button
-                type="submit"
-                className="w-full arch-btn-primary py-2 rounded-md text-xs font-mono font-medium"
-              >
-                + Add to Inbox
-              </button>
-            </form>
-
-            {state.inbox.length === 0 ? (
-              <div
-                className="p-4 rounded-lg border border-dashed text-center space-y-1"
-                style={{ borderColor: 'var(--border-elevated)' }}
-              >
-                <div className="font-mono text-xs" style={{ color: 'var(--ink-muted)' }}>
-                  INBOX CLEAR
-                </div>
-                <p className="text-[11px]" style={{ color: 'var(--ink-secondary)' }}>
-                  Dump tasks without a time here, then click &ldquo;Slot into Gap&rdquo; to place them into open free time.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
-                {state.inbox.map((item) => {
-                  const cat = getCategoryMeta(item.category);
-                  return (
-                    <div
-                      key={item.id}
-                      className="p-3 rounded-lg border space-y-2"
-                      style={{
-                        backgroundColor: 'var(--bg-canvas)',
-                        borderColor: 'var(--border-hairline)',
-                        borderLeftWidth: '3px',
-                        borderLeftColor: cat.color,
-                      }}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <div className="text-xs font-semibold">{item.title}</div>
-                          <div className="font-mono text-[10px] mt-0.5" style={{ color: 'var(--ink-muted)' }}>
-                            {cat.label} &bull; {formatDurationCompact(item.durationMin)}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => deleteInboxItem(item.id)}
-                          aria-label={`Delete inbox item ${item.title}`}
-                          className="arch-btn-ghost px-1.5 py-0.5 rounded text-[10px] font-mono"
-                        >
-                          &times;
-                        </button>
-                      </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-[10px] uppercase font-semibold" style={{ color: editingSubmId ? '#F59E0B' : 'var(--ink-secondary)' }}>
+                      {editingSubmId ? 'MODIFY EXAM / SUBMISSION' : '+ NEW EXAM / ASSIGNMENT'}
+                    </span>
+                    {editingSubmId && (
                       <button
                         type="button"
-                        onClick={() => scheduleInboxIntoGap(item)}
-                        className="w-full arch-btn-ghost py-1.5 rounded text-[11px] font-mono font-medium"
-                        style={{ color: 'var(--status-ok)' }}
+                        onClick={resetSubmissionForm}
+                        className="font-mono text-[10px] underline"
+                        style={{ color: 'var(--ink-muted)' }}
                       >
-                        Slot into Free Gap ({selectedDateKey}) &rarr;
+                        Cancel Edit
                       </button>
+                    )}
+                  </div>
+
+                  <input
+                    type="text"
+                    data-testid="subm-title-input"
+                    value={submTitle}
+                    onChange={(e) => setSubmTitle(e.target.value)}
+                    placeholder="Title (e.g. OS Lab Record / DBMS Mid-Sem)..."
+                    className="w-full arch-input rounded-md px-3 py-1.5 text-xs font-mono"
+                  />
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <select
+                      data-testid="subm-kind-select"
+                      value={submKind}
+                      onChange={(e) => setSubmKind(e.target.value as SubmissionKind)}
+                      aria-label="Submission or exam type"
+                      className="arch-input rounded-md px-2 py-1.5 text-[11px] font-mono"
+                    >
+                      {SUBMISSION_KINDS.map((k) => (
+                        <option key={k.id} value={k.id}>
+                          {k.shortBadge}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      data-testid="subm-subject-input"
+                      value={submSubject}
+                      onChange={(e) => setSubmSubject(e.target.value)}
+                      placeholder="Course (e.g. CS-301)"
+                      className="arch-input rounded-md px-2.5 py-1.5 text-[11px] font-mono"
+                    />
+                  </div>
+
+                  {/* Given Date & Deadline Date */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block font-mono text-[9px] uppercase mb-0.5" style={{ color: 'var(--ink-muted)' }}>
+                        Given Date
+                      </label>
+                      <input
+                        type="date"
+                        data-testid="subm-given-date"
+                        value={submGivenDate}
+                        onChange={(e) => setSubmGivenDate(e.target.value)}
+                        className="w-full arch-input rounded-md px-2 py-1 text-[11px] font-mono tabular-nums"
+                      />
                     </div>
-                  );
-                })}
+                    <div>
+                      <label className="block font-mono text-[9px] uppercase mb-0.5" style={{ color: '#F59E0B' }}>
+                        Deadline Date
+                      </label>
+                      <input
+                        type="date"
+                        data-testid="subm-due-date"
+                        value={submDueDate}
+                        onChange={(e) => setSubmDueDate(e.target.value)}
+                        className="w-full arch-input rounded-md px-2 py-1 text-[11px] font-mono tabular-nums"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Deadline Time & Duration */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block font-mono text-[9px] uppercase mb-0.5" style={{ color: 'var(--ink-muted)' }}>
+                        Deadline / Exam Time
+                      </label>
+                      <input
+                        type="time"
+                        data-testid="subm-due-time"
+                        value={submDueTime}
+                        onChange={(e) => setSubmDueTime(e.target.value)}
+                        className="w-full arch-input rounded-md px-2 py-1 text-[11px] font-mono tabular-nums"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-mono text-[9px] uppercase mb-0.5" style={{ color: 'var(--ink-muted)' }}>
+                        Block Duration
+                      </label>
+                      <select
+                        value={submDuration}
+                        onChange={(e) => setSubmDuration(Number(e.target.value))}
+                        className="w-full arch-input rounded-md px-2 py-1 text-[11px] font-mono tabular-nums"
+                      >
+                        {DURATION_PRESETS.map((p) => (
+                          <option key={p.min} value={p.min}>
+                            {p.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <input
+                    type="text"
+                    value={submNote}
+                    onChange={(e) => setSubmNote(e.target.value)}
+                    placeholder="Notes / syllabus / portal link (optional)..."
+                    className="w-full arch-input rounded-md px-2.5 py-1.5 text-[11px] font-mono"
+                  />
+
+                  <label className="flex items-center gap-2 cursor-pointer font-mono text-[10px]" style={{ color: 'var(--ink-secondary)' }}>
+                    <input
+                      type="checkbox"
+                      checked={submAutoSchedule}
+                      onChange={(e) => setSubmAutoSchedule(e.target.checked)}
+                      className="w-3.5 h-3.5 rounded cursor-pointer accent-current"
+                    />
+                    <span>Auto-add to Dayflow schedule &amp; Today radar</span>
+                  </label>
+
+                  <button
+                    type="submit"
+                    data-testid="subm-submit-btn"
+                    className="w-full arch-btn-primary py-2 rounded-md text-xs font-mono font-semibold"
+                  >
+                    {editingSubmId ? 'Save Modified Deadline & Sync' : '+ Add to Schedule & Today Queue'}
+                  </button>
+                </form>
+
+                {/* Closest-Window Priority List */}
+                {sortedSubmissions.length === 0 ? (
+                  <div
+                    className="p-4 rounded-lg border border-dashed text-center space-y-1"
+                    style={{ borderColor: 'var(--border-elevated)' }}
+                  >
+                    <div className="font-mono text-xs" style={{ color: 'var(--ink-muted)' }}>
+                      NO EXAMS OR SUBMISSIONS QUEUED
+                    </div>
+                    <p className="text-[11px]" style={{ color: 'var(--ink-secondary)' }}>
+                      Add assignments, labs, or exams above. They automatically rank by closest deadline window, slot into your Dayflow schedule, and pop up in your Today module.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5 max-h-[460px] overflow-y-auto pr-1" data-testid="dayflow-submissions-list">
+                    {sortedSubmissions.map((sub) => {
+                      const win = getSubmissionWindowTelemetry(sub, todayKey, nowMinutes);
+                      return (
+                        <div
+                          key={sub.id}
+                          data-testid="dayflow-submission-card"
+                          className="p-3 rounded-lg border space-y-2 transition"
+                          style={{
+                            backgroundColor: 'var(--bg-canvas)',
+                            borderTopColor: editingSubmId === sub.id ? '#F59E0B' : 'var(--border-hairline)',
+                            borderRightColor: editingSubmId === sub.id ? '#F59E0B' : 'var(--border-hairline)',
+                            borderBottomColor: editingSubmId === sub.id ? '#F59E0B' : 'var(--border-hairline)',
+                            borderLeftWidth: '3px',
+                            borderLeftColor: win.color,
+                            opacity: sub.completed ? 0.65 : 1,
+                          }}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-start gap-2 min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={sub.completed}
+                                onChange={() => handleToggleSubmissionDone(sub.id)}
+                                aria-label={`Mark ${sub.title} complete`}
+                                className="mt-0.5 w-4 h-4 rounded cursor-pointer shrink-0"
+                              />
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <span
+                                    className="px-1.5 py-0.2 rounded text-[9px] font-mono uppercase font-bold"
+                                    style={{ backgroundColor: win.kindMeta.color, color: '#09090B' }}
+                                  >
+                                    {win.kindMeta.shortBadge}
+                                  </span>
+                                  {sub.subject && (
+                                    <span
+                                      className="px-1.5 py-0.2 rounded text-[9px] font-mono border"
+                                      style={{ borderColor: 'var(--border-elevated)', color: 'var(--ink-secondary)' }}
+                                    >
+                                      {sub.subject}
+                                    </span>
+                                  )}
+                                  <span
+                                    className="px-1.5 py-0.2 rounded text-[9px] font-mono font-semibold"
+                                    style={{
+                                      color: win.color,
+                                      border: `1px solid ${win.color}`,
+                                      backgroundColor: 'var(--bg-surface)',
+                                    }}
+                                  >
+                                    {win.windowBadge}
+                                  </span>
+                                </div>
+                                <div className={`text-xs font-semibold mt-1 ${sub.completed ? 'line-through opacity-75' : ''}`}>
+                                  {sub.title}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Given Date -> Deadline Date & Window Progress Bar */}
+                          <div className="space-y-1 pt-0.5">
+                            <div className="flex flex-wrap items-center justify-between gap-1 font-mono text-[10px] tabular-nums" style={{ color: 'var(--ink-secondary)' }}>
+                              <span>Given: <strong>{sub.givenDate}</strong></span>
+                              <span>&rarr;</span>
+                              <span style={{ color: sub.completed ? 'var(--ink-muted)' : win.color }}>
+                                Due: <strong>{sub.dueDate}</strong> {formatTime12h(sub.dueTime)}
+                              </span>
+                            </div>
+                            <div className="w-full h-1 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-elevated)' }}>
+                              <div
+                                className="h-full transition-all"
+                                style={{ width: `${win.elapsedWindowPct}%`, backgroundColor: win.color }}
+                              />
+                            </div>
+                            {sub.note && (
+                              <div className="font-mono text-[10px] truncate" style={{ color: 'var(--ink-muted)' }}>
+                                {sub.note}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Actions: Slot Prep in Free Gap | Modify | Delete */}
+                          <div className="flex flex-wrap items-center justify-between gap-1.5 pt-1">
+                            {!sub.completed ? (
+                              <button
+                                type="button"
+                                onClick={() => handleSlotSubmissionPrep(sub.id)}
+                                className="arch-btn-ghost px-2 py-1 rounded text-[10px] font-mono font-medium"
+                                style={{ color: 'var(--status-ok)' }}
+                                title="Find open free-time gap on selected date and schedule prep/submission work"
+                              >
+                                + Slot Prep in Gap
+                              </button>
+                            ) : (
+                              <span className="font-mono text-[10px]" style={{ color: 'var(--status-ok)' }}>
+                                ✓ Submitted
+                              </span>
+                            )}
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                data-testid="subm-modify-btn"
+                                onClick={() => handleEditSubmission(sub)}
+                                className="arch-btn-ghost px-2 py-1 rounded text-[10px] font-mono"
+                              >
+                                Modify
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedDateKey(sub.dueDate);
+                                  setViewMode('day');
+                                }}
+                                className="arch-btn-ghost px-2 py-1 rounded text-[10px] font-mono"
+                                title="Jump to deadline day in timeline"
+                              >
+                                Open Due Day
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteSubmission(sub.id)}
+                                className="arch-btn-ghost px-1.5 py-1 rounded text-[10px] font-mono"
+                                style={{ color: 'var(--status-err)' }}
+                                aria-label={`Delete ${sub.title}`}
+                              >
+                                &times;
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
+            ) : (
+              <>
+                <form onSubmit={handleAddInboxItem} className="space-y-2.5">
+                  <input
+                    type="text"
+                    value={inboxTitle}
+                    onChange={(e) => setInboxTitle(e.target.value)}
+                    placeholder="Dump unscheduled task..."
+                    className="w-full arch-input rounded-md px-3 py-2 text-xs font-mono"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <select
+                      value={inboxCategory}
+                      onChange={(e) => setInboxCategory(e.target.value as DayflowCategory)}
+                      aria-label="Inbox task category"
+                      className="arch-input rounded-md px-2 py-1.5 text-[11px] font-mono"
+                    >
+                      {DAYFLOW_CATEGORIES.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.label}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={inboxDuration}
+                      onChange={(e) => setInboxDuration(Number(e.target.value))}
+                      aria-label="Inbox task duration"
+                      className="arch-input rounded-md px-2 py-1.5 text-[11px] font-mono tabular-nums"
+                    >
+                      {DURATION_PRESETS.map((p) => (
+                        <option key={p.min} value={p.min}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full arch-btn-primary py-2 rounded-md text-xs font-mono font-medium"
+                  >
+                    + Add to Inbox
+                  </button>
+                </form>
+
+                {state.inbox.length === 0 ? (
+                  <div
+                    className="p-4 rounded-lg border border-dashed text-center space-y-1"
+                    style={{ borderColor: 'var(--border-elevated)' }}
+                  >
+                    <div className="font-mono text-xs" style={{ color: 'var(--ink-muted)' }}>
+                      INBOX CLEAR
+                    </div>
+                    <p className="text-[11px]" style={{ color: 'var(--ink-secondary)' }}>
+                      Dump tasks without a time here, then click &ldquo;Slot into Gap&rdquo; to place them into open free time.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+                    {state.inbox.map((item) => {
+                      const cat = getCategoryMeta(item.category);
+                      return (
+                        <div
+                          key={item.id}
+                          className="p-3 rounded-lg border space-y-2"
+                          style={{
+                            backgroundColor: 'var(--bg-canvas)',
+                            borderTopColor: 'var(--border-hairline)',
+                            borderRightColor: 'var(--border-hairline)',
+                            borderBottomColor: 'var(--border-hairline)',
+                            borderLeftWidth: '3px',
+                            borderLeftColor: cat.color,
+                          }}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <div className="text-xs font-semibold">{item.title}</div>
+                              <div className="font-mono text-[10px] mt-0.5" style={{ color: 'var(--ink-muted)' }}>
+                                {cat.label} &bull; {formatDurationCompact(item.durationMin)}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => deleteInboxItem(item.id)}
+                              aria-label={`Delete inbox item ${item.title}`}
+                              className="arch-btn-ghost px-1.5 py-0.5 rounded text-[10px] font-mono"
+                            >
+                              &times;
+                            </button>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => scheduleInboxIntoGap(item)}
+                            className="w-full arch-btn-ghost py-1.5 rounded text-[11px] font-mono font-medium"
+                            style={{ color: 'var(--status-ok)' }}
+                          >
+                            Slot into Free Gap ({selectedDateKey}) &rarr;
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

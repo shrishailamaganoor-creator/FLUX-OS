@@ -17,8 +17,12 @@ import {
   calculateFreeTimeGaps,
   getBlocksForDate,
   getDayAvailabilitySummary,
+  getSortedSubmissionsByClosestWindow,
+  getSubmissionWindowTelemetry,
   mergeDayflowStates,
   normalizeDayflowState,
+  slotSubmissionPrepIntoFreeGap,
+  upsertDayflowSubmission,
 } from './dayflowState';
 
 test('isPlainObject identifies plain objects vs arrays and primitives', () => {
@@ -235,4 +239,65 @@ test('mergeDayflowStates combines classes and tasks from 2 different JSON files 
   assert.equal(mergedDf.dayOverrides['2026-11-16'], 'focus');
   assert.equal(mergedDf.dayOverrides['2026-11-17'], 'holiday');
 });
+
+test('Dayflow submissions auto-schedule on deadline, support modifying given/due dates, and sort by closest window', () => {
+  let state = normalizeDayflowState(DEFAULT_DAYFLOW_STATE);
+
+  // Add assignment due in 3 days
+  state = upsertDayflowSubmission(state, {
+    title: 'DBMS Normalization Assignment',
+    subject: 'CS-302',
+    kind: 'assignment',
+    givenDate: '2026-11-10',
+    dueDate: '2026-11-19',
+    dueTime: '17:00',
+    durationMin: 60,
+    completed: false,
+    autoSchedule: true,
+  });
+
+  // Add exam due tomorrow (closer window!)
+  state = upsertDayflowSubmission(state, {
+    title: 'Operating Systems Mid-Sem',
+    subject: 'CS-301',
+    kind: 'exam',
+    givenDate: '2026-11-01',
+    dueDate: '2026-11-17',
+    dueTime: '10:00',
+    durationMin: 90,
+    completed: false,
+    autoSchedule: true,
+  });
+
+  assert.equal(state.submissions.length, 2);
+  assert.equal(state.tasks.length, 2);
+
+  const sorted = getSortedSubmissionsByClosestWindow(state.submissions, '2026-11-16', 9 * 60);
+  assert.equal(sorted[0].title, 'Operating Systems Mid-Sem');
+  assert.equal(sorted[1].title, 'DBMS Normalization Assignment');
+
+  const win0 = getSubmissionWindowTelemetry(sorted[0], '2026-11-16', 9 * 60);
+  assert.equal(win0.daysRemaining, 1);
+  assert.equal(win0.urgencyTier, 'critical_48h');
+
+  // Modify the assignment's deadline to today (2026-11-16) -> should now become closest!
+  state = upsertDayflowSubmission(state, {
+    ...sorted[1],
+    dueDate: '2026-11-16',
+    dueTime: '18:00',
+  });
+  const sortedAfterModify = getSortedSubmissionsByClosestWindow(state.submissions, '2026-11-16', 9 * 60);
+  assert.equal(sortedAfterModify[0].title, 'DBMS Normalization Assignment');
+  assert.equal(sortedAfterModify[0].dueDate, '2026-11-16');
+
+  // Slot prep session into open gap on 2026-11-16
+  const { nextState, slottedTask } = slotSubmissionPrepIntoFreeGap(
+    state,
+    sortedAfterModify[0].id,
+    '2026-11-16'
+  );
+  assert.ok(slottedTask);
+  assert.equal(nextState.tasks.length, 3);
+});
+
 

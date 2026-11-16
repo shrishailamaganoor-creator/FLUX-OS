@@ -1,7 +1,10 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 
 export const VOICE_HUD_STORAGE_KEY = 'flux.voiceHud.v1';
+export const VOICE_HUD_PHONE_STORAGE_KEY = 'flux.voiceHud.phone.v1';
 const VOICE_HUD_EVENT = 'flux-voice-hud-settings';
+const VOICE_HUD_PHONE_EVENT = 'flux-voice-hud-phone-settings';
+const VOICE_HUD_TRIGGER_EVENT = 'flux-voice-hud-trigger';
 
 export interface VoiceHudHotkey {
   ctrl: boolean;
@@ -18,6 +21,19 @@ export interface VoiceHudSettings {
   showOnLockScreen: boolean;
 }
 
+export type PhoneShortcutGesture =
+  | 'double-tap'
+  | 'two-finger-tap'
+  | 'triple-tap'
+  | 'floating-only';
+
+export interface VoiceHudPhoneSettings {
+  phoneEnabled: boolean;
+  showFloatingMic: boolean;
+  gesture: PhoneShortcutGesture;
+  floatingPos: { x: number; y: number } | null;
+}
+
 export const DEFAULT_VOICE_HUD_HOTKEY: VoiceHudHotkey = {
   ctrl: true,
   shift: false,
@@ -31,6 +47,13 @@ export const DEFAULT_VOICE_HUD_SETTINGS: VoiceHudSettings = {
   hotkey: { ...DEFAULT_VOICE_HUD_HOTKEY },
   clickVolume: 30,
   showOnLockScreen: true,
+};
+
+export const DEFAULT_PHONE_VOICE_SETTINGS: VoiceHudPhoneSettings = {
+  phoneEnabled: true,
+  showFloatingMic: true,
+  gesture: 'two-finger-tap',
+  floatingPos: null,
 };
 
 export type VoiceHudPhase = 'idle' | 'recording' | 'transcribing' | 'done' | 'error';
@@ -164,6 +187,197 @@ export function useVoiceHudSettings(): [
   return [settings, updateSettings];
 }
 
+export function sanitizePhoneVoiceSettings(raw: unknown): VoiceHudPhoneSettings {
+  if (!raw || typeof raw !== 'object') {
+    return { ...DEFAULT_PHONE_VOICE_SETTINGS };
+  }
+  const obj = raw as Record<string, unknown>;
+  const validGestures: PhoneShortcutGesture[] = [
+    'double-tap',
+    'two-finger-tap',
+    'triple-tap',
+    'floating-only',
+  ];
+  const gesture: PhoneShortcutGesture =
+    typeof obj.gesture === 'string' && validGestures.includes(obj.gesture as PhoneShortcutGesture)
+      ? (obj.gesture as PhoneShortcutGesture)
+      : DEFAULT_PHONE_VOICE_SETTINGS.gesture;
+
+  let floatingPos: { x: number; y: number } | null = null;
+  if (obj.floatingPos && typeof obj.floatingPos === 'object') {
+    const pos = obj.floatingPos as Record<string, unknown>;
+    const x = Number(pos.x);
+    const y = Number(pos.y);
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      floatingPos = { x: Math.round(x), y: Math.round(y) };
+    }
+  }
+
+  return {
+    phoneEnabled:
+      typeof obj.phoneEnabled === 'boolean'
+        ? obj.phoneEnabled
+        : DEFAULT_PHONE_VOICE_SETTINGS.phoneEnabled,
+    showFloatingMic:
+      typeof obj.showFloatingMic === 'boolean'
+        ? obj.showFloatingMic
+        : DEFAULT_PHONE_VOICE_SETTINGS.showFloatingMic,
+    gesture,
+    floatingPos,
+  };
+}
+
+export function loadPhoneVoiceSettings(): VoiceHudPhoneSettings {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return { ...DEFAULT_PHONE_VOICE_SETTINGS };
+    }
+    const raw = window.localStorage.getItem(VOICE_HUD_PHONE_STORAGE_KEY);
+    if (!raw) return { ...DEFAULT_PHONE_VOICE_SETTINGS };
+    return sanitizePhoneVoiceSettings(JSON.parse(raw));
+  } catch {
+    return { ...DEFAULT_PHONE_VOICE_SETTINGS };
+  }
+}
+
+export function savePhoneVoiceSettings(next: VoiceHudPhoneSettings): VoiceHudPhoneSettings {
+  const clean = sanitizePhoneVoiceSettings(next);
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(VOICE_HUD_PHONE_STORAGE_KEY, JSON.stringify(clean));
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(VOICE_HUD_PHONE_EVENT, { detail: clean }));
+    }
+  } catch {}
+  return clean;
+}
+
+export function useVoiceHudPhoneSettings(): [
+  VoiceHudPhoneSettings,
+  (updater: VoiceHudPhoneSettings | ((prev: VoiceHudPhoneSettings) => VoiceHudPhoneSettings)) => void,
+  () => void,
+] {
+  const [phoneSettings, setPhoneSettings] = useState<VoiceHudPhoneSettings>(() =>
+    loadPhoneVoiceSettings()
+  );
+
+  useEffect(() => {
+    const onCustom = (e: Event) => {
+      const detail = (e as CustomEvent<VoiceHudPhoneSettings>).detail;
+      setPhoneSettings(detail ? sanitizePhoneVoiceSettings(detail) : loadPhoneVoiceSettings());
+    };
+    const onStorage = (e: StorageEvent) => {
+      if (!e.key || e.key === VOICE_HUD_PHONE_STORAGE_KEY) {
+        setPhoneSettings(loadPhoneVoiceSettings());
+      }
+    };
+    window.addEventListener(VOICE_HUD_PHONE_EVENT, onCustom);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener(VOICE_HUD_PHONE_EVENT, onCustom);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
+
+  const updatePhoneSettings = useCallback(
+    (
+      updater:
+        | VoiceHudPhoneSettings
+        | ((prev: VoiceHudPhoneSettings) => VoiceHudPhoneSettings)
+    ) => {
+      const current = loadPhoneVoiceSettings();
+      const next = typeof updater === 'function' ? updater(current) : updater;
+      const saved = savePhoneVoiceSettings(next);
+      setPhoneSettings(saved);
+    },
+    []
+  );
+
+  const resetPhoneSettings = useCallback(() => {
+    const saved = savePhoneVoiceSettings({ ...DEFAULT_PHONE_VOICE_SETTINGS });
+    setPhoneSettings(saved);
+  }, []);
+
+  return [phoneSettings, updatePhoneSettings, resetPhoneSettings];
+}
+
+export function triggerVoiceHudToggle(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(VOICE_HUD_TRIGGER_EVENT, { detail: { source: 'button' } }));
+  }
+}
+
+export async function openPcAnywhereMiniWindow(): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  try {
+    const docPip = (window as unknown as { documentPictureInPicture?: { requestWindow: (opts: { width: number; height: number }) => Promise<Window> } }).documentPictureInPicture;
+    let pipWin: Window | null = null;
+    if (docPip && typeof docPip.requestWindow === 'function') {
+      pipWin = await docPip.requestWindow({ width: 320, height: 128 });
+    }
+    if (!pipWin) {
+      return false;
+    }
+    const doc = pipWin.document;
+    doc.head.innerHTML = `<title>FLUX Voice Mic</title>
+      <style>
+        body {
+          margin: 0;
+          background: #09090B;
+          color: #FAFAFA;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          height: 100vh;
+          gap: 8px;
+          padding: 10px;
+          box-sizing: border-box;
+          user-select: none;
+        }
+        button {
+          background: #FAFAFA;
+          color: #09090B;
+          border: none;
+          border-radius: 999px;
+          padding: 10px 20px;
+          font-family: inherit;
+          font-size: 12px;
+          font-weight: 700;
+          cursor: pointer;
+          width: 100%;
+        }
+        .sub {
+          font-size: 10px;
+          color: #A1A1AA;
+          text-align: center;
+        }
+      </style>`;
+    doc.body.innerHTML = `
+      <button id="pip-mic-btn">START / STOP DICTATION (Ctrl+Space)</button>
+      <div class="sub" id="pip-status">Dictates into FLUX & auto-copies to PC clipboard</div>
+    `;
+    const btn = doc.getElementById('pip-mic-btn');
+    if (btn) {
+      btn.addEventListener('click', () => {
+        window.dispatchEvent(new CustomEvent(VOICE_HUD_TRIGGER_EVENT, { detail: { source: 'pip' } }));
+      });
+    }
+    pipWin.addEventListener('keydown', (e: KeyboardEvent) => {
+      const settings = loadVoiceHudSettings();
+      if (matchesVoiceHudChord(e, settings.hotkey)) {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent(VOICE_HUD_TRIGGER_EVENT, { detail: { source: 'pip' } }));
+      }
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function formatKeyCodeLabel(code: string): string {
   if (!code) return 'Space';
   if (code === 'Space') return 'Space';
@@ -215,15 +429,12 @@ const MODIFIER_CODES = new Set([
 ]);
 
 export function isReservedFluxShortcut(hotkey: VoiceHudHotkey): boolean {
-  // Ctrl+K or Cmd+K (Command palette)
   if ((hotkey.ctrl || hotkey.meta) && !hotkey.alt && !hotkey.shift && hotkey.code === 'KeyK') {
     return true;
   }
-  // Escape
   if (hotkey.code === 'Escape') {
     return true;
   }
-  // Alt+V or Ctrl+Shift+V (Classified Vault Trapdoor)
   if (
     (hotkey.alt && !hotkey.ctrl && !hotkey.shift && !hotkey.meta && hotkey.code === 'KeyV') ||
     ((hotkey.ctrl || hotkey.meta) && hotkey.shift && !hotkey.alt && hotkey.code === 'KeyV')
@@ -304,7 +515,6 @@ export function matchesVoiceHudChord(
 
   if (exactMatch) return true;
 
-  // Also accept Cmd+Space on macOS only if Cmd is held and Ctrl is not, when using default Ctrl+Space
   const isMac =
     typeof isMacPlatform === 'boolean'
       ? isMacPlatform
@@ -325,10 +535,6 @@ export function matchesVoiceHudChord(
   return false;
 }
 
-/**
- * Analytic underdamped spring step (`duration = 0.30s`, `bounce = 0.15` => `omega = 2*PI/0.30`, `zeta = 0.85`).
- * `dtSec` is clamped to `0.05s` (`50ms`) so tab switches never explode.
- */
 export function stepAnalyticSpring(
   pos: number,
   vel: number,
@@ -400,11 +606,9 @@ export function playDictationClick(
 
   try {
     const now = ctx.currentTime;
-    // Master gain scaled by clickVolume (0..100, default 30, max gain 0.10 at 100)
     const maxGain = (vol / 100) * 0.1;
 
     if (kind === 'error') {
-      // Error: 1200 Hz then 800 Hz sine ticks
       const playTick = (freq: number, startOffset: number) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -425,7 +629,6 @@ export function playDictationClick(
     const bpFreq = kind === 'start' ? 2400 : 1900;
     const sineFreq = kind === 'start' ? 1600 : 1200;
 
-    // 8 ms decaying white-noise buffer through bandpass (Q = 0.9)
     const noiseSamples = Math.max(1, Math.floor(ctx.sampleRate * 0.008));
     const noiseBuffer = ctx.createBuffer(1, noiseSamples, ctx.sampleRate);
     const data = noiseBuffer.getChannelData(0);
@@ -452,7 +655,6 @@ export function playDictationClick(
     noiseSource.start(now);
     noiseSource.stop(now + 0.012);
 
-    // Sine tick with 40 ms exponential decay
     const osc = ctx.createOscillator();
     const tickGain = ctx.createGain();
     osc.type = 'sine';
@@ -466,6 +668,71 @@ export function playDictationClick(
     osc.stop(now + 0.042);
   } catch {
     // Ignore audio context errors on restricted autoplay
+  }
+}
+
+// ─── FREE IN-BROWSER WHISPER FALLBACK ($0 COST, ZERO API KEYS) ───────────────
+let whisperPipelinePromise: Promise<any> | null = null;
+
+function downsampleTo16kHz(samples: Float32Array, sourceRate: number): Float32Array {
+  if (sourceRate === 16000 || sourceRate <= 0) return samples;
+  const ratio = sourceRate / 16000;
+  const outLength = Math.round(samples.length / ratio);
+  const out = new Float32Array(outLength);
+  for (let i = 0; i < outLength; i++) {
+    const idx = i * ratio;
+    const low = Math.floor(idx);
+    const high = Math.min(samples.length - 1, low + 1);
+    const weight = idx - low;
+    out[i] = samples[low] * (1 - weight) + samples[high] * weight;
+  }
+  return out;
+}
+
+async function transcribeWithFreeBrowserWhisper(
+  pcmChunks: Float32Array[],
+  sampleRate: number
+): Promise<string> {
+  if (!pcmChunks || pcmChunks.length === 0) return '';
+  const totalLen = pcmChunks.reduce((acc, c) => acc + c.length, 0);
+  if (totalLen < sampleRate * 0.2) return '';
+
+  const merged = new Float32Array(totalLen);
+  let offset = 0;
+  for (const chunk of pcmChunks) {
+    merged.set(chunk, offset);
+    offset += chunk.length;
+  }
+  const pcm16k = downsampleTo16kHz(merged, sampleRate);
+
+  try {
+    if (!whisperPipelinePromise) {
+      // Load Transformers.js dynamically from free open-source CDN only if browser Web Speech API failed
+      const cdnUrl = 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+      const mod: any = await (new Function('u', 'return import(u)')(cdnUrl));
+      if (mod?.env) {
+        mod.env.allowLocalModels = false;
+        mod.env.useBrowserCache = true;
+      }
+      whisperPipelinePromise = mod.pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en', {
+        quantized: true,
+      });
+    }
+    const transcriber = await whisperPipelinePromise;
+    const output = await transcriber(pcm16k, {
+      chunk_length_s: 15,
+      stride_length_s: 3,
+      return_timestamps: false,
+    });
+    const text = typeof output?.text === 'string' ? output.text.trim() : '';
+    // Strip common Whisper silence hallucinations like "[BLANK_AUDIO]" or "(upbeat music)"
+    const cleaned = text
+      .replace(/\[.*?\]|\(.*?\)/g, '')
+      .trim();
+    return cleaned;
+  } catch {
+    whisperPipelinePromise = null;
+    return '';
   }
 }
 
@@ -510,7 +777,9 @@ export function isValidDictationTarget(el: Element | null): el is HTMLElement {
   return false;
 }
 
-export function captureFocusedTarget(activeEl: Element | null = typeof document !== 'undefined' ? document.activeElement : null): CapturedTarget | null {
+export function captureFocusedTarget(
+  activeEl: Element | null = typeof document !== 'undefined' ? document.activeElement : null
+): CapturedTarget | null {
   if (!activeEl) return null;
 
   const editable =
@@ -579,8 +848,15 @@ export async function insertAndVerifyTranscript(
     return { status: 'empty' };
   }
 
-  // Prefer currently focused valid target if user moved focus to another input while speaking,
-  // otherwise use the target captured when recording started.
+  // Always copy to clipboard in the background so PC Anywhere & Phone users can also paste anywhere
+  try {
+    if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(cleanText);
+    }
+  } catch {
+    // Ignore clipboard write rejection
+  }
+
   const currentTarget =
     typeof document !== 'undefined' ? captureFocusedTarget(document.activeElement) : null;
   const target =
@@ -650,11 +926,8 @@ export async function insertAndVerifyTranscript(
         const nextCaret = start + chunk.length;
         try {
           inputEl.setSelectionRange(nextCaret, nextCaret);
-        } catch {
-          // Some input types (e.g. email) do not support setSelectionRange
-        }
+        } catch {}
 
-        // 2g) VERIFY insertion by reading el.value back
         const readBack = String(inputEl.value ?? '');
         if (readBack.includes(cleanText)) {
           return { status: 'inserted', text: cleanText };
@@ -678,9 +951,7 @@ export async function insertAndVerifyTranscript(
               endRange.collapse(false);
               sel.addRange(endRange);
             }
-          } catch {
-            // Ignore selection range errors
-          }
+          } catch {}
         }
 
         const beforeText = String(el.innerText || el.textContent || '');
@@ -698,7 +969,6 @@ export async function insertAndVerifyTranscript(
 
         const afterExecText = String(el.innerText || el.textContent || '');
         if (!execWorked || !afterExecText.includes(cleanText)) {
-          // Manual Range fallback
           const activeSel = typeof window !== 'undefined' ? window.getSelection() : null;
           if (activeSel && activeSel.rangeCount > 0 && el.contains(activeSel.getRangeAt(0).commonAncestorContainer)) {
             const r = activeSel.getRangeAt(0);
@@ -715,25 +985,14 @@ export async function insertAndVerifyTranscript(
           el.dispatchEvent(new Event('input', { bubbles: true }));
         }
 
-        // 2g) VERIFY insertion by reading innerText / textContent back
         const readBack = String(el.innerText || el.textContent || '');
         if (readBack.includes(cleanText)) {
           return { status: 'inserted', text: cleanText };
         }
       }
-    } catch {
-      // Fall through to clipboard fallback if DOM insertion threw
-    }
+    } catch {}
   }
 
-  // Fallback: copy to clipboard and report 'copied' (never lie with 'Done')
-  try {
-    if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(cleanText);
-    }
-  } catch {
-    // Ignore clipboard write rejection in headless/unfocused frames
-  }
   return { status: 'copied', text: cleanText };
 }
 
@@ -764,7 +1023,6 @@ function hexToRgb(hex: string): [number, number, number] {
 const RGB_DIM = hexToRgb('#3A3A3A');
 const RGB_LIT = hexToRgb('#FAFAFA');
 const RGB_TRACE = hexToRgb('#A2BCFF');
-const RGB_ERROR = hexToRgb('#FF6B5A');
 
 function mixRgb(a: [number, number, number], b: [number, number, number], t: number): string {
   const clamped = Math.max(0, Math.min(1, t));
@@ -778,31 +1036,43 @@ function mixRgb(a: [number, number, number], b: [number, number, number], t: num
 
 export const VoiceHud: React.FC = () => {
   const [settings] = useVoiceHudSettings();
+  const [phoneSettings, updatePhoneSettings] = useVoiceHudPhoneSettings();
   const [phase, setPhase] = useState<VoiceHudPhase>('idle');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [liveAnnouncement, setLiveAnnouncement] = useState<string>('');
+  const [livePreviewText, setLivePreviewText] = useState<string>('');
   const [isHovered, setIsHovered] = useState<boolean>(false);
 
   const phaseRef = useRef<VoiceHudPhase>('idle');
   const settingsRef = useRef<VoiceHudSettings>(settings);
   settingsRef.current = settings;
+  const phoneSettingsRef = useRef<VoiceHudPhoneSettings>(phoneSettings);
+  phoneSettingsRef.current = phoneSettings;
 
   const plateRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  //Captured target & active resources
+  // Target tracking (including last-focused target for mobile/floating mic taps)
   const capturedTargetRef = useRef<CapturedTarget | null>(null);
+  const lastFocusedTargetRef = useRef<CapturedTarget | null>(null);
+
+  // Active media & audio metering / PCM recording for Whisper fallback
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const meterAudioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const scriptProcRef = useRef<ScriptProcessorNode | null>(null);
   const meterTimeDataRef = useRef<Float32Array | null>(null);
+  const pcmChunksRef = useRef<Float32Array[]>([]);
+  const pcmSampleRateRef = useRef<number>(16000);
   const smoothedLevelRef = useRef<number>(0);
   const peakEnergySeenRef = useRef<number>(0);
 
-  // Speech recognition / fallback recorder
+  // Speech recognition & live transcript state
   const recognitionRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const transcriptsRef = useRef<string[]>([]);
+  const interimTranscriptRef = useRef<string>('');
+  const accumulatedPriorTranscriptRef = useRef<string>('');
   const recognitionEndedEarlyRef = useRef<boolean>(false);
   const recognitionFatalErrorRef = useRef<string | null>(null);
 
@@ -821,6 +1091,47 @@ export const VoiceHud: React.FC = () => {
   const opacityRef = useRef<number>(0);
   const phosphorTrailRef = useRef<Float32Array>(new Float32Array(GRID_COLS * GRID_ROWS));
   const reducedMotionRef = useRef<boolean>(false);
+
+  // Draggable floating mic state
+  const dragStateRef = useRef<{
+    dragging: boolean;
+    moved: boolean;
+    startX: number;
+    startY: number;
+    origX: number;
+    origY: number;
+  }>({
+    dragging: false,
+    moved: false,
+    startX: 0,
+    startY: 0,
+    origX: 0,
+    origY: 0,
+  });
+
+  // Track last focused valid input across the app so mobile/floating button taps know where to insert
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const onFocusIn = (e: FocusEvent) => {
+      const target = e.target instanceof Element ? e.target : document.activeElement;
+      const captured = captureFocusedTarget(target);
+      if (captured) {
+        lastFocusedTargetRef.current = captured;
+      }
+    };
+    const onSelectionChange = () => {
+      const captured = captureFocusedTarget(document.activeElement);
+      if (captured) {
+        lastFocusedTargetRef.current = captured;
+      }
+    };
+    document.addEventListener('focusin', onFocusIn, true);
+    document.addEventListener('selectionchange', onSelectionChange, true);
+    return () => {
+      document.removeEventListener('focusin', onFocusIn, true);
+      document.removeEventListener('selectionchange', onSelectionChange, true);
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return;
@@ -863,9 +1174,7 @@ export const VoiceHud: React.FC = () => {
         } else {
           rec.stop();
         }
-      } catch {
-        // Ignore recognizer stop errors
-      }
+      } catch {}
     }
 
     if (mediaRecorderRef.current) {
@@ -873,9 +1182,15 @@ export const VoiceHud: React.FC = () => {
       mediaRecorderRef.current = null;
       try {
         if (mr.state !== 'inactive') mr.stop();
-      } catch {
-        // Ignore recorder stop errors
-      }
+      } catch {}
+    }
+
+    if (scriptProcRef.current) {
+      try {
+        scriptProcRef.current.onaudioprocess = null;
+        scriptProcRef.current.disconnect();
+      } catch {}
+      scriptProcRef.current = null;
     }
 
     if (mediaStreamRef.current) {
@@ -902,6 +1217,22 @@ export const VoiceHud: React.FC = () => {
     smoothedLevelRef.current = 0;
   }, []);
 
+  const getCombinedTranscript = useCallback((): string => {
+    const parts: string[] = [];
+    if (accumulatedPriorTranscriptRef.current.trim()) {
+      parts.push(accumulatedPriorTranscriptRef.current.trim());
+    }
+    const currentFinal = transcriptsRef.current.join(' ').trim();
+    if (currentFinal) {
+      parts.push(currentFinal);
+    }
+    const currentInterim = interimTranscriptRef.current.trim();
+    if (currentInterim) {
+      parts.push(currentInterim);
+    }
+    return parts.join(' ').replace(/\s+/g, ' ').trim();
+  }, []);
+
   const ensureRafLoopRunning = useCallback(() => {
     if (rafIdRef.current !== null) return;
     lastFrameTimeRef.current = performance.now();
@@ -925,7 +1256,6 @@ export const VoiceHud: React.FC = () => {
       const targetOpacity = isIdle ? 0 : 1;
 
       if (reducedMotionRef.current) {
-        // prefers-reduced-motion: no spring, 160ms opacity crossfade only
         if (!isIdle) {
           springWidthRef.current = { pos: targetWidth, vel: 0 };
         }
@@ -961,7 +1291,6 @@ export const VoiceHud: React.FC = () => {
           0.3,
           0.15
         );
-        // ~120ms exponential ease for opacity
         const opAlpha = 1 - Math.exp(-dt / 0.06);
         opacityRef.current += (targetOpacity - opacityRef.current) * opAlpha;
       }
@@ -981,19 +1310,15 @@ export const VoiceHud: React.FC = () => {
           if (norm > peakEnergySeenRef.current) {
             peakEnergySeenRef.current = norm;
           }
-          // Attack 40ms, release 150ms
           const tau = norm > smoothedLevelRef.current ? 0.04 : 0.15;
           const k = 1 - Math.exp(-dt / tau);
           smoothedLevelRef.current += (norm - smoothedLevelRef.current) * k;
-        } catch {
-          // Ignore analyser read error
-        }
+        } catch {}
       } else {
         const k = 1 - Math.exp(-dt / 0.15);
         smoothedLevelRef.current *= 1 - k;
       }
 
-      // Update plate DOM styles directly for 60fps spring without React re-render overhead
       const plate = plateRef.current;
       const drawWidth = Math.max(0, springWidthRef.current.pos);
       if (plate) {
@@ -1003,7 +1328,6 @@ export const VoiceHud: React.FC = () => {
         plate.style.pointerEvents = isIdle || opacityRef.current < 0.05 ? 'none' : 'auto';
       }
 
-      // Paint dot-matrix canvas
       const canvas = canvasRef.current;
       if (canvas && drawWidth > 2) {
         const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 2);
@@ -1028,7 +1352,6 @@ export const VoiceHud: React.FC = () => {
           const phaseElapsedSec = (now - phaseStartTimeRef.current) / 1000;
 
           if (currentPhase === 'done') {
-            // Done: 2px white check (#FAFAFA) centered in the 44px pill
             const cx = cssW / 2;
             const cy = cssH / 2;
             ctx.strokeStyle = '#FAFAFA';
@@ -1041,7 +1364,6 @@ export const VoiceHud: React.FC = () => {
             ctx.lineTo(cx + 7.0, cy - 4.5);
             ctx.stroke();
           } else if (currentPhase === 'error') {
-            // Error: draw subtle dim matrix on left + coral #FF6B5A alert glyph
             const iconX = 20;
             const iconY = cssH / 2;
             for (let r = -1; r <= 1; r++) {
@@ -1053,13 +1375,11 @@ export const VoiceHud: React.FC = () => {
               }
             }
           } else {
-            // Recording or Transcribing: 43 columns × 9 rows dot field, pitch 5.2px, dot radius 1.05px
             const gridSpanW = (GRID_COLS - 1) * DOT_PITCH;
             const gridSpanH = (GRID_ROWS - 1) * DOT_PITCH;
             const startX = (cssW - gridSpanW) / 2;
             const startY = (cssH - gridSpanH) / 2;
 
-            // Phosphor decay (0.6s trail)
             const decayFactor = Math.exp(-dt / 0.18);
             for (let i = 0; i < trail.length; i++) {
               trail[i] *= decayFactor;
@@ -1067,7 +1387,6 @@ export const VoiceHud: React.FC = () => {
 
             if (currentPhase === 'recording') {
               const lvl = smoothedLevelRef.current;
-              // Braided traces: two counter-phase sines per column, tapered at edges
               for (let c = 0; c < GRID_COLS; c++) {
                 const u = c / (GRID_COLS - 1);
                 const taper = Math.pow(Math.sin(u * Math.PI), 0.85);
@@ -1096,7 +1415,6 @@ export const VoiceHud: React.FC = () => {
                   trail[c * GRID_ROWS + 4] = 0.65 * taper;
                 }
               } else {
-                // Soft #A2BCFF beam sweeps left-to-right every 0.55 s
                 const cycle = ((now - phaseStartTimeRef.current) % 550) / 550;
                 const beamCol = cycle * (GRID_COLS - 1);
                 for (let c = 0; c < GRID_COLS; c++) {
@@ -1116,7 +1434,6 @@ export const VoiceHud: React.FC = () => {
               }
             }
 
-            // Render 43 × 9 dots
             for (let c = 0; c < GRID_COLS; c++) {
               const x = startX + c * DOT_PITCH;
               if (x < 6 || x > cssW - 6) continue;
@@ -1143,7 +1460,6 @@ export const VoiceHud: React.FC = () => {
         }
       }
 
-      // Stop rAF loop completely once idle and opacity < 0.01
       if (isIdle && opacityRef.current < 0.01 && Math.abs(springWidthRef.current.pos) < 0.5) {
         opacityRef.current = 0;
         springWidthRef.current = { pos: 0, vel: 0 };
@@ -1168,6 +1484,9 @@ export const VoiceHud: React.FC = () => {
       phaseStartTimeRef.current = performance.now();
       setPhase(nextPhase);
       setErrorMessage(errText);
+      if (nextPhase !== 'recording') {
+        setLivePreviewText('');
+      }
       if (announcement !== undefined) {
         setLiveAnnouncement(announcement);
       }
@@ -1192,12 +1511,31 @@ export const VoiceHud: React.FC = () => {
   const finalizeTranscript = useCallback(
     async (rawText: string) => {
       clearAllTimers();
+      const chunksCopy = pcmChunksRef.current.slice();
+      const srCopy = pcmSampleRateRef.current;
+      const hadVoiceSignal = peakEnergySeenRef.current > 0.04 && chunksCopy.length > 4;
       releaseMediaAndRecognizer(true);
 
+      let finalCandidate = (rawText || '').trim();
+
+      // If Web Speech API returned empty despite real human voice audio in the mic,
+      // run 100% free in-browser local Whisper fallback ($0 cost, zero API keys)
+      const isMockSpeechInstalled =
+        typeof window !== 'undefined' &&
+        Boolean((window as unknown as { __mockSpeechText?: string }).__mockSpeechText !== undefined);
+
+      if (!finalCandidate && hadVoiceSignal && !isMockSpeechInstalled) {
+        const whisperText = await transcribeWithFreeBrowserWhisper(chunksCopy, srCopy);
+        if (whisperText) {
+          finalCandidate = whisperText;
+        }
+      }
+
+      pcmChunksRef.current = [];
       const savedTarget = capturedTargetRef.current;
       capturedTargetRef.current = null;
 
-      const result = await insertAndVerifyTranscript(savedTarget, rawText);
+      const result = await insertAndVerifyTranscript(savedTarget, finalCandidate);
       if (result.status === 'empty') {
         showErrorAndClose('No speech detected — try again');
         return;
@@ -1208,7 +1546,6 @@ export const VoiceHud: React.FC = () => {
         return;
       }
 
-      // Verified insertion in target!
       playDictationClick('stop', settingsRef.current.clickVolume);
       transitionToPhase('done', `Inserted dictated text: ${result.text}`);
       holdTimerRef.current = window.setTimeout(() => {
@@ -1223,6 +1560,9 @@ export const VoiceHud: React.FC = () => {
     releaseMediaAndRecognizer(true);
     capturedTargetRef.current = null;
     transcriptsRef.current = [];
+    interimTranscriptRef.current = '';
+    accumulatedPriorTranscriptRef.current = '';
+    pcmChunksRef.current = [];
     transitionToPhase('idle', 'Dictation cancelled');
   }, [clearAllTimers, releaseMediaAndRecognizer, transitionToPhase]);
 
@@ -1234,16 +1574,10 @@ export const VoiceHud: React.FC = () => {
     // Hard settle timeout of 4 s: if no result, no error, and no onend fires, abort cleanly
     settleTimerRef.current = window.setTimeout(() => {
       if (phaseRef.current === 'transcribing') {
-        const joined = transcriptsRef.current.join(' ').trim();
-        if (joined) {
-          finalizeTranscript(joined);
-        } else {
-          showErrorAndClose('No speech detected — try again');
-        }
+        finalizeTranscript(getCombinedTranscript());
       }
     }, 3900);
 
-    // Check for mock transcript override (for deterministic testing if set)
     const mockOverride =
       typeof window !== 'undefined'
         ? (window as unknown as { __FLUX_VOICE_HUD_MOCK_TRANSCRIPT__?: string }).__FLUX_VOICE_HUD_MOCK_TRANSCRIPT__
@@ -1255,206 +1589,372 @@ export const VoiceHud: React.FC = () => {
       return;
     }
 
-    // If using Web Speech API
     if (recognitionRef.current) {
       const rec = recognitionRef.current;
-      // Stop microphone stream tracks right away while letting recognizer flush final result
-      if (mediaStreamRef.current) {
-        try {
-          mediaStreamRef.current.getTracks().forEach((t) => t.stop());
-        } catch {}
-        mediaStreamRef.current = null;
-      }
 
       if (recognitionFatalErrorRef.current) {
         const errCode = recognitionFatalErrorRef.current;
         recognitionFatalErrorRef.current = null;
         if (errCode === 'not-allowed' || errCode === 'service-not-allowed') {
           showErrorAndClose('Microphone unavailable');
-        } else {
-          showErrorAndClose('No speech detected — try again');
+          return;
         }
-        return;
       }
 
       if (recognitionEndedEarlyRef.current) {
-        const joined = transcriptsRef.current.join(' ').trim();
         fallbackTimerRef.current = window.setTimeout(() => {
-          finalizeTranscript(joined);
-        }, 200);
+          finalizeTranscript(getCombinedTranscript());
+        }, 180);
         return;
       }
+
+      // Give rec.stop() up to 420ms to emit final result before settling with live interim + final text
+      fallbackTimerRef.current = window.setTimeout(() => {
+        if (phaseRef.current === 'transcribing') {
+          finalizeTranscript(getCombinedTranscript());
+        }
+      }, 420);
 
       try {
         rec.stop();
       } catch {
-        const joined = transcriptsRef.current.join(' ').trim();
-        finalizeTranscript(joined);
+        finalizeTranscript(getCombinedTranscript());
       }
       return;
     }
 
-    // Fallback: MediaRecorder + 1.2s simulated pass ONLY if Web Speech API is absent
+    // Fallback when Web Speech API is absent in browser
     if (mediaRecorderRef.current) {
       try {
         if (mediaRecorderRef.current.state !== 'inactive') {
           mediaRecorderRef.current.stop();
         }
       } catch {}
-      fallbackTimerRef.current = window.setTimeout(() => {
-        const hadSignal = peakEnergySeenRef.current > 0.08;
-        finalizeTranscript(hadSignal ? '[Demo] hello world' : '');
-      }, 1200);
+      fallbackTimerRef.current = window.setTimeout(async () => {
+        const chunksCopy = pcmChunksRef.current.slice();
+        const srCopy = pcmSampleRateRef.current;
+        const whisperText = await transcribeWithFreeBrowserWhisper(chunksCopy, srCopy);
+        if (whisperText) {
+          finalizeTranscript(whisperText);
+        } else {
+          const hadSignal = peakEnergySeenRef.current > 0.08;
+          finalizeTranscript(hadSignal ? '[Demo] hello world' : '');
+        }
+      }, 600);
       return;
     }
 
-    finalizeTranscript(transcriptsRef.current.join(' ').trim());
-  }, [clearAllTimers, finalizeTranscript, showErrorAndClose, transitionToPhase]);
+    finalizeTranscript(getCombinedTranscript());
+  }, [clearAllTimers, finalizeTranscript, getCombinedTranscript, showErrorAndClose, transitionToPhase]);
 
-  const startListening = useCallback(async () => {
-    if (phaseRef.current === 'recording' || phaseRef.current === 'transcribing') return;
+  const startListening = useCallback(
+    async (preferLastFocusedTarget = false) => {
+      if (phaseRef.current === 'recording' || phaseRef.current === 'transcribing') return;
 
-    clearAllTimers();
-    releaseMediaAndRecognizer(true);
-    transcriptsRef.current = [];
-    recognitionEndedEarlyRef.current = false;
-    recognitionFatalErrorRef.current = null;
-    peakEnergySeenRef.current = 0;
+      clearAllTimers();
+      releaseMediaAndRecognizer(true);
+      transcriptsRef.current = [];
+      interimTranscriptRef.current = '';
+      accumulatedPriorTranscriptRef.current = '';
+      pcmChunksRef.current = [];
+      recognitionEndedEarlyRef.current = false;
+      recognitionFatalErrorRef.current = null;
+      peakEnergySeenRef.current = 0;
 
-    // 2a & 2b) Capture activeElement and caret selection when recording STARTS
-    capturedTargetRef.current = captureFocusedTarget(
-      typeof document !== 'undefined' ? document.activeElement : null
-    );
-
-    // Check microphone API availability
-    if (
-      typeof navigator === 'undefined' ||
-      !navigator.mediaDevices ||
-      typeof navigator.mediaDevices.getUserMedia !== 'function'
-    ) {
-      showErrorAndClose('Microphone unavailable');
-      return;
-    }
-
-    let stream: MediaStream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
-    } catch {
-      showErrorAndClose('Microphone unavailable');
-      return;
-    }
-
-    const audioTracks = stream.getAudioTracks();
-    if (!audioTracks || audioTracks.length === 0 || audioTracks[0].readyState === 'ended') {
-      try {
-        stream.getTracks().forEach((t) => t.stop());
-      } catch {}
-      showErrorAndClose('No audio track');
-      return;
-    }
-
-    mediaStreamRef.current = stream;
-
-    // Set up AnalyserNode (fftSize = 1024) on dedicated AudioContext so app audio never conflicts
-    try {
-      const Ctx =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (Ctx) {
-        const audioCtx = new Ctx();
-        const source = audioCtx.createMediaStreamSource(stream);
-        const analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 1024;
-        source.connect(analyser);
-        meterAudioCtxRef.current = audioCtx;
-        analyserRef.current = analyser;
-        meterTimeDataRef.current = new Float32Array(analyser.fftSize);
+      // Capture activeElement (or fall back to lastFocusedTargetRef when triggered via touch/floating button)
+      const directTarget = captureFocusedTarget(
+        typeof document !== 'undefined' ? document.activeElement : null
+      );
+      if (directTarget) {
+        capturedTargetRef.current = directTarget;
+        lastFocusedTargetRef.current = directTarget;
+      } else if (
+        preferLastFocusedTarget &&
+        lastFocusedTargetRef.current &&
+        typeof document !== 'undefined' &&
+        document.contains(lastFocusedTargetRef.current.el)
+      ) {
+        capturedTargetRef.current = lastFocusedTargetRef.current;
+      } else {
+        capturedTargetRef.current = null;
       }
-    } catch {
-      // Metering is optional if AudioContext fails
-    }
 
-    // Play start click & enter recording state
-    playDictationClick('start', settingsRef.current.clickVolume);
-    transitionToPhase('recording', 'Listening — press Ctrl+Space or Enter to finish, Escape to cancel');
+      if (
+        typeof navigator === 'undefined' ||
+        !navigator.mediaDevices ||
+        typeof navigator.mediaDevices.getUserMedia !== 'function'
+      ) {
+        showErrorAndClose('Microphone unavailable');
+        return;
+      }
 
-    // Start Web Speech API (or MediaRecorder fallback ONLY if Web Speech API is absent)
-    const SpeechRec =
-      (window as unknown as { SpeechRecognition?: any; webkitSpeechRecognition?: any }).SpeechRecognition ||
-      (window as unknown as { webkitSpeechRecognition?: any }).webkitSpeechRecognition;
+      // Start Web Speech API synchronously inside the user gesture FIRST so mobile & desktop
+      // browsers never block rec.start() or clip the first syllables of speech.
+      const SpeechRec =
+        (window as unknown as { SpeechRecognition?: any; webkitSpeechRecognition?: any }).SpeechRecognition ||
+        (window as unknown as { webkitSpeechRecognition?: any }).webkitSpeechRecognition;
 
-    if (SpeechRec) {
-      try {
-        const rec = new SpeechRec();
-        rec.interimResults = false;
-        rec.continuous = false;
-        rec.lang = (typeof navigator !== 'undefined' && navigator.language) || 'en-US';
+      let recInstance: any = null;
+      if (SpeechRec) {
+        try {
+          const rec = new SpeechRec();
+          rec.continuous = true;
+          rec.interimResults = true;
+          rec.maxAlternatives = 1;
+          rec.lang = (typeof navigator !== 'undefined' && navigator.language) || 'en-US';
 
-        rec.onresult = (event: any) => {
-          try {
-            for (let i = event.resultIndex || 0; i < event.results.length; i++) {
-              const res = event.results[i];
-              if (res && res[0] && typeof res[0].transcript === 'string') {
-                const piece = res[0].transcript.trim();
-                if (piece) transcriptsRef.current.push(piece);
+          rec.onresult = (event: any) => {
+            try {
+              const finals: string[] = [];
+              let interims = '';
+              const resultsList = event?.results;
+              if (resultsList && typeof resultsList.length === 'number') {
+                for (let i = 0; i < resultsList.length; i++) {
+                  const res = resultsList[i];
+                  if (res && res[0] && typeof res[0].transcript === 'string') {
+                    const chunk = res[0].transcript;
+                    if (res.isFinal === false) {
+                      interims += ' ' + chunk;
+                    } else {
+                      finals.push(chunk.trim());
+                    }
+                  }
+                }
               }
-            }
-          } catch {}
-        };
+              transcriptsRef.current = finals.filter(Boolean);
+              interimTranscriptRef.current = interims.trim();
+              const combined = getCombinedTranscript();
+              if (combined) {
+                setLivePreviewText(combined.slice(-34));
+              }
+            } catch {}
+          };
 
-        rec.onerror = (event: any) => {
-          const code = String(event?.error || 'unknown');
-          if (code === 'aborted') return;
-          if (phaseRef.current === 'transcribing') {
-            if (code === 'not-allowed' || code === 'service-not-allowed') {
-              showErrorAndClose('Microphone unavailable');
-            } else {
-              const joined = transcriptsRef.current.join(' ').trim();
-              if (joined) {
-                finalizeTranscript(joined);
+          rec.onerror = (event: any) => {
+            const code = String(event?.error || 'unknown');
+            if (code === 'aborted') return;
+            if (phaseRef.current === 'transcribing') {
+              if (code === 'not-allowed' || code === 'service-not-allowed') {
+                showErrorAndClose('Microphone unavailable');
               } else {
-                showErrorAndClose('No speech detected — try again');
+                finalizeTranscript(getCombinedTranscript());
+              }
+            } else if (phaseRef.current === 'recording') {
+              if (code === 'not-allowed' || code === 'service-not-allowed' || code === 'audio-capture') {
+                showErrorAndClose('Microphone unavailable');
+              } else if (code !== 'no-speech') {
+                recognitionFatalErrorRef.current = code;
               }
             }
-          } else if (phaseRef.current === 'recording') {
-            if (code === 'not-allowed' || code === 'service-not-allowed' || code === 'audio-capture') {
-              showErrorAndClose('Microphone unavailable');
-            } else if (code !== 'no-speech') {
-              recognitionFatalErrorRef.current = code;
+          };
+
+          rec.onend = () => {
+            if (phaseRef.current === 'transcribing') {
+              finalizeTranscript(getCombinedTranscript());
+            } else if (phaseRef.current === 'recording') {
+              // If user paused briefly while still in recording mode, preserve captured words
+              // and seamlessly restart continuous recognition if no fatal error occurred
+              const currentSoFar = getCombinedTranscript();
+              if (currentSoFar) {
+                accumulatedPriorTranscriptRef.current = currentSoFar;
+                transcriptsRef.current = [];
+                interimTranscriptRef.current = '';
+              }
+              if (!recognitionFatalErrorRef.current && recognitionRef.current === rec) {
+                try {
+                  rec.start();
+                  return;
+                } catch {
+                  recognitionEndedEarlyRef.current = true;
+                }
+              } else {
+                recognitionEndedEarlyRef.current = true;
+              }
             }
-          }
-        };
+          };
 
-        rec.onend = () => {
-          if (phaseRef.current === 'transcribing') {
-            const joined = transcriptsRef.current.join(' ').trim();
-            finalizeTranscript(joined);
-          } else if (phaseRef.current === 'recording') {
-            recognitionEndedEarlyRef.current = true;
-          }
-        };
-
-        recognitionRef.current = rec;
-        rec.start();
-      } catch {
-        showErrorAndClose('Speech recognizer unavailable');
+          recognitionRef.current = rec;
+          recInstance = rec;
+          rec.start();
+        } catch {
+          recognitionRef.current = null;
+        }
       }
-    } else if (typeof MediaRecorder !== 'undefined') {
+
+      let stream: MediaStream;
       try {
-        const mr = new MediaRecorder(stream);
-        mediaRecorderRef.current = mr;
-        mr.start();
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
       } catch {
-        // Ignore MediaRecorder error; fallback timer handles completion
+        if (recInstance) {
+          try {
+            recInstance.abort();
+          } catch {}
+          recognitionRef.current = null;
+        }
+        showErrorAndClose('Microphone unavailable');
+        return;
       }
-    }
-  }, [clearAllTimers, finalizeTranscript, releaseMediaAndRecognizer, showErrorAndClose, transitionToPhase]);
+
+      const audioTracks =
+        typeof stream.getAudioTracks === 'function'
+          ? stream.getAudioTracks()
+          : typeof stream.getTracks === 'function'
+          ? stream.getTracks()
+          : [];
+      if (!audioTracks || audioTracks.length === 0 || audioTracks[0].readyState === 'ended') {
+        try {
+          stream.getTracks().forEach((t) => t.stop());
+        } catch {}
+        showErrorAndClose('No audio track');
+        return;
+      }
+
+      mediaStreamRef.current = stream;
+
+      // Set up AnalyserNode (fftSize = 1024) + PCM capture buffer for free local Whisper fallback
+      try {
+        const Ctx =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (Ctx) {
+          const audioCtx = new Ctx();
+          if (audioCtx.state === 'suspended') {
+            audioCtx.resume().catch(() => {});
+          }
+          const source = audioCtx.createMediaStreamSource(stream);
+          const analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 1024;
+          source.connect(analyser);
+
+          pcmSampleRateRef.current = audioCtx.sampleRate || 16000;
+          if (typeof audioCtx.createScriptProcessor === 'function') {
+            const proc = audioCtx.createScriptProcessor(4096, 1, 1);
+            const silentGain = audioCtx.createGain();
+            silentGain.gain.value = 0;
+            proc.onaudioprocess = (ev: AudioProcessingEvent) => {
+              if (phaseRef.current !== 'recording') return;
+              try {
+                const input = ev.inputBuffer.getChannelData(0);
+                // Keep up to ~30s of audio in memory
+                if (pcmChunksRef.current.length < 360) {
+                  pcmChunksRef.current.push(new Float32Array(input));
+                }
+              } catch {}
+            };
+            source.connect(proc);
+            proc.connect(silentGain);
+            silentGain.connect(audioCtx.destination);
+            scriptProcRef.current = proc;
+          }
+
+          meterAudioCtxRef.current = audioCtx;
+          analyserRef.current = analyser;
+          meterTimeDataRef.current = new Float32Array(analyser.fftSize);
+        }
+      } catch {}
+
+      if (!SpeechRec && typeof MediaRecorder !== 'undefined') {
+        try {
+          const mr = new MediaRecorder(stream);
+          mediaRecorderRef.current = mr;
+          mr.start();
+        } catch {}
+      }
+
+      playDictationClick('start', settingsRef.current.clickVolume);
+      transitionToPhase('recording', 'Listening — speak now, press Ctrl+Space or tap to finish');
+    },
+    [
+      clearAllTimers,
+      finalizeTranscript,
+      getCombinedTranscript,
+      releaseMediaAndRecognizer,
+      showErrorAndClose,
+      transitionToPhase,
+    ]
+  );
+
+  // Listen for custom trigger events (from Floating Mic button, PiP window, or System Core)
+  useEffect(() => {
+    const onTrigger = () => {
+      if (!settingsRef.current.enabled) return;
+      if (phaseRef.current === 'recording') {
+        stopAndTranscribe();
+      } else if (
+        phaseRef.current === 'idle' ||
+        phaseRef.current === 'done' ||
+        phaseRef.current === 'error'
+      ) {
+        startListening(true);
+      }
+    };
+    window.addEventListener(VOICE_HUD_TRIGGER_EVENT, onTrigger);
+    return () => window.removeEventListener(VOICE_HUD_TRIGGER_EVENT, onTrigger);
+  }, [startListening, stopAndTranscribe]);
+
+  // Phone In-App Gesture Shortcut (works strictly inside the FLUX app; stops when app is hidden)
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+
+    let tapTimes: number[] = [];
+    const onTouchStart = (e: TouchEvent) => {
+      const ps = phoneSettingsRef.current;
+      const vs = settingsRef.current;
+      if (!vs.enabled || !ps.phoneEnabled || ps.gesture === 'floating-only') return;
+
+      const targetEl = e.target instanceof Element ? e.target : null;
+      if (targetEl && targetEl.closest('[data-voice-hud-ignore]')) return;
+
+      // Two-finger tap anywhere in app
+      if (ps.gesture === 'two-finger-tap' && e.touches.length === 2) {
+        e.preventDefault();
+        if (phaseRef.current === 'recording') {
+          stopAndTranscribe();
+        } else if (phaseRef.current === 'idle' || phaseRef.current === 'done' || phaseRef.current === 'error') {
+          startListening(true);
+        }
+        return;
+      }
+
+      if (e.touches.length !== 1) return;
+      // Ignore single-finger multi-tap if tapping directly on buttons/links
+      if (targetEl && targetEl.closest('button, a, select, [role="button"]')) return;
+
+      const now = Date.now();
+      tapTimes = tapTimes.filter((t) => now - t < 480);
+      tapTimes.push(now);
+
+      const requiredTaps = ps.gesture === 'triple-tap' ? 3 : ps.gesture === 'double-tap' ? 2 : 0;
+      if (requiredTaps > 0 && tapTimes.length >= requiredTaps) {
+        tapTimes = [];
+        if (phaseRef.current === 'recording') {
+          stopAndTranscribe();
+        } else if (phaseRef.current === 'idle' || phaseRef.current === 'done' || phaseRef.current === 'error') {
+          startListening(true);
+        }
+      }
+    };
+
+    const onVisibilityChange = () => {
+      // Strictly app-only on phone: if the user switches apps or locks screen, release microphone
+      if (document.hidden && phaseRef.current === 'recording') {
+        cancelListening();
+      }
+    };
+
+    window.addEventListener('touchstart', onTouchStart, { passive: false });
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('touchstart', onTouchStart);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [cancelListening, startListening, stopAndTranscribe]);
 
   // Global keyboard listener (capture phase so Esc / Enter / Ctrl+Space never leak into focused inputs)
   useEffect(() => {
@@ -1462,12 +1962,10 @@ export const VoiceHud: React.FC = () => {
       const currentSettings = settingsRef.current;
       if (!currentSettings.enabled) return;
 
-      // Check lock screen restriction if disabled on lock screen
       if (!currentSettings.showOnLockScreen && typeof document !== 'undefined') {
         if (document.getElementById('xor-auth-pin')) return;
       }
 
-      // Escape hatch: if inside [data-voice-hud-ignore], do nothing
       const targetEl = e.target instanceof Element ? e.target : document.activeElement;
       if (targetEl && targetEl.closest('[data-voice-hud-ignore]')) {
         return;
@@ -1475,7 +1973,6 @@ export const VoiceHud: React.FC = () => {
 
       const currentPhase = phaseRef.current;
 
-      // When listening, Enter stops & transcribes; Esc cancels immediately
       if (currentPhase === 'recording') {
         if (e.key === 'Escape' || e.code === 'Escape') {
           e.preventDefault();
@@ -1492,7 +1989,6 @@ export const VoiceHud: React.FC = () => {
       }
 
       if (matchesVoiceHudChord(e, currentSettings.hotkey)) {
-        // Always preventDefault so Ctrl+Space never types a space into the focused input
         e.preventDefault();
         e.stopPropagation();
         if (e.repeat) return;
@@ -1500,7 +1996,7 @@ export const VoiceHud: React.FC = () => {
         if (currentPhase === 'recording') {
           stopAndTranscribe();
         } else if (currentPhase === 'idle' || currentPhase === 'done' || currentPhase === 'error') {
-          startListening();
+          startListening(false);
         }
       }
     };
@@ -1523,6 +2019,64 @@ export const VoiceHud: React.FC = () => {
     };
   }, [clearAllTimers, releaseMediaAndRecognizer]);
 
+  const showFloatingMicButton =
+    settings.enabled && phoneSettings.phoneEnabled && phoneSettings.showFloatingMic;
+
+  const handleFloatingPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    // Prevent focus loss on the active <input>/<textarea> when tapping the floating mic!
+    e.preventDefault();
+    const rect = e.currentTarget.getBoundingClientRect();
+    dragStateRef.current = {
+      dragging: true,
+      moved: false,
+      startX: e.clientX,
+      startY: e.clientY,
+      origX: rect.left,
+      origY: rect.top,
+    };
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {}
+  };
+
+  const handleFloatingPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const ds = dragStateRef.current;
+    if (!ds.dragging) return;
+    const dx = e.clientX - ds.startX;
+    const dy = e.clientY - ds.startY;
+    if (Math.abs(dx) > 6 || Math.abs(dy) > 6) {
+      ds.moved = true;
+      const maxX = Math.max(60, (typeof window !== 'undefined' ? window.innerWidth : 390) - 56);
+      const maxY = Math.max(60, (typeof window !== 'undefined' ? window.innerHeight : 844) - 56);
+      const nextX = Math.max(8, Math.min(maxX, Math.round(ds.origX + dx)));
+      const nextY = Math.max(8, Math.min(maxY, Math.round(ds.origY + dy)));
+      updatePhoneSettings((prev) => ({
+        ...prev,
+        floatingPos: { x: nextX, y: nextY },
+      }));
+    }
+  };
+
+  const handleFloatingPointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const ds = dragStateRef.current;
+    if (!ds.dragging) return;
+    ds.dragging = false;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {}
+    if (!ds.moved) {
+      if (phaseRef.current === 'recording') {
+        stopAndTranscribe();
+      } else if (
+        phaseRef.current === 'idle' ||
+        phaseRef.current === 'done' ||
+        phaseRef.current === 'error'
+      ) {
+        startListening(true);
+      }
+    }
+  };
+
   return (
     <>
       {/* Separate visually-hidden polite live region for screen readers */}
@@ -1544,6 +2098,7 @@ export const VoiceHud: React.FC = () => {
         data-phase={phase}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
+        onMouseDown={(e) => e.preventDefault()}
         onClick={() => {
           if (phase === 'recording') {
             stopAndTranscribe();
@@ -1581,6 +2136,28 @@ export const VoiceHud: React.FC = () => {
             pointerEvents: 'none',
           }}
         />
+
+        {phase === 'recording' && livePreviewText && !isHovered && (
+          <div
+            style={{
+              position: 'absolute',
+              bottom: '3px',
+              left: '16px',
+              right: '16px',
+              textAlign: 'center',
+              color: '#A2BCFF',
+              fontFamily: 'var(--font-mono, monospace)',
+              fontSize: '9px',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              pointerEvents: 'none',
+              opacity: 0.9,
+            }}
+          >
+            {livePreviewText}
+          </div>
+        )}
 
         {phase === 'error' && errorMessage && (
           <div
@@ -1624,6 +2201,77 @@ export const VoiceHud: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* In-App Floating Voice Mic Trigger (Phone & PC Quick-Tap, Draggable & Focus-Preserving) */}
+      {showFloatingMicButton && (
+        <button
+          type="button"
+          data-testid="voice-hud-floating-mic"
+          data-voice-hud-ignore="true"
+          aria-label={
+            phase === 'recording'
+              ? 'Stop voice dictation'
+              : 'Start voice dictation (drag to move)'
+          }
+          title={
+            phase === 'recording'
+              ? 'Tap to stop & insert dictation'
+              : 'Tap to dictate into focused field (drag to reposition)'
+          }
+          onPointerDown={handleFloatingPointerDown}
+          onPointerMove={handleFloatingPointerMove}
+          onPointerUp={handleFloatingPointerUp}
+          style={{
+            position: 'fixed',
+            ...(phoneSettings.floatingPos
+              ? {
+                  left: `${phoneSettings.floatingPos.x}px`,
+                  top: `${phoneSettings.floatingPos.y}px`,
+                }
+              : {
+                  right: '18px',
+                  bottom: '22px',
+                }),
+            width: '44px',
+            height: '44px',
+            borderRadius: '22px',
+            zIndex: 55,
+            background: phase === 'recording' ? '#FAFAFA' : 'rgba(8,8,8,0.94)',
+            color: phase === 'recording' ? '#09090B' : '#FAFAFA',
+            border:
+              phase === 'recording'
+                ? '2px solid #A2BCFF'
+                : '1px solid rgba(255,255,255,0.14)',
+            boxShadow:
+              phase === 'recording'
+                ? '0 0 0 4px rgba(162,188,255,0.25), 0 8px 24px rgba(0,0,0,0.6)'
+                : '0 8px 24px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'grab',
+            touchAction: 'none',
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
+          }}
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+            <line x1="12" x2="12" y1="19" y2="22" />
+          </svg>
+        </button>
+      )}
     </>
   );
 };
