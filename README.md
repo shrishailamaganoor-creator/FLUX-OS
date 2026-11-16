@@ -6,7 +6,7 @@
 - **Repository:** [https://github.com/shrishailamaganoor-creator/FLUX-OS](https://github.com/shrishailamaganoor-creator/FLUX-OS)
 - **Architecture:** React 19 + TypeScript + Vite + Tailwind CSS v4 (plus precompiled static bundle in `./compiled/`)
 - **Persistence:** 100% Local-First (`localStorage` + `IndexedDB`) · Zero Backend · Zero Cloud Database · `$0` Operating Cost
-- **Offline & Installable:** Progressive Web App (`manifest.webmanifest`, clean installed app title **`FLUX`**, Network-First Service Worker `sw.js` `flux-v3.4.0`, and smart single-button device installer in **System Core**)
+- **Offline & Installable:** Progressive Web App (`manifest.webmanifest`, clean installed app title **`FLUX`**, Network-First Service Worker `sw.js` `flux-v3.6.0`, and smart single-button device installer in **System Core**)
 - **Design System:** 2 Calibrated Engineering Themes (`Direction A: Obsidian Precision`, `Direction B: Editorial Paper`)
 
 ---
@@ -79,6 +79,9 @@ Most student productivity tools are passive containers—blank note pages or gen
     - **Startup Security (`ACCESS SECURITY // STARTUP PASSWORD & PIN`):** Keep, change/update, or **remove (turn off)** the startup password/PIN (`XOR_BIT_AUTH_V1`). When removed, FLUX opens directly without asking for a PIN.
     - **Smart Device Installation (`DEVICE INSTALLATION // WEB APP`):** Single `Install FLUX App` card shown only when running in a browser and the app is not yet installed.
     - **Sidebar Module Visibility Manager**, **2 Engineering Themes (`Obsidian Precision` & `Editorial Paper`)**, and **Operator Identity & Tactile Audio**.
+    - **Voice Dictation HUD (`VOICE DICTATION // ZERO-SETUP HUD` — `src/components/VoiceHud.tsx`):**
+      - **On by Default (`Ctrl + Space`):** Top-center `52px` Obsidian pill with a `43 × 9` braided dot-matrix waveform driven by live microphone RMS + `0.6s` phosphor trail, analytic damped spring physics (`duration = 0.30s`, `bounce = 0.15`), synthesized Web Audio mechanical clicks, and verified read-back text insertion into any focused `<input>`, `<textarea>`, or `contenteditable` field (including the PIN/lock screen).
+      - **Configurable in System Core (`flux.voiceHud.v1`):** Customize the keyboard shortcut with live conflict/bare-key validation, reset to `Ctrl + Space`, adjust dictation click volume (`0–100%`), toggle lock-screen dictation, and run a 3-second live microphone level test.
     - **Multi-JSON Merge Engine & Workspace Slot Manager (`LOCAL STORAGE VAULT`):**
       - **`+ Merge / Add JSON Files (1, 2, or Multiple)`:** Select 2 or more `.json` files at once—or upload them one after another—to deep-merge courses, missions, transactions, habits, Dayflow schedules, and IndexedDB media without losing or overwriting existing items (automatically resolves colliding IDs across files).
       - **`Loaded JSON Files & Workspace Slots`:** Stores up to 8 imported or saved JSON workspaces (`FLUX_JSON_SLOTS_V1`) so you can **Combine All Loaded JSONs**, **Merge** any slot into the active app, or **Switch** exclusively to a specific JSON file anytime.
@@ -92,6 +95,7 @@ Most student productivity tools are passive containers—blank note pages or gen
 
 | Shortcut | Scope | Action |
 | :--- | :--- | :--- |
+| `Ctrl + Space` *(customizable in System Core)* | Global *(including PIN Lock Screen)* | **Voice Dictation HUD** — press once to start listening (`Enter` or second press to transcribe, verify, and insert into the focused field; `Esc` to cancel). |
 | `Ctrl + K` / `⌘ + K` | Global | Toggle the **Command Palette** (jump to any module or search courses, Dayflow blocks, missions, projects, and Innovation Canvas ideas). |
 | `/` | Global *(outside inputs)* | Open the **Command Palette** immediately. |
 | `1` – `9` | Global *(outside inputs)* | Jump directly to the 1st through 9th visible sidebar modules (`1` Today, `2` Dayflow, `3` Academy, `4` Wallet, `5` Innovation Canvas, `6` Habit Matrix, `7` Focus Discipline, `8` Habit Design, `9` Study Vault). |

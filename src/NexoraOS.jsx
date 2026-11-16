@@ -24,6 +24,14 @@ import {
   normalizeDayflowState,
   mergeDayflowStates,
 } from "./utils/dayflowState";
+import {
+  useVoiceHudSettings,
+  formatHotkeyChips,
+  validateCapturedShortcut,
+  DEFAULT_VOICE_HUD_SETTINGS,
+  DEFAULT_VOICE_HUD_HOTKEY,
+  playDictationClick,
+} from "./components/VoiceHud";
 
 const NexoraContext = createContext(null);
 
@@ -1669,6 +1677,36 @@ const NexoraContext = createContext(null);
                       <span>Commit</span>
                     </button>
                   </form>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t" style={{ borderColor: 'var(--border-hairline)' }}>
+                    <div>
+                      <label htmlFor="flux-quick-scratchpad" className="font-mono text-[10px] uppercase tracking-wider block mb-1" style={{ color: 'var(--ink-muted)' }}>
+                        QUICK SCRATCHPAD (TEXTAREA)
+                      </label>
+                      <textarea
+                        id="flux-quick-scratchpad"
+                        aria-label="Quick Scratchpad"
+                        rows={2}
+                        placeholder="Scratchpad note (press Ctrl+Space to dictate)..."
+                        defaultValue=""
+                        className="w-full arch-input rounded-lg px-3 py-1.5 text-xs font-sans resize-none"
+                      />
+                    </div>
+                    <div>
+                      <span className="font-mono text-[10px] uppercase tracking-wider block mb-1" style={{ color: 'var(--ink-muted)' }}>
+                        LIVE NOTE PAD (CONTENTEDITABLE)
+                      </span>
+                      <div
+                        id="flux-contenteditable-note"
+                        role="textbox"
+                        aria-label="Live Note Pad"
+                        contentEditable={true}
+                        suppressContentEditableWarning={true}
+                        data-placeholder="Click & press Ctrl+Space to dictate..."
+                        className="w-full min-h-[50px] arch-input rounded-lg px-3 py-1.5 text-xs font-sans focus:outline-none"
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 <div className="arch-panel rounded-xl p-5 space-y-3.5">
@@ -7275,6 +7313,8 @@ const NexoraContext = createContext(null);
               </div>
             </div>
 
+            <VoiceDictationSettings onNotify={notify} />
+
             <StartupPasswordManager
               operatorName={data.profile.name}
               onNotify={notify}
@@ -7464,6 +7504,344 @@ const NexoraContext = createContext(null);
                       );
                     })}
                   </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      // Voice Dictation HUD Settings inside System Core
+      const VoiceDictationSettings = ({ onNotify }) => {
+        const [vhSettings, updateVhSettings] = useVoiceHudSettings();
+        const [capturing, setCapturing] = useState(false);
+        const [captureWarning, setCaptureWarning] = useState('');
+        const [micPermission, setMicPermission] = useState('not asked'); // 'granted' | 'denied' | 'not asked'
+        const [testingMic, setTestingMic] = useState(false);
+        const [testMicLevel, setTestMicLevel] = useState(0);
+        const testCleanupRef = useRef(null);
+
+        const refreshMicPermission = useCallback(async () => {
+          try {
+            if (typeof navigator !== 'undefined' && navigator.permissions && navigator.permissions.query) {
+              const status = await navigator.permissions.query({ name: 'microphone' });
+              const mapState = (s) => (s === 'granted' ? 'granted' : s === 'denied' ? 'denied' : 'not asked');
+              setMicPermission(mapState(status.state));
+              status.onchange = () => setMicPermission(mapState(status.state));
+            }
+          } catch {
+            // Browser does not support permissions.query('microphone')
+          }
+        }, []);
+
+        useEffect(() => {
+          refreshMicPermission();
+          return () => {
+            if (testCleanupRef.current) {
+              testCleanupRef.current();
+              testCleanupRef.current = null;
+            }
+          };
+        }, [refreshMicPermission]);
+
+        useEffect(() => {
+          if (!capturing) return undefined;
+          const onKeyDown = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.key === 'Escape' || e.code === 'Escape') {
+              setCapturing(false);
+              setCaptureWarning('');
+              return;
+            }
+            const res = validateCapturedShortcut(e);
+            if (!res.ok) {
+              if (res.reason !== 'modifier_only') {
+                setCaptureWarning(res.message);
+              }
+              return;
+            }
+            updateVhSettings((prev) => ({ ...prev, hotkey: res.hotkey }));
+            setCapturing(false);
+            setCaptureWarning('');
+            if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+              document.activeElement.blur();
+            }
+            if (onNotify) {
+              onNotify(`Voice dictation shortcut set to ${formatHotkeyChips(res.hotkey).join(' + ')}`);
+            }
+          };
+          window.addEventListener('keydown', onKeyDown, { capture: true });
+          return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
+        }, [capturing, updateVhSettings, onNotify]);
+
+        const handleTestMic = async () => {
+          if (testingMic) {
+            if (testCleanupRef.current) {
+              testCleanupRef.current();
+              testCleanupRef.current = null;
+            }
+            setTestingMic(false);
+            setTestMicLevel(0);
+            return;
+          }
+
+          if (typeof navigator === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            setMicPermission('denied');
+            return;
+          }
+
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            setMicPermission('granted');
+            setTestingMic(true);
+
+            const Ctx = window.AudioContext || window.webkitAudioContext;
+            const audioCtx = Ctx ? new Ctx() : null;
+            const analyser = audioCtx ? audioCtx.createAnalyser() : null;
+            if (audioCtx && analyser) {
+              analyser.fftSize = 1024;
+              const src = audioCtx.createMediaStreamSource(stream);
+              src.connect(analyser);
+            }
+            const buf = analyser ? new Float32Array(analyser.fftSize) : null;
+            let rafId = null;
+            let smoothed = 0;
+
+            const loop = () => {
+              if (analyser && buf) {
+                analyser.getFloatTimeDomainData(buf);
+                let sum = 0;
+                for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+                const rms = Math.sqrt(sum / buf.length);
+                const db = 20 * Math.log10(Math.max(rms, 1e-7));
+                const norm = Math.max(0, Math.min(1, (db + 60) / 50));
+                smoothed = smoothed + (norm - smoothed) * (norm > smoothed ? 0.35 : 0.15);
+                setTestMicLevel(Math.round(smoothed * 100));
+              }
+              rafId = window.requestAnimationFrame(loop);
+            };
+            rafId = window.requestAnimationFrame(loop);
+
+            const cleanup = () => {
+              if (rafId) window.cancelAnimationFrame(rafId);
+              try {
+                stream.getTracks().forEach((t) => t.stop());
+              } catch {}
+              if (audioCtx) {
+                try {
+                  audioCtx.close().catch(() => {});
+                } catch {}
+              }
+              setTestingMic(false);
+              setTestMicLevel(0);
+            };
+
+            testCleanupRef.current = cleanup;
+            window.setTimeout(() => {
+              if (testCleanupRef.current === cleanup) {
+                cleanup();
+                testCleanupRef.current = null;
+              }
+            }, 3000);
+          } catch {
+            setMicPermission('denied');
+            setTestingMic(false);
+            setTestMicLevel(0);
+          }
+        };
+
+        const chips = formatHotkeyChips(vhSettings.hotkey);
+
+        return (
+          <div
+            className="arch-panel p-5 rounded-xl space-y-4"
+            data-testid="voice-dictation-settings"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="font-mono text-xs uppercase" style={{ color: 'var(--ink-muted)' }}>
+                  VOICE DICTATION // ZERO-SETUP HUD
+                </div>
+                <p className="text-[11px] mt-1" style={{ color: 'var(--ink-secondary)' }}>
+                  Press {chips.join(' + ')} anywhere to dictate into the focused field. Press again or Enter to insert, Esc to cancel.
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-mono">
+                  <input
+                    type="checkbox"
+                    aria-label="Voice dictation"
+                    checked={vhSettings.enabled}
+                    onChange={(e) =>
+                      updateVhSettings((prev) => ({ ...prev, enabled: e.target.checked }))
+                    }
+                    className="w-4 h-4 rounded cursor-pointer accent-current"
+                  />
+                  <span>Voice dictation</span>
+                </label>
+                <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-mono" style={{ color: 'var(--ink-secondary)' }}>
+                  <input
+                    type="checkbox"
+                    aria-label="Allow on lock screen"
+                    checked={vhSettings.showOnLockScreen}
+                    onChange={(e) =>
+                      updateVhSettings((prev) => ({ ...prev, showOnLockScreen: e.target.checked }))
+                    }
+                    className="w-4 h-4 rounded cursor-pointer accent-current"
+                  />
+                  <span>Lock screen</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Shortcut & Capture Row */}
+            <div
+              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3"
+              style={{ backgroundColor: 'var(--bg-canvas)', borderColor: 'var(--border-hairline)' }}
+              data-voice-hud-ignore={capturing ? 'true' : undefined}
+            >
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-mono text-[11px] uppercase" style={{ color: 'var(--ink-muted)' }}>
+                  Shortcut:
+                </span>
+                <div className="inline-flex items-center gap-1" data-testid="voice-hud-shortcut-chips">
+                  {chips.map((chip, idx) => (
+                    <kbd
+                      key={idx}
+                      className="px-2 py-0.5 rounded border font-mono text-xs font-semibold"
+                      style={{
+                        backgroundColor: 'var(--bg-elevated)',
+                        borderColor: 'var(--border-elevated)',
+                        color: 'var(--ink-primary)',
+                      }}
+                    >
+                      [{chip}]
+                    </kbd>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCapturing((c) => !c);
+                    setCaptureWarning('');
+                  }}
+                  className={`px-3 py-1.5 rounded-md text-xs font-mono ${
+                    capturing ? 'arch-btn-primary' : 'arch-btn-ghost'
+                  }`}
+                >
+                  {capturing ? 'Press new shortcut... (Esc to cancel)' : 'Change shortcut'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCapturing(false);
+                    setCaptureWarning('');
+                    updateVhSettings((prev) => ({
+                      ...prev,
+                      hotkey: { ...DEFAULT_VOICE_HUD_HOTKEY },
+                    }));
+                  }}
+                  className="arch-btn-ghost px-3 py-1.5 rounded-md text-xs font-mono"
+                >
+                  Reset to defaults
+                </button>
+              </div>
+            </div>
+
+            {captureWarning && (
+              <div
+                role="alert"
+                data-testid="voice-hud-capture-warning"
+                className="text-xs font-mono rounded-md px-3 py-2 border"
+                style={{
+                  color: '#FF6B5A',
+                  borderColor: 'rgba(255,107,90,0.35)',
+                  backgroundColor: 'rgba(255,107,90,0.08)',
+                }}
+              >
+                {captureWarning}
+              </div>
+            )}
+
+            {/* Click Volume & Microphone Row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div
+                className="rounded-lg border p-3 flex flex-col justify-between gap-2"
+                style={{ backgroundColor: 'var(--bg-canvas)', borderColor: 'var(--border-hairline)' }}
+              >
+                <div className="flex items-center justify-between text-xs font-mono">
+                  <label htmlFor="flux-dictation-volume" style={{ color: 'var(--ink-muted)' }}>
+                    Dictation click volume
+                  </label>
+                  <span className="tabular-nums" style={{ color: 'var(--ink-primary)' }}>
+                    {vhSettings.clickVolume}%
+                  </span>
+                </div>
+                <input
+                  id="flux-dictation-volume"
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={vhSettings.clickVolume}
+                  onChange={(e) => {
+                    const nextVol = Number(e.target.value);
+                    updateVhSettings((prev) => ({ ...prev, clickVolume: nextVol }));
+                  }}
+                  onMouseUp={() => playDictationClick('start', vhSettings.clickVolume)}
+                  aria-label="Dictation click volume"
+                  className="w-full cursor-pointer accent-current"
+                />
+              </div>
+
+              <div
+                className="rounded-lg border p-3 flex flex-col justify-between gap-2"
+                style={{ backgroundColor: 'var(--bg-canvas)', borderColor: 'var(--border-hairline)' }}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="font-mono text-xs flex items-center gap-2">
+                    <span style={{ color: 'var(--ink-muted)' }}>Microphone:</span>
+                    <span
+                      data-testid="voice-hud-mic-status"
+                      className="uppercase font-semibold"
+                      style={{
+                        color:
+                          micPermission === 'granted'
+                            ? 'var(--status-ok)'
+                            : micPermission === 'denied'
+                            ? '#FF6B5A'
+                            : 'var(--ink-primary)',
+                      }}
+                    >
+                      {micPermission}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleTestMic}
+                    className="arch-btn-ghost px-2.5 py-1 rounded text-[11px] font-mono"
+                  >
+                    {testingMic ? 'Testing (3s)...' : 'Test microphone'}
+                  </button>
+                </div>
+
+                <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-elevated)' }}>
+                  <div
+                    className="h-full transition-all duration-75"
+                    style={{
+                      width: `${testingMic ? Math.max(6, testMicLevel) : 0}%`,
+                      backgroundColor: '#A2BCFF',
+                    }}
+                  />
+                </div>
+
+                {micPermission === 'denied' && (
+                  <p className="text-[10px] font-mono" style={{ color: '#FF6B5A' }}>
+                    Microphone blocked — click the browser&apos;s site settings icon in the address bar to allow access.
+                  </p>
                 )}
               </div>
             </div>
@@ -11373,20 +11751,58 @@ const NexoraContext = createContext(null);
                 </div>
 
                 {!sidebarCollapsed && (
-                  <button
-                    type="button"
-                    onClick={() => setCmdOpen(true)}
-                    className="w-full arch-input rounded-lg px-2.5 py-2 text-xs font-sans flex items-center justify-between"
-                    style={{ color: 'var(--ink-secondary)' }}
-                  >
-                    <span className="inline-flex items-center gap-2">
+                  <div className="space-y-1.5">
+                    <div
+                      className="w-full arch-input rounded-lg px-2.5 py-1.5 text-xs font-sans flex items-center justify-between gap-1.5"
+                      style={{ color: 'var(--ink-secondary)' }}
+                    >
                       <Icon name="search" size={13} />
-                      <span>Command / Search...</span>
-                    </span>
-                    <kbd className="font-mono text-[10px] border rounded px-1.5 py-0.5" style={{ backgroundColor: 'var(--bg-canvas)', borderColor: 'var(--border-elevated)', color: 'var(--ink-muted)' }}>
-                      ⌘K
-                    </kbd>
-                  </button>
+                      <input
+                        type="search"
+                        aria-label="Command / Search"
+                        placeholder="Command / Search..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && searchResults.length > 0) {
+                            setActiveTab(searchResults[0].tab);
+                          }
+                        }}
+                        className="w-full bg-transparent text-xs font-sans focus:outline-none"
+                        style={{ color: 'var(--ink-primary)' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setCmdOpen(true)}
+                        title="Open Command Palette (Ctrl+K)"
+                        className="font-mono text-[10px] border rounded px-1.5 py-0.5 shrink-0"
+                        style={{ backgroundColor: 'var(--bg-canvas)', borderColor: 'var(--border-elevated)', color: 'var(--ink-muted)' }}
+                      >
+                        ⌘K
+                      </button>
+                    </div>
+                    {searchQuery.trim() && !cmdOpen && searchResults.length > 0 && (
+                      <div
+                        className="rounded-lg border p-1.5 space-y-1 max-h-40 overflow-y-auto"
+                        style={{ backgroundColor: 'var(--bg-canvas)', borderColor: 'var(--border-hairline)' }}
+                      >
+                        {searchResults.slice(0, 5).map((r, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => {
+                              setActiveTab(r.tab);
+                              setSearchQuery('');
+                            }}
+                            className="w-full px-2 py-1 rounded arch-btn-ghost flex items-center justify-between text-[11px] font-mono text-left"
+                          >
+                            <span className="truncate">{r.title}</span>
+                            <span className="text-[9px] ml-2 shrink-0" style={{ color: 'var(--ink-muted)' }}>{r.module}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 <nav className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-x-visible pb-1 lg:pb-0">
