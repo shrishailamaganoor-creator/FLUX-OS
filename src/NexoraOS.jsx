@@ -19,17 +19,13 @@ import {
 import { DayflowView } from "./components/DayflowView";
 import {
   DAYFLOW_STORAGE_KEY,
-  SUBMISSION_KINDS,
   loadDayflowState,
   saveDayflowState,
   normalizeDayflowState,
   mergeDayflowStates,
   getSubmissionWindowTelemetry,
   getSortedSubmissionsByClosestWindow,
-  upsertDayflowSubmission,
-  deleteDayflowSubmission,
   toggleDayflowSubmissionComplete,
-  slotSubmissionPrepIntoFreeGap,
   formatTime12h,
 } from "./utils/dayflowState";
 import {
@@ -1350,19 +1346,9 @@ const NexoraContext = createContext(null);
           setData((prev) => ({ ...prev, top3: { date: todayKey, items } }));
         };
 
-        // Sync with Dayflow Exams & Assignment Submissions for Today module + Slide Bar
+        // Sync with Dayflow Exams & Assignment Submissions for Today 2-slide card & Priority Mission Queue
         const [dfState, setDfState] = useState(() => loadDayflowState());
-        const [todaySlideOpen, setTodaySlideOpen] = useState(false);
-        const [editingSubId, setEditingSubId] = useState(null);
-        const [subTitle, setSubTitle] = useState('');
-        const [subSubject, setSubSubject] = useState('');
-        const [subKind, setSubKind] = useState('assignment');
-        const [subGivenDate, setSubGivenDate] = useState(todayKey);
-        const [subDueDate, setSubDueDate] = useState(todayKey);
-        const [subDueTime, setSubDueTime] = useState('17:00');
-        const [subDuration, setSubDuration] = useState(60);
-        const [subAutoSchedule, setSubAutoSchedule] = useState(true);
-        const [subNote, setSubNote] = useState('');
+        const [todayCardSlide, setTodayCardSlide] = useState('top3'); // 'top3' | 'submissions'
 
         useEffect(() => {
           const refreshDf = () => setDfState(loadDayflowState());
@@ -1383,67 +1369,19 @@ const NexoraContext = createContext(null);
           () => sortedTodaySubmissions.filter((s) => !s.completed),
           [sortedTodaySubmissions]
         );
+        // Nearby submissions/exams (overdue, due today, or within 7 days)
+        const nearbyTodaySubmissions = useMemo(
+          () =>
+            pendingTodaySubmissions.filter((s) => {
+              const win = getSubmissionWindowTelemetry(s, todayKey, nowMinsToday);
+              return win.daysRemaining <= 7;
+            }),
+          [pendingTodaySubmissions, todayKey, nowMinsToday]
+        );
 
         const commitDayflowUpdate = (nextDf) => {
           setDfState(nextDf);
           saveDayflowState(nextDf, true);
-        };
-
-        const resetTodaySubForm = () => {
-          setEditingSubId(null);
-          setSubTitle('');
-          setSubSubject('');
-          setSubKind('assignment');
-          setSubGivenDate(todayKey);
-          setSubDueDate(todayKey);
-          setSubDueTime('17:00');
-          setSubDuration(60);
-          setSubAutoSchedule(true);
-          setSubNote('');
-        };
-
-        const openModifySubmissionInToday = (sub) => {
-          playTactileClick(data.profile.soundEnabled, 820, 12);
-          setEditingSubId(sub.id);
-          setSubTitle(sub.title || '');
-          setSubSubject(sub.subject || '');
-          setSubKind(sub.kind || 'assignment');
-          setSubGivenDate(sub.givenDate || todayKey);
-          setSubDueDate(sub.dueDate || todayKey);
-          setSubDueTime(sub.dueTime || '17:00');
-          setSubDuration(sub.durationMin || 60);
-          setSubAutoSchedule(sub.autoSchedule !== false);
-          setSubNote(sub.note || '');
-          setTodaySlideOpen(true);
-        };
-
-        const handleSaveTodaySubmission = (e) => {
-          e.preventDefault();
-          if (!subTitle.trim()) return;
-          playTactileClick(data.profile.soundEnabled, 920, 14);
-          const wasEditing = Boolean(editingSubId);
-          const nextDf = upsertDayflowSubmission(dfState, {
-            id: editingSubId || undefined,
-            title: subTitle.trim(),
-            subject: subSubject.trim() || undefined,
-            kind: subKind,
-            givenDate: subGivenDate || todayKey,
-            dueDate: subDueDate || todayKey,
-            dueTime: subDueTime || '17:00',
-            durationMin: Math.max(15, Number(subDuration) || 60),
-            completed: wasEditing
-              ? Boolean((dfState.submissions || []).find((s) => s.id === editingSubId)?.completed)
-              : false,
-            autoSchedule: subAutoSchedule,
-            note: subNote.trim() || undefined,
-          });
-          commitDayflowUpdate(nextDf);
-          notify(
-            wasEditing
-              ? `Updated "${subTitle.trim()}" (Given: ${subGivenDate} → Due: ${subDueDate} ${subDueTime})`
-              : `Added "${subTitle.trim()}" to Schedule & Today Queue`
-          );
-          resetTodaySubForm();
         };
 
         const handlePinSubmissionToTop3 = (sub) => {
@@ -1453,32 +1391,8 @@ const NexoraContext = createContext(null);
           const emptyIdx = slots.findIndex((s) => !s.text.trim());
           const targetIdx = emptyIdx !== -1 ? emptyIdx : 0;
           updateTop3(targetIdx, { text: label, done: Boolean(sub.completed) });
+          setTodayCardSlide('top3');
           notify(`Pinned "${sub.title}" to Priority 0${targetIdx + 1}`);
-        };
-
-        const handleAutoFillTop3FromClosest = () => {
-          playTactileClick(data.profile.soundEnabled, 920, 14);
-          if (pendingTodaySubmissions.length === 0) return;
-          const nextItems = slots.map((s, idx) => {
-            const candidate = pendingTodaySubmissions[idx];
-            if (!candidate) return s;
-            const win = getSubmissionWindowTelemetry(candidate, todayKey, nowMinsToday);
-            return {
-              text: `[${win.kindMeta.shortBadge}] ${candidate.title}${candidate.subject ? ` (${candidate.subject})` : ''} • Due ${candidate.dueDate}`,
-              done: false,
-            };
-          });
-          setData((prev) => ({ ...prev, top3: { date: todayKey, items: nextItems } }));
-          notify('Auto-filled Top 3 Priorities from closest upcoming deadlines');
-        };
-
-        const handleSlotSubIntoTodaySchedule = (subId) => {
-          playTactileClick(data.profile.soundEnabled, 880, 12);
-          const { nextState, slottedTask } = slotSubmissionPrepIntoFreeGap(dfState, subId, todayKey);
-          if (slottedTask) {
-            commitDayflowUpdate(nextState);
-            notify(`Scheduled "${slottedTask.title}" at ${formatTime12h(slottedTask.startTime)} in Dayflow`);
-          }
         };
 
         const handleToggleSubDoneInToday = (subId) => {
@@ -1488,14 +1402,6 @@ const NexoraContext = createContext(null);
           if (res.nowCompleted) {
             awardXP(25, 'Completed Exam / Assignment Submission');
           }
-        };
-
-        const handleDeleteSubInToday = (subId) => {
-          playTactileClick(data.profile.soundEnabled, 520, 12);
-          const nextDf = deleteDayflowSubmission(dfState, subId);
-          commitDayflowUpdate(nextDf);
-          if (editingSubId === subId) resetTodaySubForm();
-          notify('Removed submission from queue & schedule');
         };
 
         const shields = data.habitShields || {};
@@ -1631,545 +1537,172 @@ const NexoraContext = createContext(null);
               </div>
             </div>
 
-            {/* Row 2: Top 3 Priorities + Habit Dot-Matrix Streak + Countdown Readout */}
+            {/* Row 2: Top 3 Priorities / Submissions Slide (2-Slide Hub Switcher) + Habit Dot-Matrix Streak + Countdown Readout */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
               <div className="lg:col-span-5 arch-panel rounded-xl p-5 space-y-3.5 relative">
                 <Crosshair className="absolute top-2.5 right-2.5" />
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-mono text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--ink-muted)' }}>
-                    TODAY // TOP 3 PRIORITIES
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      data-testid="today-submissions-slide-toggle"
-                      onClick={() => setTodaySlideOpen((o) => !o)}
-                      className={`font-mono text-[10px] px-2.5 py-0.5 rounded border transition inline-flex items-center gap-1.5 ${
-                        todaySlideOpen ? 'arch-btn-primary' : 'arch-btn-ghost'
-                      }`}
-                      style={
-                        !todaySlideOpen
-                          ? {
-                              borderColor: pendingTodaySubmissions.length > 0 ? '#F59E0B' : 'var(--border-elevated)',
-                              color: pendingTodaySubmissions.length > 0 ? '#F59E0B' : 'var(--ink-secondary)',
-                            }
-                          : undefined
-                      }
-                      title="Slide open Closest-Window Exams & Assignment Submissions bar"
-                    >
-                      <span>Submissions Slide</span>
-                      <span className="px-1 rounded text-[9px] border tabular-nums">
+
+                {/* Hub-Style 2-Slide Switcher Bar (Slide 1: Top 3 Priorities | Slide 2: Submissions Slide) */}
+                <div
+                  className="flex flex-wrap items-center gap-1.5 p-1 rounded-lg border"
+                  style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-hairline)' }}
+                  data-testid="today-priority-hub-switcher"
+                >
+                  <button
+                    type="button"
+                    data-testid="today-slide-top3-btn"
+                    onClick={() => setTodayCardSlide('top3')}
+                    className={`px-3 py-1 rounded-md text-xs font-mono inline-flex items-center gap-1.5 transition ${
+                      todayCardSlide === 'top3' ? 'arch-btn-primary' : 'arch-btn-ghost border-transparent'
+                    }`}
+                  >
+                    <Icon name="missions" size={12} />
+                    <span>Top 3 Priorities</span>
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="today-submissions-slide-toggle"
+                    onClick={() => setTodayCardSlide('submissions')}
+                    className={`px-3 py-1 rounded-md text-xs font-mono inline-flex items-center gap-1.5 transition ${
+                      todayCardSlide === 'submissions' ? 'arch-btn-primary' : 'arch-btn-ghost border-transparent'
+                    }`}
+                  >
+                    <Icon name="academy" size={12} />
+                    <span>Submissions Slide</span>
+                    {pendingTodaySubmissions.length > 0 && (
+                      <span
+                        className="px-1.5 py-0.2 rounded text-[10px] border tabular-nums"
+                        style={{
+                          borderColor: todayCardSlide === 'submissions' ? 'currentColor' : '#F59E0B',
+                          color: todayCardSlide === 'submissions' ? 'currentColor' : '#F59E0B',
+                        }}
+                      >
                         {pendingTodaySubmissions.length}
                       </span>
-                    </button>
-                    <span className="font-mono text-[11px] tabular-nums px-2 py-0.5 rounded border" style={{ backgroundColor: 'var(--bg-elevated)', borderColor: 'var(--border-elevated)', color: completedTop3Count > 0 ? 'var(--ink-primary)' : 'var(--ink-muted)' }}>
-                      {completedTop3Count} / 3 LOCKED
-                    </span>
-                  </div>
+                    )}
+                  </button>
                 </div>
-                <div className="space-y-2.5">
-                  {slots.map((s, i) => (
-                    <div key={i} className="flex items-center gap-2.5">
-                      <span className="font-mono text-[10px] tabular-nums w-5 shrink-0" style={{ color: s.done ? 'var(--ink-primary)' : 'var(--ink-dim)' }}>
-                        0{i + 1}
+
+                {todayCardSlide === 'top3' ? (
+                  <>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--ink-muted)' }}>
+                        TODAY // TOP 3 PRIORITIES
                       </span>
-                      <input
-                        type="checkbox"
-                        checked={s.done}
-                        onChange={() => updateTop3(i, { done: !s.done })}
-                        aria-label={`Mark Priority ${i + 1} complete`}
-                        className="w-4 h-4 rounded cursor-pointer shrink-0"
-                      />
-                      <input
-                        value={s.text}
-                        onChange={(e) => updateTop3(i, { text: e.target.value })}
-                        placeholder={`Priority ${i + 1}`}
-                        className={`flex-1 arch-input rounded-lg px-3 py-2 text-xs font-sans ${s.done ? 'line-through opacity-50' : ''}`}
-                      />
+                      <span className="font-mono text-[11px] tabular-nums px-2 py-0.5 rounded border" style={{ backgroundColor: 'var(--bg-elevated)', borderColor: 'var(--border-elevated)', color: completedTop3Count > 0 ? 'var(--ink-primary)' : 'var(--ink-muted)' }}>
+                        {completedTop3Count} / 3 LOCKED
+                      </span>
                     </div>
-                  ))}
-                </div>
-
-                {/* Automatic Closest-Window Submissions & Exams Pop-Up inside Today */}
-                <div
-                  className="pt-3 border-t space-y-2"
-                  style={{ borderColor: 'var(--border-hairline)' }}
-                  data-testid="today-closest-submissions-strip"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-mono text-[10px] uppercase tracking-wider flex items-center gap-1.5" style={{ color: pendingTodaySubmissions.length > 0 ? '#F59E0B' : 'var(--ink-muted)' }}>
-                      <span
-                        className="w-1.5 h-1.5 rounded-full"
-                        style={{ backgroundColor: pendingTodaySubmissions.length > 0 ? '#F59E0B' : 'var(--ink-dim)' }}
-                      />
-                      <span>CLOSEST WINDOW // DUE &amp; EXAMS ({pendingTodaySubmissions.length})</span>
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      {pendingTodaySubmissions.length > 0 && (
-                        <button
-                          type="button"
-                          data-testid="today-autofill-top3-btn"
-                          onClick={handleAutoFillTop3FromClosest}
-                          className="arch-btn-ghost px-2 py-0.5 rounded text-[10px] font-mono"
-                          style={{ color: '#F59E0B' }}
-                          title="Fill Top 3 Priorities from closest upcoming exams & assignments"
-                        >
-                          Auto-Fill Top 3
-                        </button>
-                      )}
+                    <div className="space-y-2.5">
+                      {slots.map((s, i) => (
+                        <div key={i} className="flex items-center gap-2.5">
+                          <span className="font-mono text-[10px] tabular-nums w-5 shrink-0" style={{ color: s.done ? 'var(--ink-primary)' : 'var(--ink-dim)' }}>
+                            0{i + 1}
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={s.done}
+                            onChange={() => updateTop3(i, { done: !s.done })}
+                            aria-label={`Mark Priority ${i + 1} complete`}
+                            className="w-4 h-4 rounded cursor-pointer shrink-0"
+                          />
+                          <input
+                            value={s.text}
+                            onChange={(e) => updateTop3(i, { text: e.target.value })}
+                            placeholder={`Priority ${i + 1}`}
+                            className={`flex-1 arch-input rounded-lg px-3 py-2 text-xs font-sans ${s.done ? 'line-through opacity-50' : ''}`}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <div className="space-y-3" data-testid="today-submissions-slide-view">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--ink-muted)' }}>
+                        CLOSEST WINDOW // EXAMS &amp; SUBMISSIONS
+                      </span>
                       <button
                         type="button"
-                        onClick={() => {
-                          resetTodaySubForm();
-                          setTodaySlideOpen(true);
-                        }}
-                        className="arch-btn-ghost px-2 py-0.5 rounded text-[10px] font-mono"
-                      >
-                        + Add / Slide Bar &rarr;
-                      </button>
-                    </div>
-                  </div>
-
-                  {pendingTodaySubmissions.length === 0 ? (
-                    <div
-                      className="rounded-lg border border-dashed px-3 py-2 flex items-center justify-between gap-2 text-[11px] font-mono"
-                      style={{ borderColor: 'var(--border-elevated)', color: 'var(--ink-muted)' }}
-                    >
-                      <span>No pending exams or assignment submissions in closest window.</span>
-                      <button
-                        type="button"
-                        onClick={() => setTodaySlideOpen(true)}
-                        className="underline shrink-0"
+                        onClick={() => setActiveTab('dayflow')}
+                        className="font-mono text-[11px] hover:underline"
                         style={{ color: 'var(--ink-primary)' }}
                       >
-                        Open Slide Bar
+                        Manage in Dayflow &rarr;
                       </button>
                     </div>
-                  ) : (
-                    <div className="space-y-1.5 max-h-44 overflow-y-auto pr-0.5">
-                      {pendingTodaySubmissions.slice(0, 3).map((sub) => {
-                        const win = getSubmissionWindowTelemetry(sub, todayKey, nowMinsToday);
-                        return (
-                          <div
-                            key={sub.id}
-                            data-testid="today-popup-submission-item"
-                            className="p-2.5 rounded-lg border space-y-1.5"
-                            style={{
-                              backgroundColor: 'var(--bg-canvas)',
-                              borderTopColor: 'var(--border-hairline)',
-                              borderRightColor: 'var(--border-hairline)',
-                              borderBottomColor: 'var(--border-hairline)',
-                              borderLeftWidth: '3px',
-                              borderLeftColor: win.color,
-                            }}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex items-start gap-2 min-w-0">
+
+                    {pendingTodaySubmissions.length === 0 ? (
+                      <div className="rounded-lg border p-3.5 space-y-2 arch-dot-matrix" style={{ backgroundColor: 'var(--bg-canvas)', borderColor: 'var(--border-hairline)' }}>
+                        <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.12em]" style={{ color: 'var(--ink-muted)' }}>
+                          <span>SUBMISSION TELEMETRY // 0 NEARBY</span>
+                          <span style={{ color: 'var(--ink-secondary)' }}>CLEAR</span>
+                        </div>
+                        <p className="text-xs" style={{ color: 'var(--ink-secondary)' }}>
+                          No upcoming exams or assignment submissions due. Add them in Dayflow to see closest deadlines here.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="divide-y max-h-44 overflow-y-auto pr-1">
+                        {pendingTodaySubmissions.map((sub) => {
+                          const win = getSubmissionWindowTelemetry(sub, todayKey, nowMinsToday);
+                          return (
+                            <div
+                              key={sub.id}
+                              data-testid="today-popup-submission-item"
+                              className="py-2.5 flex items-center justify-between gap-2.5"
+                            >
+                              <label className="flex items-start gap-2.5 cursor-pointer min-w-0">
                                 <input
                                   type="checkbox"
                                   checked={sub.completed}
                                   onChange={() => handleToggleSubDoneInToday(sub.id)}
-                                  aria-label={`Complete ${sub.title}`}
-                                  className="mt-0.5 w-3.5 h-3.5 rounded cursor-pointer shrink-0"
+                                  className="mt-0.5 w-4 h-4 rounded cursor-pointer shrink-0"
                                 />
                                 <div className="min-w-0">
                                   <div className="flex flex-wrap items-center gap-1.5">
                                     <span
-                                      className="px-1.5 py-0.2 rounded text-[8px] font-mono uppercase font-bold"
+                                      className="px-1.5 py-0.2 rounded text-[9px] font-mono uppercase font-bold"
                                       style={{ backgroundColor: win.kindMeta.color, color: '#09090B' }}
                                     >
                                       {win.kindMeta.shortBadge}
                                     </span>
-                                    <span className="text-xs font-semibold truncate">{sub.title}</span>
+                                    <span className="text-xs font-medium truncate">{sub.title}</span>
                                     {sub.subject && (
-                                      <span className="font-mono text-[9px] opacity-75">({sub.subject})</span>
+                                      <span className="font-mono text-[10px]" style={{ color: 'var(--ink-muted)' }}>
+                                        ({sub.subject})
+                                      </span>
                                     )}
                                   </div>
-                                  <div className="font-mono text-[10px] tabular-nums mt-0.5 flex flex-wrap items-center gap-1.5" style={{ color: 'var(--ink-secondary)' }}>
-                                    <span>Given: {sub.givenDate}</span>
-                                    <span>&rarr;</span>
-                                    <span style={{ color: win.color }}>
-                                      Due: {sub.dueDate} {formatTime12h(sub.dueTime)}
-                                    </span>
-                                    <span>&bull;</span>
-                                    <strong style={{ color: win.color }}>{win.windowBadge}</strong>
+                                  <div className="font-mono text-[10px] tabular-nums mt-0.5" style={{ color: 'var(--ink-muted)' }}>
+                                    Given {sub.givenDate} &bull; Due {sub.dueDate} {formatTime12h(sub.dueTime)}
                                   </div>
                                 </div>
-                              </div>
-                            </div>
-
-                            <div className="flex flex-wrap items-center justify-between gap-1 pt-0.5">
-                              <div className="flex items-center gap-1">
+                              </label>
+                              <div className="flex items-center gap-1.5 shrink-0 font-mono text-[10px] tabular-nums">
+                                <span
+                                  className="px-1.5 py-0.5 rounded border font-semibold"
+                                  style={{ color: win.color, borderColor: win.color }}
+                                >
+                                  {win.windowBadge}
+                                </span>
                                 <button
                                   type="button"
                                   onClick={() => handlePinSubmissionToTop3(sub)}
-                                  className="arch-btn-ghost px-2 py-0.5 rounded text-[9px] font-mono"
-                                  title="Pin to Today Top 3 Priorities"
+                                  className="arch-btn-ghost px-2 py-0.5 rounded text-[10px]"
+                                  title="Pin to Top 3 Priorities"
                                 >
-                                  Pin to Top 3
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleSlotSubIntoTodaySchedule(sub.id)}
-                                  className="arch-btn-ghost px-2 py-0.5 rounded text-[9px] font-mono"
-                                  style={{ color: 'var(--status-ok)' }}
-                                  title="Slot prep session into today's free gap in Dayflow"
-                                >
-                                  + Schedule Today
+                                  Pin
                                 </button>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => openModifySubmissionInToday(sub)}
-                                className="arch-btn-ghost px-2 py-0.5 rounded text-[9px] font-mono"
-                              >
-                                Modify Deadline
-                              </button>
                             </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Right-Edge Slide Handle & Slide-Out Drawer in Today Module */}
-              {!todaySlideOpen && (
-                <button
-                  type="button"
-                  data-testid="today-right-slide-handle"
-                  onClick={() => setTodaySlideOpen(true)}
-                  className="fixed right-0 top-1/2 -translate-y-1/2 z-40 px-2.5 py-4 rounded-l-xl border border-r-0 font-mono text-[10px] uppercase tracking-widest shadow-2xl flex flex-col items-center gap-2 transition hover:pr-3.5"
-                  style={{
-                    backgroundColor: 'var(--bg-elevated)',
-                    borderColor: pendingTodaySubmissions.length > 0 ? '#F59E0B' : 'var(--border-strong)',
-                    color: 'var(--ink-primary)',
-                  }}
-                  title="Slide open Closest-Window Exams & Assignment Submissions"
-                >
-                  <span style={{ color: '#F59E0B' }}>&larr;</span>
-                  <span style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}>
-                    SUBMISSIONS ({pendingTodaySubmissions.length})
-                  </span>
-                </button>
-              )}
-
-              {todaySlideOpen && (
-                <div
-                  className="fixed inset-0 z-50 bg-black/60 flex justify-end"
-                  onClick={() => setTodaySlideOpen(false)}
-                >
-                  <div
-                    data-testid="today-submissions-slide-drawer"
-                    className="w-full max-w-md h-full arch-panel border-l p-5 overflow-y-auto space-y-4 flex flex-col justify-between"
-                    style={{
-                      backgroundColor: 'var(--bg-surface)',
-                      borderColor: 'var(--border-strong)',
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--border-hairline)' }}>
-                        <div>
-                          <span className="font-mono text-[10px] uppercase tracking-widest block" style={{ color: '#F59E0B' }}>
-                            TODAY &amp; DAYFLOW // CLOSEST WINDOW SLIDE BAR
-                          </span>
-                          <h3 className="text-base font-mono font-semibold mt-0.5">
-                            Exams &amp; Assignment Submissions ({pendingTodaySubmissions.length} Active)
-                          </h3>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setTodaySlideOpen(false);
-                              setActiveTab('dayflow');
-                            }}
-                            className="arch-btn-ghost px-2.5 py-1 rounded text-[10px] font-mono"
-                          >
-                            Open Dayflow &rarr;
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setTodaySlideOpen(false)}
-                            className="arch-btn-ghost px-2.5 py-1 rounded text-xs font-mono"
-                          >
-                            Close &times;
-                          </button>
-                        </div>
+                          );
+                        })}
                       </div>
-
-                      {/* Add / Modify Form inside Today Slide Bar */}
-                      <form
-                        onSubmit={handleSaveTodaySubmission}
-                        className="p-3.5 rounded-xl border space-y-2.5"
-                        style={{ backgroundColor: 'var(--bg-canvas)', borderColor: 'var(--border-hairline)' }}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-mono text-[10px] uppercase font-semibold" style={{ color: editingSubId ? '#F59E0B' : 'var(--ink-secondary)' }}>
-                            {editingSubId ? 'MODIFY GIVEN DATE / DEADLINE' : '+ ADD EXAM OR ASSIGNMENT SUBMISSION'}
-                          </span>
-                          {editingSubId && (
-                            <button
-                              type="button"
-                              onClick={resetTodaySubForm}
-                              className="font-mono text-[10px] underline"
-                              style={{ color: 'var(--ink-muted)' }}
-                            >
-                              Cancel Edit
-                            </button>
-                          )}
-                        </div>
-
-                        <input
-                          type="text"
-                          data-testid="today-subm-title-input"
-                          value={subTitle}
-                          onChange={(e) => setSubTitle(e.target.value)}
-                          placeholder="Assignment or Exam Title..."
-                          className="w-full arch-input rounded-md px-3 py-1.5 text-xs font-mono"
-                        />
-
-                        <div className="grid grid-cols-2 gap-2">
-                          <select
-                            value={subKind}
-                            onChange={(e) => setSubKind(e.target.value)}
-                            className="arch-input rounded-md px-2 py-1.5 text-[11px] font-mono"
-                          >
-                            {SUBMISSION_KINDS.map((k) => (
-                              <option key={k.id} value={k.id}>
-                                {k.label}
-                              </option>
-                            ))}
-                          </select>
-                          <input
-                            type="text"
-                            value={subSubject}
-                            onChange={(e) => setSubSubject(e.target.value)}
-                            placeholder="Course (e.g. CS-301)"
-                            className="arch-input rounded-md px-2.5 py-1.5 text-[11px] font-mono"
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="block font-mono text-[9px] uppercase mb-0.5" style={{ color: 'var(--ink-muted)' }}>
-                              When Given (Given Date)
-                            </label>
-                            <input
-                              type="date"
-                              data-testid="today-subm-given-date"
-                              value={subGivenDate}
-                              onChange={(e) => setSubGivenDate(e.target.value)}
-                              className="w-full arch-input rounded-md px-2 py-1 text-[11px] font-mono tabular-nums"
-                            />
-                          </div>
-                          <div>
-                            <label className="block font-mono text-[9px] uppercase mb-0.5" style={{ color: '#F59E0B' }}>
-                              Deadline / Exam Date
-                            </label>
-                            <input
-                              type="date"
-                              data-testid="today-subm-due-date"
-                              value={subDueDate}
-                              onChange={(e) => setSubDueDate(e.target.value)}
-                              className="w-full arch-input rounded-md px-2 py-1 text-[11px] font-mono tabular-nums"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="block font-mono text-[9px] uppercase mb-0.5" style={{ color: 'var(--ink-muted)' }}>
-                              Deadline Time
-                            </label>
-                            <input
-                              type="time"
-                              value={subDueTime}
-                              onChange={(e) => setSubDueTime(e.target.value)}
-                              className="w-full arch-input rounded-md px-2 py-1 text-[11px] font-mono tabular-nums"
-                            />
-                          </div>
-                          <div>
-                            <label className="block font-mono text-[9px] uppercase mb-0.5" style={{ color: 'var(--ink-muted)' }}>
-                              Duration (Min)
-                            </label>
-                            <input
-                              type="number"
-                              min="15"
-                              max="360"
-                              step="15"
-                              value={subDuration}
-                              onChange={(e) => setSubDuration(Number(e.target.value))}
-                              className="w-full arch-input rounded-md px-2 py-1 text-[11px] font-mono tabular-nums"
-                            />
-                          </div>
-                        </div>
-
-                        <input
-                          type="text"
-                          value={subNote}
-                          onChange={(e) => setSubNote(e.target.value)}
-                          placeholder="Notes / instructions (optional)..."
-                          className="w-full arch-input rounded-md px-2.5 py-1.5 text-[11px] font-mono"
-                        />
-
-                        <label className="flex items-center gap-2 cursor-pointer font-mono text-[10px]" style={{ color: 'var(--ink-secondary)' }}>
-                          <input
-                            type="checkbox"
-                            checked={subAutoSchedule}
-                            onChange={(e) => setSubAutoSchedule(e.target.checked)}
-                            className="w-3.5 h-3.5 rounded cursor-pointer accent-current"
-                          />
-                          <span>Auto-add to Dayflow schedule on deadline date</span>
-                        </label>
-
-                        <button
-                          type="submit"
-                          data-testid="today-subm-save-btn"
-                          className="w-full arch-btn-primary py-2 rounded-md text-xs font-mono font-semibold"
-                        >
-                          {editingSubId ? 'Save Modified Deadline & Sync' : '+ Add & Sync to Schedule'}
-                        </button>
-                      </form>
-
-                      {/* Ranked Closest-Window Queue */}
-                      <div className="space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <span className="font-mono text-[10px] uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
-                            RANKED BY CLOSEST DEADLINE WINDOW ({sortedTodaySubmissions.length})
-                          </span>
-                          {pendingTodaySubmissions.length > 0 && (
-                            <button
-                              type="button"
-                              onClick={handleAutoFillTop3FromClosest}
-                              className="arch-btn-ghost px-2 py-0.5 rounded text-[10px] font-mono"
-                              style={{ color: '#F59E0B' }}
-                            >
-                              Push Top 3 to Priorities
-                            </button>
-                          )}
-                        </div>
-
-                        {sortedTodaySubmissions.length === 0 ? (
-                          <div className="p-4 rounded-xl border border-dashed text-center font-mono text-xs" style={{ borderColor: 'var(--border-elevated)', color: 'var(--ink-muted)' }}>
-                            No exams or assignment submissions yet. Add one above to track its given date, deadline window, and schedule block.
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            {sortedTodaySubmissions.map((sub) => {
-                              const win = getSubmissionWindowTelemetry(sub, todayKey, nowMinsToday);
-                              return (
-                                <div
-                                  key={sub.id}
-                                  className="p-3 rounded-xl border space-y-2"
-                                  style={{
-                                    backgroundColor: 'var(--bg-canvas)',
-                                    borderTopColor: editingSubId === sub.id ? '#F59E0B' : 'var(--border-hairline)',
-                                    borderRightColor: editingSubId === sub.id ? '#F59E0B' : 'var(--border-hairline)',
-                                    borderBottomColor: editingSubId === sub.id ? '#F59E0B' : 'var(--border-hairline)',
-                                    borderLeftWidth: '3px',
-                                    borderLeftColor: win.color,
-                                    opacity: sub.completed ? 0.65 : 1,
-                                  }}
-                                >
-                                  <div className="flex items-start justify-between gap-2">
-                                    <div className="flex items-start gap-2 min-w-0">
-                                      <input
-                                        type="checkbox"
-                                        checked={sub.completed}
-                                        onChange={() => handleToggleSubDoneInToday(sub.id)}
-                                        className="mt-0.5 w-4 h-4 rounded cursor-pointer shrink-0"
-                                      />
-                                      <div className="min-w-0">
-                                        <div className="flex flex-wrap items-center gap-1.5">
-                                          <span
-                                            className="px-1.5 py-0.2 rounded text-[9px] font-mono uppercase font-bold"
-                                            style={{ backgroundColor: win.kindMeta.color, color: '#09090B' }}
-                                          >
-                                            {win.kindMeta.shortBadge}
-                                          </span>
-                                          {sub.subject && (
-                                            <span className="px-1.5 py-0.2 rounded text-[9px] font-mono border" style={{ borderColor: 'var(--border-elevated)' }}>
-                                              {sub.subject}
-                                            </span>
-                                          )}
-                                          <span
-                                            className="px-1.5 py-0.2 rounded text-[9px] font-mono font-semibold"
-                                            style={{ color: win.color, border: `1px solid ${win.color}` }}
-                                          >
-                                            {win.windowBadge}
-                                          </span>
-                                        </div>
-                                        <div className={`text-xs font-semibold mt-1 ${sub.completed ? 'line-through opacity-75' : ''}`}>
-                                          {sub.title}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  <div className="space-y-1">
-                                    <div className="flex items-center justify-between font-mono text-[10px] tabular-nums" style={{ color: 'var(--ink-secondary)' }}>
-                                      <span>Given: <strong>{sub.givenDate}</strong></span>
-                                      <span>&rarr;</span>
-                                      <span style={{ color: win.color }}>
-                                        Deadline: <strong>{sub.dueDate}</strong> {formatTime12h(sub.dueTime)}
-                                      </span>
-                                    </div>
-                                    <div className="w-full h-1 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-elevated)' }}>
-                                      <div className="h-full" style={{ width: `${win.elapsedWindowPct}%`, backgroundColor: win.color }} />
-                                    </div>
-                                  </div>
-
-                                  <div className="flex flex-wrap items-center justify-between gap-1 pt-1">
-                                    <div className="flex items-center gap-1">
-                                      <button
-                                        type="button"
-                                        onClick={() => handlePinSubmissionToTop3(sub)}
-                                        className="arch-btn-ghost px-2 py-1 rounded text-[10px] font-mono"
-                                      >
-                                        Pin to Top 3
-                                      </button>
-                                      {!sub.completed && (
-                                        <button
-                                          type="button"
-                                          onClick={() => handleSlotSubIntoTodaySchedule(sub.id)}
-                                          className="arch-btn-ghost px-2 py-1 rounded text-[10px] font-mono"
-                                          style={{ color: 'var(--status-ok)' }}
-                                        >
-                                          + Slot in Today
-                                        </button>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                      <button
-                                        type="button"
-                                        onClick={() => openModifySubmissionInToday(sub)}
-                                        className="arch-btn-ghost px-2 py-1 rounded text-[10px] font-mono"
-                                      >
-                                        Modify
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleDeleteSubInToday(sub.id)}
-                                        className="arch-btn-ghost px-1.5 py-1 rounded text-[10px] font-mono"
-                                        style={{ color: 'var(--status-err)' }}
-                                      >
-                                        &times;
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                    )}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
               <div className="lg:col-span-4 arch-panel rounded-xl p-5 flex flex-col justify-between space-y-3">
                 <Crosshair className="absolute top-2.5 right-2.5" />
@@ -2375,7 +1908,7 @@ const NexoraContext = createContext(null);
                 <div className="arch-panel rounded-xl p-5 space-y-3.5">
                   <div className="flex items-center justify-between">
                     <span className="font-mono text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--ink-muted)' }}>
-                      03 // PRIORITY MISSION QUEUE
+                      03 // PRIORITY MISSION &amp; DEADLINE QUEUE
                     </span>
                     <button
                       type="button"
@@ -2387,7 +1920,7 @@ const NexoraContext = createContext(null);
                     </button>
                   </div>
 
-                  {data.tasks.filter((t) => !t.completed).length === 0 ? (
+                  {data.tasks.filter((t) => !t.completed).length === 0 && nearbyTodaySubmissions.length === 0 ? (
                     <div className="rounded-lg border p-4 space-y-2.5 arch-dot-matrix" style={{ backgroundColor: 'var(--bg-canvas)', borderColor: 'var(--border-hairline)' }}>
                       <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.12em]" style={{ color: 'var(--ink-muted)' }}>
                         <span>QUEUE TELEMETRY // 0 ACTIVE PACKETS</span>
@@ -2406,11 +1939,46 @@ const NexoraContext = createContext(null);
                         ))}
                       </div>
                       <p className="text-xs pt-0.5" style={{ color: 'var(--ink-secondary)' }}>
-                        No pending missions in queue. Use the capture bar above or jump to Mission Control to log tasks.
+                        No pending missions or nearby exam/assignment deadlines in queue.
                       </p>
                     </div>
                   ) : (
                     <div className="divide-y">
+                      {/* Nearby Submissions & Exams automatically surfaced in Priority Queue */}
+                      {nearbyTodaySubmissions.slice(0, 4).map((sub) => {
+                        const win = getSubmissionWindowTelemetry(sub, todayKey, nowMinsToday);
+                        return (
+                          <div key={`subm-q-${sub.id}`} className="py-2.5 flex items-center justify-between gap-3">
+                            <label className="flex items-center gap-2.5 cursor-pointer min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={sub.completed}
+                                onChange={() => handleToggleSubDoneInToday(sub.id)}
+                                className="w-4 h-4 rounded cursor-pointer shrink-0"
+                              />
+                              <span
+                                className="px-1.5 py-0.2 rounded text-[9px] font-mono uppercase font-bold shrink-0"
+                                style={{ backgroundColor: win.kindMeta.color, color: '#09090B' }}
+                              >
+                                {win.kindMeta.shortBadge}
+                              </span>
+                              <span className="text-xs font-medium truncate">
+                                {sub.title}{sub.subject ? ` (${sub.subject})` : ''}
+                              </span>
+                            </label>
+                            <div className="flex items-center gap-2 font-mono text-[11px] tabular-nums shrink-0" style={{ color: 'var(--ink-muted)' }}>
+                              <span
+                                className="px-1.5 py-0.5 rounded border text-[10px] font-semibold"
+                                style={{ color: win.color, borderColor: win.color }}
+                              >
+                                {win.windowBadge}
+                              </span>
+                              <span>&bull;</span>
+                              <span>Due {sub.dueDate}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
                       {data.tasks.filter((t) => !t.completed).slice(0, 5).map((t) => (
                         <div key={t.id} className="py-2.5 flex items-center justify-between gap-3">
                           <label className="flex items-center gap-2.5 cursor-pointer">

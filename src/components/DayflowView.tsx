@@ -636,6 +636,48 @@ export const DayflowView: React.FC<DayflowViewProps> = ({
 
   return (
     <div className="space-y-5">
+      {/* DAYFLOW HUB SUB-VIEW SWITCHER BAR (Matches EXECUTION HUB style) */}
+      <div
+        className="flex flex-wrap items-center gap-1.5 p-1.5 rounded-lg border"
+        style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-hairline)' }}
+        data-testid="dayflow-hub-bar"
+      >
+        <span className="font-mono text-[10px] uppercase tracking-wider px-2" style={{ color: 'var(--ink-muted)' }}>
+          DAYFLOW HUB:
+        </span>
+        <button
+          type="button"
+          onClick={() => {
+            clickSound(780, 10);
+            setRightSlideTab('inbox');
+          }}
+          className={`px-3 py-1 rounded-md text-xs font-mono inline-flex items-center gap-1.5 transition ${
+            rightSlideTab === 'inbox' ? 'arch-btn-primary' : 'arch-btn-ghost border-transparent'
+          }`}
+        >
+          <span>Timeline &amp; Inbox</span>
+        </button>
+        <button
+          type="button"
+          data-testid="dayflow-hub-submissions-tab"
+          onClick={() => {
+            clickSound(780, 10);
+            setRightSlideTab('submissions');
+            setInboxOpen(true);
+          }}
+          className={`px-3 py-1 rounded-md text-xs font-mono inline-flex items-center gap-1.5 transition ${
+            rightSlideTab === 'submissions' ? 'arch-btn-primary' : 'arch-btn-ghost border-transparent'
+          }`}
+        >
+          <span>Exams &amp; Submissions</span>
+          {pendingSubmissionsCount > 0 && (
+            <span className="px-1.5 py-0.2 rounded text-[10px] border tabular-nums">
+              {pendingSubmissionsCount}
+            </span>
+          )}
+        </button>
+      </div>
+
       {/* 1. TOP NAVIGATION & VIEW SWITCHER HEADER */}
       <div className="arch-panel rounded-xl p-4 sm:p-5 space-y-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -1583,30 +1625,7 @@ export const DayflowView: React.FC<DayflowViewProps> = ({
           )}
         </div>
 
-        {/* 4. RIGHT SLIDE BAR: EXAMS & ASSIGNMENT SUBMISSIONS + COLLAPSIBLE INBOX TRAY */}
-        {!inboxOpen && (
-          <button
-            type="button"
-            data-testid="dayflow-slide-handle"
-            onClick={() => {
-              setRightSlideTab('submissions');
-              setInboxOpen(true);
-            }}
-            className="fixed right-0 top-1/2 -translate-y-1/2 z-40 px-2.5 py-4 rounded-l-xl border border-r-0 font-mono text-[10px] uppercase tracking-widest shadow-2xl flex flex-col items-center gap-2 transition hover:pr-3.5"
-            style={{
-              backgroundColor: 'var(--bg-elevated)',
-              borderColor: pendingSubmissionsCount > 0 ? '#F59E0B' : 'var(--border-strong)',
-              color: 'var(--ink-primary)',
-            }}
-            title="Slide open Exams & Assignment Submissions bar"
-          >
-            <span style={{ color: '#F59E0B' }}>&larr;</span>
-            <span style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}>
-              SUBMISSIONS ({pendingSubmissionsCount})
-            </span>
-          </button>
-        )}
-
+        {/* 4. RIGHT SIDEBAR IN DAYFLOW: + NEW EXAM / ASSIGNMENT (AS IN IMAGE 1) & INBOX */}
         {inboxOpen && (
           <div
             className="lg:col-span-4 xl:col-span-3 arch-panel rounded-xl p-4 sm:p-5 space-y-4"
