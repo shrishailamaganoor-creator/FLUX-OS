@@ -78,7 +78,10 @@ Most student productivity tools are passive containers—blank note pages or gen
 13. **System Core (`14 // System Configuration & Storage` — `SettingsView`)**
     - **Startup Security (`ACCESS SECURITY // STARTUP PASSWORD & PIN`):** Keep, change/update, or **remove (turn off)** the startup password/PIN (`XOR_BIT_AUTH_V1`). When removed, FLUX opens directly without asking for a PIN.
     - **Smart Device Installation (`DEVICE INSTALLATION // WEB APP`):** Single `Install FLUX App` card shown only when running in a browser and the app is not yet installed.
-    - **Sidebar Module Visibility Manager**, **2 Engineering Themes (`Obsidian Precision` & `Editorial Paper`)**, **Operator Identity & Tactile Audio**, and **Local Storage Vault (`Export / Import JSON Snapshot`)**.
+    - **Sidebar Module Visibility Manager**, **2 Engineering Themes (`Obsidian Precision` & `Editorial Paper`)**, and **Operator Identity & Tactile Audio**.
+    - **Multi-JSON Merge Engine & Workspace Slot Manager (`LOCAL STORAGE VAULT`):**
+      - **`+ Merge / Add JSON Files (1, 2, or Multiple)`:** Select 2 or more `.json` files at once—or upload them one after another—to deep-merge courses, missions, transactions, habits, Dayflow schedules, and IndexedDB media without losing or overwriting existing items (automatically resolves colliding IDs across files).
+      - **`Loaded JSON Files & Workspace Slots`:** Stores up to 8 imported or saved JSON workspaces (`FLUX_JSON_SLOTS_V1`) so you can **Combine All Loaded JSONs**, **Merge** any slot into the active app, or **Switch** exclusively to a specific JSON file anytime.
 14. **Classified Vault Trapdoor (`08 & 09 // SecretVaultView` — Hidden Module)**
     - Zero sidebar footprint. Unlocked from **anywhere in FLUX** by pressing **`H` then `O`** (outside text inputs) or **`Alt + V`** / **`Ctrl + Shift + V`**. Press **`Esc`** to lock immediately.
     - Houses **Memory Vault** and **Experience Archive**.

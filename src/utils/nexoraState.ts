@@ -70,22 +70,25 @@ export const EMPTY_STATE = {
   }
 };
 
+export const JSON_SLOTS_KEY = 'FLUX_JSON_SLOTS_V1';
+
 export function isPlainObject(value: unknown): value is Record<string, any> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 export function mergeValidatedState(defaults: any, candidate: any, path = 'state'): any {
   if (Array.isArray(defaults)) {
-    if (candidate === undefined) return [];
+    if (candidate === undefined || candidate === null) return [];
     if (!Array.isArray(candidate)) throw new Error(`${path} must be an array`);
     return candidate;
   }
 
   if (isPlainObject(defaults)) {
-    if (candidate === undefined) return { ...defaults };
+    if (candidate === undefined || candidate === null) return { ...defaults };
     if (!isPlainObject(candidate)) throw new Error(`${path} must be an object`);
     const merged: Record<string, any> = { ...defaults };
     Object.entries(candidate).forEach(([key, value]) => {
+      if (value === null || value === undefined) return;
       merged[key] = Object.prototype.hasOwnProperty.call(defaults, key)
         ? mergeValidatedState(defaults[key], value, `${path}.${key}`)
         : value;
@@ -93,7 +96,7 @@ export function mergeValidatedState(defaults: any, candidate: any, path = 'state
     return merged;
   }
 
-  if (candidate === undefined) return defaults;
+  if (candidate === undefined || candidate === null) return defaults;
   if (typeof candidate !== typeof defaults) throw new Error(`${path} has an invalid value`);
   return candidate;
 }
@@ -111,12 +114,260 @@ export function validateImportedMedia(candidate: unknown): Record<string, string
   if (!isPlainObject(candidate)) throw new Error('Backup media must be an object');
   const media: Record<string, string> = {};
   Object.entries(candidate).forEach(([key, value]) => {
-    if (typeof value !== 'string' || value.length === 0) {
+    if (typeof value === 'string' && value.length > 0) {
+      media[key] = value;
+    } else if (value !== null && value !== undefined) {
       throw new Error('Backup contains invalid media');
     }
-    media[key] = value;
   });
   return media;
+}
+
+function getItemSignature(item: any): string {
+  if (!isPlainObject(item)) return String(item);
+  const label =
+    item.title ??
+    item.name ??
+    item.question ??
+    item.topic ??
+    item.anchor ??
+    item.habit ??
+    item.statement ??
+    item.axis ??
+    item.label ??
+    item.desc ??
+    item.text ??
+    '';
+  const secondary =
+    item.date ??
+    item.due ??
+    item.startTime ??
+    item.time ??
+    item.code ??
+    item.category ??
+    item.type ??
+    item.amount ??
+    '';
+  return `${String(label).trim().toLowerCase()}::${String(secondary).trim().toLowerCase()}`;
+}
+
+export function mergeArrayItems(existing: any[], incoming: any[], keyPrefix = 'item'): any[] {
+  const baseList = Array.isArray(existing) ? existing.map((x) => (isPlainObject(x) ? { ...x } : x)) : [];
+  const incList = Array.isArray(incoming) ? incoming : [];
+
+  incList.forEach((inc, idx) => {
+    if (inc === null || inc === undefined) return;
+    if (!isPlainObject(inc)) {
+      if (!baseList.includes(inc)) baseList.push(inc);
+      return;
+    }
+
+    const incSig = getItemSignature(inc);
+    const hasMeaningfulSig = incSig !== '::';
+
+    // 1. Check if an item with the exact same logical signature already exists
+    const sigMatchIdx = hasMeaningfulSig
+      ? baseList.findIndex((ex) => isPlainObject(ex) && getItemSignature(ex) === incSig)
+      : -1;
+
+    if (sigMatchIdx !== -1) {
+      const exItem = baseList[sigMatchIdx];
+      const mergedItem: Record<string, any> = { ...exItem, ...inc, id: exItem.id || inc.id };
+      // Merge nested arrays if present (e.g. attachments, milestones, history, subpages)
+      ['attachments', 'milestones', 'history', 'subpages', 'sessions'].forEach((subKey) => {
+        if (Array.isArray(exItem[subKey]) || Array.isArray(inc[subKey])) {
+          mergedItem[subKey] = mergeArrayItems(exItem[subKey] || [], inc[subKey] || [], subKey);
+        }
+      });
+      // Merge nested log objects if present (e.g. habit logs)
+      if (isPlainObject(exItem.logs) || isPlainObject(inc.logs)) {
+        mergedItem.logs = { ...(exItem.logs || {}), ...(inc.logs || {}) };
+      }
+      baseList[sigMatchIdx] = mergedItem;
+      return;
+    }
+
+    // 2. Check if the incoming item's ID collides with a DIFFERENT existing item
+    const idCollision = inc.id !== undefined && baseList.some((ex) => isPlainObject(ex) && ex.id === inc.id);
+    if (!idCollision) {
+      baseList.push({
+        ...inc,
+        id: inc.id !== undefined ? inc.id : `${keyPrefix}-${Date.now()}-${idx}`
+      });
+    } else {
+      // Preserve both items by assigning a fresh unique ID to the incoming item from the 2nd JSON file
+      baseList.push({
+        ...inc,
+        id: `${inc.id}-m${idx}-${Math.random().toString(36).slice(2, 6)}`
+      });
+    }
+  });
+
+  return baseList;
+}
+
+export function mergeNexoraStates(baseCandidate: unknown, incomingCandidate: unknown) {
+  const base = isPlainObject(baseCandidate) ? normalizeImportedState(baseCandidate) : normalizeImportedState({});
+  const inc = isPlainObject(incomingCandidate) ? normalizeImportedState(incomingCandidate) : normalizeImportedState({});
+
+  const merged: Record<string, any> = { ...EMPTY_STATE };
+
+  Object.keys(EMPTY_STATE).forEach((key) => {
+    const defVal = (EMPTY_STATE as Record<string, any>)[key];
+    const baseVal = base[key];
+    const incVal = inc[key];
+
+    if (Array.isArray(defVal)) {
+      merged[key] = mergeArrayItems(baseVal || [], incVal || [], key);
+      return;
+    }
+
+    if (key === 'bioLog') {
+      const baseDays = baseVal?.days || {};
+      const incDays = incVal?.days || {};
+      const allDayKeys = new Set([...Object.keys(baseDays), ...Object.keys(incDays)]);
+      const mergedDays: Record<string, any> = {};
+      allDayKeys.forEach((dKey) => {
+        const bDay = baseDays[dKey] || {};
+        const iDay = incDays[dKey] || {};
+        mergedDays[dKey] = {
+          ...bDay,
+          ...iDay,
+          waterMl: Math.max(Number(bDay.waterMl) || 0, Number(iDay.waterMl) || 0),
+          sleepHrs: Math.max(Number(bDay.sleepHrs) || 0, Number(iDay.sleepHrs) || 0),
+          schedule: mergeArrayItems(bDay.schedule || [], iDay.schedule || [], 'blk')
+        };
+      });
+      merged.bioLog = {
+        days: mergedDays,
+        templates: { ...(baseVal?.templates || {}), ...(incVal?.templates || {}) }
+      };
+      return;
+    }
+
+    if (key === 'morningLog' || key === 'nightLog') {
+      const bLog = isPlainObject(baseVal) ? baseVal : {};
+      const iLog = isPlainObject(incVal) ? incVal : {};
+      const allDates = new Set([...Object.keys(bLog), ...Object.keys(iLog)]);
+      const combinedLog: Record<string, any> = {};
+      allDates.forEach((dKey) => {
+        combinedLog[dKey] = { ...(bLog[dKey] || {}), ...(iLog[dKey] || {}) };
+      });
+      merged[key] = combinedLog;
+      return;
+    }
+
+    if (key === 'profile') {
+      const bProf = isPlainObject(baseVal) ? baseVal : EMPTY_STATE.profile;
+      const iProf = isPlainObject(incVal) ? incVal : EMPTY_STATE.profile;
+      const pickCustom = (bField: any, iField: any, defField: any) =>
+        iField && iField !== defField ? iField : bField || defField;
+      merged.profile = {
+        ...EMPTY_STATE.profile,
+        ...bProf,
+        ...iProf,
+        name: pickCustom(bProf.name, iProf.name, EMPTY_STATE.profile.name),
+        title: pickCustom(bProf.title, iProf.title, EMPTY_STATE.profile.title),
+        semester: pickCustom(bProf.semester, iProf.semester, EMPTY_STATE.profile.semester),
+        xp: Math.max(Number(bProf.xp) || 0, Number(iProf.xp) || 0)
+      };
+      return;
+    }
+
+    if (key === 'arcadeScores') {
+      const bArc = isPlainObject(baseVal) ? baseVal : EMPTY_STATE.arcadeScores;
+      const iArc = isPlainObject(incVal) ? incVal : EMPTY_STATE.arcadeScores;
+      const bReact = Number(bArc.reactionBestMs) || 0;
+      const iReact = Number(iArc.reactionBestMs) || 0;
+      merged.arcadeScores = {
+        roverNodes: Math.max(Number(bArc.roverNodes) || 0, Number(iArc.roverNodes) || 0),
+        snakeHigh: Math.max(Number(bArc.snakeHigh) || 0, Number(iArc.snakeHigh) || 0),
+        pongWins: Math.max(Number(bArc.pongWins) || 0, Number(iArc.pongWins) || 0),
+        memoryHigh: Math.max(Number(bArc.memoryHigh) || 0, Number(iArc.memoryHigh) || 0),
+        reactionBestMs: bReact > 0 && iReact > 0 ? Math.min(bReact, iReact) : Math.max(bReact, iReact)
+      };
+      return;
+    }
+
+    if (isPlainObject(defVal)) {
+      merged[key] = {
+        ...defVal,
+        ...(isPlainObject(baseVal) ? baseVal : {}),
+        ...(isPlainObject(incVal) ? incVal : {})
+      };
+      return;
+    }
+
+    merged[key] = incVal !== undefined && incVal !== defVal ? incVal : baseVal !== undefined ? baseVal : defVal;
+  });
+
+  // Also preserve any extra top-level keys from either state (e.g., priorities, countdown)
+  [base, inc].forEach((src) => {
+    if (!isPlainObject(src)) return;
+    Object.keys(src).forEach((k) => {
+      if (!Object.prototype.hasOwnProperty.call(EMPTY_STATE, k)) {
+        if (Array.isArray(src[k])) {
+          merged[k] = mergeArrayItems(merged[k] || [], src[k], k);
+        } else if (isPlainObject(src[k])) {
+          merged[k] = { ...(merged[k] || {}), ...src[k] };
+        } else if (src[k] !== undefined) {
+          merged[k] = src[k];
+        }
+      }
+    });
+  });
+
+  merged.tasks = (merged.tasks || []).map((task: any) =>
+    task && task.completed && task.rewardClaimed === undefined ? { ...task, rewardClaimed: true } : task
+  );
+
+  return merged;
+}
+
+export function parseFlexibleJsonImport(parsed: unknown): {
+  data: Record<string, any> | null;
+  dayflow: Record<string, any> | null;
+  media: Record<string, string> | null;
+} {
+  if (!isPlainObject(parsed)) {
+    throw new Error('JSON file root must be an object');
+  }
+
+  // Case 1: Envelope format { format, data, dayflow, media }
+  const hasDataEnvelope = isPlainObject(parsed.data);
+  if (hasDataEnvelope) {
+    const normalizedData = normalizeImportedState(parsed.data);
+    const media = isPlainObject(parsed.media) ? validateImportedMedia(parsed.media) : null;
+    const dayflow = isPlainObject(parsed.dayflow) ? parsed.dayflow : null;
+    return {
+      data: normalizedData,
+      dayflow,
+      media
+    };
+  }
+
+  // Case 2: Standalone Dayflow JSON { config, recurringClasses, tasks, inbox, dayOverrides }
+  const looksLikeStandaloneDayflow =
+    (Array.isArray(parsed.recurringClasses) || isPlainObject(parsed.dayOverrides) || Array.isArray(parsed.inbox)) &&
+    !Array.isArray(parsed.subjects) &&
+    !Array.isArray(parsed.transactions);
+
+  if (looksLikeStandaloneDayflow) {
+    return {
+      data: null,
+      dayflow: parsed,
+      media: isPlainObject(parsed.media) ? validateImportedMedia(parsed.media) : null
+    };
+  }
+
+  // Case 3: Direct state object (full or partial) with optional inline dayflow/media
+  const { dayflow: inlineDayflow, media: inlineMedia, format: _fmt, exportedAt: _exp, ...restState } = parsed;
+  const normalizedData = normalizeImportedState(restState);
+  return {
+    data: normalizedData,
+    dayflow: isPlainObject(inlineDayflow) ? inlineDayflow : null,
+    media: isPlainObject(inlineMedia) ? validateImportedMedia(inlineMedia) : null
+  };
 }
 
 export function loadPersistedState() {

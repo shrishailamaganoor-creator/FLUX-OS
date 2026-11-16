@@ -245,10 +245,13 @@ export function loadDayflowState(): DayflowState {
   }
 }
 
-export function saveDayflowState(state: DayflowState): boolean {
+export function saveDayflowState(state: DayflowState, broadcastEvent = false): boolean {
   try {
     if (typeof localStorage === 'undefined') return false;
     localStorage.setItem(DAYFLOW_STORAGE_KEY, JSON.stringify(state));
+    if (broadcastEvent && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('flux-dayflow-updated'));
+    }
     return true;
   } catch {
     return false;
@@ -271,6 +274,71 @@ export function normalizeDayflowState(candidate: any): DayflowState {
       candidate.dayOverrides && typeof candidate.dayOverrides === 'object' && !Array.isArray(candidate.dayOverrides)
         ? candidate.dayOverrides
         : {}
+  };
+}
+
+function mergeDayflowCollection<T extends { id?: string; title?: string; startTime?: string; date?: string }>(
+  existing: T[],
+  incoming: T[],
+  prefix: string
+): T[] {
+  const result: T[] = Array.isArray(existing) ? existing.map((item) => ({ ...item })) : [];
+  const incomingList = Array.isArray(incoming) ? incoming : [];
+
+  incomingList.forEach((inc, idx) => {
+    if (!inc || typeof inc !== 'object') return;
+    const incTitle = String(inc.title || '').trim().toLowerCase();
+    const incStart = String(inc.startTime || '').trim();
+    const incDate = String(inc.date || '').trim();
+
+    // Check if an identical item already exists by content
+    const contentMatchIdx = result.findIndex((ex) => {
+      const exTitle = String(ex.title || '').trim().toLowerCase();
+      const exStart = String(ex.startTime || '').trim();
+      const exDate = String(ex.date || '').trim();
+      return exTitle === incTitle && exStart === incStart && exDate === incDate && exTitle.length > 0;
+    });
+
+    if (contentMatchIdx !== -1) {
+      result[contentMatchIdx] = { ...result[contentMatchIdx], ...inc, id: result[contentMatchIdx].id || inc.id };
+      return;
+    }
+
+    // Check if ID collides with a different item
+    const idMatchIdx = inc.id ? result.findIndex((ex) => ex.id === inc.id) : -1;
+    if (idMatchIdx === -1) {
+      result.push({
+        ...inc,
+        id: inc.id || `${prefix}-${Date.now()}-${idx}`
+      });
+    } else {
+      // Different item content that happened to share the same ID in a second JSON file: preserve both!
+      result.push({
+        ...inc,
+        id: `${inc.id}-m${idx}-${Math.random().toString(36).slice(2, 6)}`
+      });
+    }
+  });
+
+  return result;
+}
+
+export function mergeDayflowStates(baseCandidate: any, incomingCandidate: any): DayflowState {
+  const base = normalizeDayflowState(baseCandidate);
+  const inc = normalizeDayflowState(incomingCandidate);
+
+  const wakeStartHour = Math.min(base.config.wakeStartHour, inc.config.wakeStartHour);
+  const wakeEndHour = Math.max(base.config.wakeEndHour, inc.config.wakeEndHour);
+
+  return {
+    config: { wakeStartHour, wakeEndHour },
+    recurringClasses: mergeDayflowCollection(base.recurringClasses, inc.recurringClasses, 'cls'),
+    tasks: mergeDayflowCollection(base.tasks, inc.tasks, 'dft'),
+    inbox: mergeDayflowCollection(base.inbox, inc.inbox, 'dfi'),
+    dayOverrides: {
+      ...(base.dayOverrides || {}),
+      ...(inc.dayOverrides || {})
+    }
   };
 }
 

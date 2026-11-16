@@ -86,6 +86,15 @@ export const DayflowView: React.FC<DayflowViewProps> = ({
     saveDayflowState(state);
   }, [state]);
 
+  // Reload state immediately when a JSON backup is imported or merged in System Core
+  useEffect(() => {
+    const onExternalUpdate = () => {
+      setState(loadDayflowState());
+    };
+    window.addEventListener('flux-dayflow-updated', onExternalUpdate);
+    return () => window.removeEventListener('flux-dayflow-updated', onExternalUpdate);
+  }, []);
+
   // Collapsible Inbox Tray state
   const [inboxOpen, setInboxOpen] = useState<boolean>(true);
   const [inboxTitle, setInboxTitle] = useState<string>('');

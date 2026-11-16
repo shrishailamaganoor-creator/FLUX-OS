@@ -4,12 +4,15 @@ import {
   IDB_NAME,
   IDB_STORE,
   AUTH_KEY,
+  JSON_SLOTS_KEY,
   DEFAULT_DAY_TYPES,
   EMPTY_STATE,
   isPlainObject,
   mergeValidatedState,
   normalizeImportedState,
   validateImportedMedia,
+  mergeNexoraStates,
+  parseFlexibleJsonImport,
   loadPersistedState,
   savePersistedState,
 } from "./utils/nexoraState";
@@ -19,6 +22,7 @@ import {
   loadDayflowState,
   saveDayflowState,
   normalizeDayflowState,
+  mergeDayflowStates,
 } from "./utils/dayflowState";
 
 const NexoraContext = createContext(null);
@@ -121,6 +125,26 @@ const NexoraContext = createContext(null);
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error || new Error('Media restore failed'));
         tx.onabort = () => reject(tx.error || new Error('Media restore was cancelled'));
+      });
+    }
+
+    async function mergeMediaIntoIDB(mediaMap) {
+      if (!mediaMap || Object.keys(mediaMap).length === 0) return;
+      const db = await openMediaDB();
+      if (!db) throw new Error('IndexedDB is unavailable');
+      await new Promise((resolve, reject) => {
+        let tx;
+        try {
+          tx = db.transaction(IDB_STORE, 'readwrite');
+          const store = tx.objectStore(IDB_STORE);
+          Object.entries(mediaMap).forEach(([key, value]) => store.put(value, key));
+        } catch (error) {
+          reject(error);
+          return;
+        }
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error || new Error('Media merge failed'));
+        tx.onabort = () => reject(tx.error || new Error('Media merge was cancelled'));
       });
     }
     // 2. TACTILE MECHANICAL AUDIO SYNTHESIZER (Teenage Engineering Style)
@@ -6700,6 +6724,60 @@ const NexoraContext = createContext(null);
       // VIEW 14: SYSTEM CORE (Settings, Visibility, Backup)
       const SettingsView = () => {
         const { awardXP, data, focusLabel, focusMinutes, hiddenSidebarIds, mediaMap, navItems, notify, secondsLeft, setActiveTab, setConfirmResetModal, setData, setFocusLabel, setFocusMinutes, setHiddenSidebarIds, setMediaMap, setProfileModal, setSecondsLeft, setTimerRunning, telemetry, timerRunning } = useContext(NexoraContext);
+        const [importMode, setImportMode] = useState('merge'); // 'merge' | 'replace'
+        const [jsonStatusMsg, setJsonStatusMsg] = useState('');
+        const [jsonStatusType, setJsonStatusType] = useState('ok'); // 'ok' | 'err'
+        const [slotNameInput, setSlotNameInput] = useState('');
+        const [jsonSlots, setJsonSlots] = useState(() => {
+          try {
+            const raw = localStorage.getItem(JSON_SLOTS_KEY);
+            if (!raw) return [];
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+          } catch {
+            return [];
+          }
+        });
+
+        const persistJsonSlots = (nextSlots) => {
+          const capped = nextSlots.slice(0, 8);
+          setJsonSlots(capped);
+          try {
+            localStorage.setItem(JSON_SLOTS_KEY, JSON.stringify(capped));
+          } catch (e) {}
+        };
+
+        const summarizeSlotCounts = (stateObj, dayflowObj) => {
+          const d = stateObj || {};
+          const df = dayflowObj || {};
+          const courses = (d.subjects || []).length;
+          const missions = (d.tasks || []).length;
+          const txCount = (d.transactions || []).length;
+          const habits = (d.habits || []).length;
+          const dayflowCount = (df.recurringClasses || []).length + (df.tasks || []).length + (df.inbox || []).length;
+          return { courses, missions, txCount, habits, dayflowCount };
+        };
+
+        const upsertSlotRecord = (name, stateData, dayflowData) => {
+          const cleanName = (name || 'Snapshot.json').trim();
+          const entry = {
+            id: 'slot-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+            name: cleanName,
+            savedAt: new Date().toISOString(),
+            counts: summarizeSlotCounts(stateData, dayflowData),
+            data: stateData,
+            dayflow: dayflowData
+          };
+          setJsonSlots((prev) => {
+            const filtered = prev.filter((s) => s.name.toLowerCase() !== cleanName.toLowerCase());
+            const next = [entry, ...filtered].slice(0, 8);
+            try {
+              localStorage.setItem(JSON_SLOTS_KEY, JSON.stringify(next));
+            } catch (e) {}
+            return next;
+          });
+        };
+
         const exportJSON = async () => {
           try {
             const storedMedia = await loadAllMediaFromIDB();
@@ -6724,40 +6802,151 @@ const NexoraContext = createContext(null);
           }
         };
 
-        const importJSON = (e) => {
-          const input = e.target;
-          const file = input.files?.[0];
-          if (!file) return;
-          const reader = new FileReader();
-          reader.onload = async () => {
-            try {
-              const parsed = JSON.parse(reader.result);
-              if (!isPlainObject(parsed)) throw new Error('Backup must be an object');
-              if (parsed.format && parsed.format !== 'FLUX_BACKUP_V1' && parsed.format !== 'NEXORA_BACKUP_V1') {
-                throw new Error('Unsupported backup format');
+        const readFileAsText = (file) =>
+          new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ''));
+            reader.onerror = () => reject(new Error(`Could not read ${file.name}`));
+            reader.readAsText(file);
+          });
+
+        const processJsonFiles = async (fileList, modeOverride) => {
+          const files = Array.from(fileList || []);
+          if (files.length === 0) return;
+          const activeMode = modeOverride || importMode;
+          setJsonStatusMsg('');
+
+          try {
+            // If user selected 2+ files at once, we always merge the 2nd..Nth files into the 1st file!
+            let workingState = activeMode === 'merge' ? data : null;
+            let workingDayflow = activeMode === 'merge' ? loadDayflowState() : null;
+            let accumulatedMedia = {};
+            let hasAnyMedia = false;
+            const importedNames = [];
+
+            for (let i = 0; i < files.length; i++) {
+              const file = files[i];
+              const rawText = await readFileAsText(file);
+              const parsed = JSON.parse(rawText);
+              const extracted = parseFlexibleJsonImport(parsed);
+
+              const fileState = extracted.data ? extracted.data : EMPTY_STATE;
+              const fileDayflow = extracted.dayflow ? normalizeDayflowState(extracted.dayflow) : loadDayflowState();
+
+              // Save each uploaded JSON file into the Saved JSON Slots list so user can switch or re-merge anytime
+              upsertSlotRecord(file.name || `Backup-${i + 1}.json`, fileState, fileDayflow);
+              importedNames.push(file.name || `File ${i + 1}`);
+
+              if (extracted.data) {
+                if (workingState === null) {
+                  workingState = extracted.data;
+                } else {
+                  workingState = mergeNexoraStates(workingState, extracted.data);
+                }
               }
-              const hasEnvelope = Object.prototype.hasOwnProperty.call(parsed, 'data');
-              const restoredData = normalizeImportedState(hasEnvelope ? parsed.data : parsed);
-              const hasMedia = hasEnvelope && Object.prototype.hasOwnProperty.call(parsed, 'media');
-              const restoredMedia = hasMedia ? validateImportedMedia(parsed.media) : null;
-              if (restoredMedia) await replaceAllMediaInIDB(restoredMedia);
-              if (hasEnvelope && parsed.dayflow) {
-                saveDayflowState(normalizeDayflowState(parsed.dayflow));
+
+              if (extracted.dayflow) {
+                if (workingDayflow === null) {
+                  workingDayflow = normalizeDayflowState(extracted.dayflow);
+                } else {
+                  workingDayflow = mergeDayflowStates(workingDayflow, extracted.dayflow);
+                }
               }
-              setData(restoredData);
-              if (restoredMedia) setMediaMap(restoredMedia);
-              notify(hasMedia ? 'Restored backup and uploaded media' : 'Restored backup data');
-            } catch (err) {
-              notify(err?.message === 'IndexedDB is unavailable' ? 'Could not restore backup media' : 'Invalid or incomplete backup file', 'err');
-            } finally {
-              input.value = '';
+
+              if (extracted.media && Object.keys(extracted.media).length > 0) {
+                hasAnyMedia = true;
+                accumulatedMedia = { ...accumulatedMedia, ...extracted.media };
+              }
             }
-          };
-          reader.onerror = () => {
-            notify('Could not read backup file', 'err');
-            input.value = '';
-          };
-          reader.readAsText(file);
+
+            if (hasAnyMedia) {
+              if (activeMode === 'replace' && files.length === 1) {
+                await replaceAllMediaInIDB(accumulatedMedia);
+                setMediaMap(accumulatedMedia);
+              } else {
+                await mergeMediaIntoIDB(accumulatedMedia);
+                setMediaMap((prev) => ({ ...(prev || {}), ...accumulatedMedia }));
+              }
+            }
+
+            if (workingDayflow) {
+              saveDayflowState(workingDayflow, true);
+            }
+
+            if (workingState) {
+              setData(workingState);
+            }
+
+            const summaryText =
+              activeMode === 'merge' || files.length > 1
+                ? `Merged ${files.length} JSON ${files.length === 1 ? 'file' : 'files'} (${importedNames.join(', ')}) into active app`
+                : `Restored state from ${importedNames.join(', ')}`;
+
+            setJsonStatusType('ok');
+            setJsonStatusMsg(summaryText);
+            notify(summaryText);
+          } catch (err) {
+            const errMsg =
+              err?.message === 'IndexedDB is unavailable'
+                ? 'Could not restore backup media'
+                : `Could not import JSON: ${err?.message || 'Invalid JSON structure'}`;
+            setJsonStatusType('err');
+            setJsonStatusMsg(errMsg);
+            notify(errMsg, 'err');
+          }
+        };
+
+        const importJSON = async (e, modeOverride) => {
+          const input = e.target;
+          const files = input.files;
+          if (!files || files.length === 0) return;
+          await processJsonFiles(files, modeOverride);
+          input.value = '';
+        };
+
+        const handleSaveCurrentToSlot = (e) => {
+          e.preventDefault();
+          const label = slotNameInput.trim() || `Workspace-${jsonSlots.length + 1}.json`;
+          upsertSlotRecord(label, data, loadDayflowState());
+          setSlotNameInput('');
+          setJsonStatusType('ok');
+          setJsonStatusMsg(`Saved current app state to slot "${label}"`);
+        };
+
+        const handleMergeSlotIntoApp = (slot) => {
+          const nextState = mergeNexoraStates(data, slot.data || {});
+          const nextDayflow = mergeDayflowStates(loadDayflowState(), slot.dayflow || {});
+          setData(nextState);
+          saveDayflowState(nextDayflow, true);
+          setJsonStatusType('ok');
+          setJsonStatusMsg(`Merged "${slot.name}" into active app state`);
+        };
+
+        const handleSwitchToSlot = (slot) => {
+          const nextState = normalizeImportedState(slot.data || {});
+          const nextDayflow = normalizeDayflowState(slot.dayflow || {});
+          setData(nextState);
+          saveDayflowState(nextDayflow, true);
+          setJsonStatusType('ok');
+          setJsonStatusMsg(`Switched active workspace to "${slot.name}"`);
+        };
+
+        const handleCombineAllSlots = () => {
+          if (jsonSlots.length === 0) return;
+          let combinedState = data;
+          let combinedDayflow = loadDayflowState();
+          jsonSlots.forEach((slot) => {
+            if (slot.data) combinedState = mergeNexoraStates(combinedState, slot.data);
+            if (slot.dayflow) combinedDayflow = mergeDayflowStates(combinedDayflow, slot.dayflow);
+          });
+          setData(combinedState);
+          saveDayflowState(combinedDayflow, true);
+          setJsonStatusType('ok');
+          setJsonStatusMsg(`Combined all ${jsonSlots.length} loaded JSON slots into active app!`);
+        };
+
+        const handleDeleteSlot = (slotId) => {
+          persistJsonSlots(jsonSlots.filter((s) => s.id !== slotId));
         };
 
         const [deferredPrompt, setDeferredPrompt] = useState(() =>
@@ -7060,20 +7249,96 @@ const NexoraContext = createContext(null);
               onOpenVault={() => setActiveTab('secret-vault')}
             />
 
-            <div className="arch-panel p-5 rounded-xl space-y-4">
-              <div className="font-mono text-xs uppercase" style={{ color: 'var(--ink-muted)' }}>
-                LOCAL STORAGE VAULT
+            <div
+              className="arch-panel p-5 rounded-xl space-y-4"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (e.dataTransfer?.files?.length) {
+                  processJsonFiles(e.dataTransfer.files, importMode);
+                }
+              }}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="font-mono text-xs uppercase" style={{ color: 'var(--ink-muted)' }}>
+                    LOCAL STORAGE VAULT // MULTI-JSON MERGE &amp; WORKSPACE MANAGER
+                  </div>
+                  <p className="text-[11px] mt-0.5" style={{ color: 'var(--ink-secondary)' }}>
+                    Add 2 or more JSON files together without losing data. Select multiple `.json` files at once or upload them one by one to combine courses, missions, wallet, habits, and Dayflow schedules.
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5 p-1 rounded-lg border" style={{ backgroundColor: 'var(--bg-canvas)', borderColor: 'var(--border-hairline)' }}>
+                  <button
+                    type="button"
+                    onClick={() => setImportMode('merge')}
+                    className={`px-2.5 py-1 rounded text-[10px] font-mono transition ${
+                      importMode === 'merge' ? 'arch-btn-primary' : 'arch-btn-ghost'
+                    }`}
+                  >
+                    MODE: MERGE / COMBINE JSONs
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImportMode('replace')}
+                    className={`px-2.5 py-1 rounded text-[10px] font-mono transition ${
+                      importMode === 'replace' ? 'arch-btn-primary' : 'arch-btn-ghost'
+                    }`}
+                  >
+                    MODE: REPLACE
+                  </button>
+                </div>
               </div>
+
+              {jsonStatusMsg && (
+                <div
+                  className="p-3 rounded-lg border text-xs font-mono flex items-center justify-between gap-2"
+                  style={{
+                    backgroundColor: 'var(--bg-canvas)',
+                    borderColor: jsonStatusType === 'err' ? 'var(--status-err)' : 'var(--status-ok)',
+                    color: jsonStatusType === 'err' ? 'var(--status-err)' : 'var(--status-ok)'
+                  }}
+                >
+                  <span>{jsonStatusMsg}</span>
+                  <button
+                    type="button"
+                    onClick={() => setJsonStatusMsg('')}
+                    className="arch-btn-ghost px-2 py-0.5 rounded text-[10px]"
+                  >
+                    OK
+                  </button>
+                </div>
+              )}
+
               <div className="flex flex-wrap gap-2.5">
-                <button type="button" onClick={exportJSON} className="arch-btn-primary px-4 py-2 rounded-md text-xs font-mono inline-flex items-center gap-1.5">
-                  <Icon name="download" size={14} />
-                  <span>Export JSON Snapshot</span>
-                </button>
+                <label className="arch-btn-primary px-4 py-2 rounded-md text-xs font-mono inline-flex items-center gap-1.5 cursor-pointer">
+                  <Icon name="upload" size={14} />
+                  <span>+ Merge / Add JSON Files (1, 2, or Multiple)</span>
+                  <input
+                    type="file"
+                    accept=".json,application/json"
+                    multiple
+                    onChange={(e) => importJSON(e, 'merge')}
+                    className="hidden"
+                  />
+                </label>
+
                 <label className="arch-btn-ghost px-4 py-2 rounded-md text-xs font-mono inline-flex items-center gap-1.5 cursor-pointer">
                   <Icon name="upload" size={14} />
-                  <span>Import JSON Snapshot</span>
-                  <input type="file" accept=".json" onChange={importJSON} className="hidden" />
+                  <span>Replace State with JSON</span>
+                  <input
+                    type="file"
+                    accept=".json,application/json"
+                    onChange={(e) => importJSON(e, 'replace')}
+                    className="hidden"
+                  />
                 </label>
+
+                <button type="button" onClick={exportJSON} className="arch-btn-ghost px-4 py-2 rounded-md text-xs font-mono inline-flex items-center gap-1.5">
+                  <Icon name="download" size={14} />
+                  <span>Export Combined JSON Snapshot</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => setConfirmResetModal(true)}
@@ -7083,6 +7348,91 @@ const NexoraContext = createContext(null);
                   <Icon name="trash" size={14} />
                   <span>Wipe All Local Data</span>
                 </button>
+              </div>
+
+              <div className="pt-3 border-t space-y-3" style={{ borderColor: 'var(--border-hairline)' }}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <span className="font-mono text-[11px] uppercase tracking-wider block" style={{ color: 'var(--ink-muted)' }}>
+                      LOADED JSON FILES &amp; WORKSPACE SLOTS ({jsonSlots.length})
+                    </span>
+                    <span className="text-[11px]" style={{ color: 'var(--ink-secondary)' }}>
+                      Every imported JSON file is saved here so you can combine 2+ JSON files or switch between them anytime.
+                    </span>
+                  </div>
+                  {jsonSlots.length >= 2 && (
+                    <button
+                      type="button"
+                      onClick={handleCombineAllSlots}
+                      className="arch-btn-primary px-3 py-1.5 rounded-md text-[11px] font-mono"
+                    >
+                      Combine All {jsonSlots.length} Loaded JSONs →
+                    </button>
+                  )}
+                </div>
+
+                <form onSubmit={handleSaveCurrentToSlot} className="flex gap-2">
+                  <input
+                    value={slotNameInput}
+                    onChange={(e) => setSlotNameInput(e.target.value)}
+                    placeholder="Save current app state as named JSON slot (e.g., Semester-1.json, Personal.json)..."
+                    className="flex-1 arch-input rounded-md px-3 py-1.5 text-xs"
+                  />
+                  <button type="submit" className="arch-btn-ghost px-3 py-1.5 rounded-md text-xs font-mono shrink-0">
+                    + Save Current State as Slot
+                  </button>
+                </form>
+
+                {jsonSlots.length > 0 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {jsonSlots.map((slot) => {
+                      const c = slot.counts || {};
+                      return (
+                        <div
+                          key={slot.id}
+                          className="p-3 rounded-lg border space-y-2 flex flex-col justify-between"
+                          style={{ backgroundColor: 'var(--bg-canvas)', borderColor: 'var(--border-hairline)' }}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="font-mono text-xs font-semibold truncate" title={slot.name}>
+                                {slot.name}
+                              </div>
+                              <div className="font-mono text-[10px] mt-0.5" style={{ color: 'var(--ink-muted)' }}>
+                                {c.courses || 0} Courses • {c.missions || 0} Missions • {c.txCount || 0} Tx • {c.habits || 0} Habits • {c.dayflowCount || 0} Dayflow
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteSlot(slot.id)}
+                              className="arch-btn-ghost p-1 rounded shrink-0"
+                              title="Remove slot"
+                            >
+                              <Icon name="trash" size={11} />
+                            </button>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => handleMergeSlotIntoApp(slot)}
+                              className="arch-btn-primary px-2.5 py-1 rounded text-[10px] font-mono"
+                            >
+                              + Merge into Active App
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSwitchToSlot(slot)}
+                              className="arch-btn-ghost px-2.5 py-1 rounded text-[10px] font-mono"
+                            >
+                              Use Only This JSON
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           </div>
