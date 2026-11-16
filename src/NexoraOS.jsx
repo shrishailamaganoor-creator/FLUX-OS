@@ -3819,33 +3819,61 @@ const NexoraContext = createContext(null);
                                       </div>
                                     </div>
 
-                                    <div className="flex flex-wrap items-center gap-1.5">
-                                      {canInlinePreview && attDataUrl && (
+                                      <div className="flex flex-wrap items-center gap-1.5">
+                                        {att.ext === 'json' && attDataUrl && (
+                                          <button
+                                            type="button"
+                                            onClick={async () => {
+                                              try {
+                                                const rawJson = decodeDataUrlToText(attDataUrl);
+                                                const parsed = JSON.parse(rawJson);
+                                                const extracted = parseFlexibleJsonImport(parsed, att.name);
+                                                if (extracted.media && Object.keys(extracted.media).length > 0) {
+                                                  await mergeMediaIntoIDB(extracted.media);
+                                                  setMediaMap((prev) => ({ ...(prev || {}), ...extracted.media }));
+                                                }
+                                                if (extracted.dayflow) {
+                                                  saveDayflowState(mergeDayflowStates(loadDayflowState(), extracted.dayflow), true);
+                                                }
+                                                if (extracted.data) {
+                                                  setData((prev) => mergeNexoraStates(prev, extracted.data));
+                                                }
+                                                notify(`Merged ${att.name} into active FLUX state`);
+                                              } catch (err) {
+                                                notify(`Could not merge ${att.name}: Invalid JSON`, 'err');
+                                              }
+                                            }}
+                                            className="arch-btn-primary px-2.5 py-1 rounded text-[11px] font-mono"
+                                          >
+                                            + Merge into App
+                                          </button>
+                                        )}
+                                        {canInlinePreview && attDataUrl && (
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              setOpenPreviews((prev) => ({ ...prev, [att.id]: !prev[att.id] }))
+                                            }
+                                            className="arch-btn-ghost px-2.5 py-1 rounded text-[11px] font-mono"
+                                          >
+                                            {isPreviewOpen ? 'Hide Preview' : 'Preview'}
+                                          </button>
+                                        )}
                                         <button
                                           type="button"
-                                          onClick={() =>
-                                            setOpenPreviews((prev) => ({ ...prev, [att.id]: !prev[att.id] }))
-                                          }
+                                          onClick={() => triggerOpenAttachmentInTab(att, attDataUrl)}
                                           className="arch-btn-ghost px-2.5 py-1 rounded text-[11px] font-mono"
                                         >
-                                          {isPreviewOpen ? 'Hide Preview' : 'Preview'}
+                                          Open
                                         </button>
-                                      )}
-                                      <button
-                                        type="button"
-                                        onClick={() => triggerOpenAttachmentInTab(att, attDataUrl)}
-                                        className="arch-btn-ghost px-2.5 py-1 rounded text-[11px] font-mono"
-                                      >
-                                        Open
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => triggerDownloadAttachment(att, attDataUrl)}
-                                        className="arch-btn-primary px-2.5 py-1 rounded text-[11px] font-mono inline-flex items-center gap-1"
-                                      >
-                                        <Icon name="download" size={12} />
-                                        <span>Download</span>
-                                      </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => triggerDownloadAttachment(att, attDataUrl)}
+                                          className="arch-btn-ghost px-2.5 py-1 rounded text-[11px] font-mono inline-flex items-center gap-1"
+                                        >
+                                          <Icon name="download" size={12} />
+                                          <span>Download</span>
+                                        </button>
                                       <button
                                         type="button"
                                         onClick={() => removeAttachmentFromCard(card.id, att.id)}
@@ -6828,7 +6856,7 @@ const NexoraContext = createContext(null);
               const file = files[i];
               const rawText = await readFileAsText(file);
               const parsed = JSON.parse(rawText);
-              const extracted = parseFlexibleJsonImport(parsed);
+              const extracted = parseFlexibleJsonImport(parsed, file.name || `Backup-${i + 1}.json`);
 
               const fileState = extracted.data ? extracted.data : EMPTY_STATE;
               const fileDayflow = extracted.dayflow ? normalizeDayflowState(extracted.dayflow) : loadDayflowState();
@@ -6874,7 +6902,11 @@ const NexoraContext = createContext(null);
             }
 
             if (workingState) {
-              setData(workingState);
+              setData((prevData) =>
+                activeMode === 'merge' || files.length > 1
+                  ? mergeNexoraStates(prevData, workingState)
+                  : workingState
+              );
             }
 
             const summaryText =

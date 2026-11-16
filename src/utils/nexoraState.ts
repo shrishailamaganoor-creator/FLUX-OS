@@ -324,20 +324,112 @@ export function mergeNexoraStates(baseCandidate: unknown, incomingCandidate: unk
   return merged;
 }
 
-export function parseFlexibleJsonImport(parsed: unknown): {
+function coerceStateShape(defaults: any, candidate: any): any {
+  if (Array.isArray(defaults)) {
+    if (Array.isArray(candidate)) return candidate;
+    if (isPlainObject(candidate)) return Object.values(candidate);
+    return [];
+  }
+  if (isPlainObject(defaults)) {
+    if (!isPlainObject(candidate)) return { ...defaults };
+    const out: Record<string, any> = { ...defaults };
+    Object.entries(candidate).forEach(([k, v]) => {
+      if (v === null || v === undefined) return;
+      out[k] = Object.prototype.hasOwnProperty.call(defaults, k)
+        ? coerceStateShape(defaults[k], v)
+        : v;
+    });
+    return out;
+  }
+  if (typeof defaults === 'number') {
+    const n = Number(candidate);
+    return Number.isFinite(n) ? n : defaults;
+  }
+  if (typeof defaults === 'boolean') {
+    if (typeof candidate === 'boolean') return candidate;
+    if (candidate === 'true' || candidate === 1 || candidate === '1') return true;
+    if (candidate === 'false' || candidate === 0 || candidate === '0') return false;
+    return defaults;
+  }
+  if (typeof defaults === 'string') {
+    return candidate !== undefined && candidate !== null ? String(candidate) : defaults;
+  }
+  return candidate ?? defaults;
+}
+
+export function parseFlexibleJsonImport(
+  parsed: unknown,
+  fileName = 'Imported.json'
+): {
   data: Record<string, any> | null;
   dayflow: Record<string, any> | null;
   media: Record<string, string> | null;
 } {
+  // Support JSON Arrays at root (e.g., array of tasks, courses, transactions, habits, or classes)
+  if (Array.isArray(parsed)) {
+    const sample = parsed.find((item) => isPlainObject(item)) || {};
+    const stateObj: Record<string, any> = coerceStateShape(EMPTY_STATE, {});
+    if ('attended' in sample || 'total' in sample || 'credits' in sample) {
+      stateObj.subjects = parsed;
+    } else if ('amount' in sample && ('type' in sample || 'category' in sample)) {
+      stateObj.transactions = parsed;
+    } else if ('repeatDays' in sample && 'startTime' in sample) {
+      return {
+        data: null,
+        dayflow: { recurringClasses: parsed },
+        media: null
+      };
+    } else if ('startTime' in sample && 'durationMin' in sample) {
+      return {
+        data: null,
+        dayflow: { tasks: parsed },
+        media: null
+      };
+    } else if ('title' in sample || 'completed' in sample) {
+      stateObj.tasks = parsed;
+    } else {
+      stateObj.ideas = [
+        {
+          id: `idea-json-${Date.now()}`,
+          title: fileName.replace(/\.json$/i, ''),
+          tag: 'Specification Doc',
+          notes: JSON.stringify(parsed, null, 2),
+          date: new Date().toISOString().split('T')[0],
+          hasMedia: false,
+          attachments: []
+        }
+      ];
+    }
+    return {
+      data: normalizeImportedState(stateObj),
+      dayflow: null,
+      media: null
+    };
+  }
+
   if (!isPlainObject(parsed)) {
-    throw new Error('JSON file root must be an object');
+    throw new Error('JSON file root must be an object or array');
   }
 
   // Case 1: Envelope format { format, data, dayflow, media }
   const hasDataEnvelope = isPlainObject(parsed.data);
   if (hasDataEnvelope) {
-    const normalizedData = normalizeImportedState(parsed.data);
-    const media = isPlainObject(parsed.media) ? validateImportedMedia(parsed.media) : null;
+    const coerced = coerceStateShape(EMPTY_STATE, parsed.data);
+    // Preserve extra custom top-level keys on parsed.data
+    Object.keys(parsed.data).forEach((k) => {
+      if (!Object.prototype.hasOwnProperty.call(EMPTY_STATE, k)) {
+        coerced[k] = parsed.data[k];
+      }
+    });
+    const normalizedData = normalizeImportedState(coerced);
+    let media: Record<string, string> | null = null;
+    if (isPlainObject(parsed.media)) {
+      try {
+        media = validateImportedMedia(parsed.media);
+      } catch {
+        media = null;
+      }
+    }
     const dayflow = isPlainObject(parsed.dayflow) ? parsed.dayflow : null;
     return {
       data: normalizedData,
@@ -360,13 +452,49 @@ export function parseFlexibleJsonImport(parsed: unknown): {
     };
   }
 
-  // Case 3: Direct state object (full or partial) with optional inline dayflow/media
+  // Case 3: Direct state object (full or partial) or custom JSON object
   const { dayflow: inlineDayflow, media: inlineMedia, format: _fmt, exportedAt: _exp, ...restState } = parsed;
-  const normalizedData = normalizeImportedState(restState);
+  const knownKeysCount = Object.keys(restState).filter((k) =>
+    Object.prototype.hasOwnProperty.call(EMPTY_STATE, k)
+  ).length;
+
+  const coerced = coerceStateShape(EMPTY_STATE, restState);
+  Object.keys(restState).forEach((k) => {
+    if (!Object.prototype.hasOwnProperty.call(EMPTY_STATE, k)) {
+      coerced[k] = restState[k];
+    }
+  });
+
+  // If the JSON object has no standard FLUX state keys (e.g. a custom JSON file), also add it as an Innovation Canvas card so the user can immediately view & use it!
+  if (knownKeysCount === 0 && !isPlainObject(inlineDayflow)) {
+    coerced.ideas = [
+      ...(coerced.ideas || []),
+      {
+        id: `idea-json-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        title: String(restState.title || restState.name || fileName.replace(/\.json$/i, '')),
+        tag: 'Specification Doc',
+        notes: JSON.stringify(parsed, null, 2),
+        date: new Date().toISOString().split('T')[0],
+        hasMedia: false,
+        attachments: []
+      }
+    ];
+  }
+
+  const normalizedData = normalizeImportedState(coerced);
+  let validMedia: Record<string, string> | null = null;
+  if (isPlainObject(inlineMedia)) {
+    try {
+      validMedia = validateImportedMedia(inlineMedia);
+    } catch {
+      validMedia = null;
+    }
+  }
+
   return {
     data: normalizedData,
     dayflow: isPlainObject(inlineDayflow) ? inlineDayflow : null,
-    media: isPlainObject(inlineMedia) ? validateImportedMedia(inlineMedia) : null
+    media: validMedia
   };
 }
 
